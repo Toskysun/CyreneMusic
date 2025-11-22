@@ -26,6 +26,7 @@ import '../utils/page_visibility_notifier.dart';
 import '../utils/theme_manager.dart';
 import '../widgets/mini_player.dart';
 import '../widgets/search_widget.dart';
+import '../widgets/video_background_player.dart';
 import '../pages/home_page/home_overlay_controller.dart';
 
 /// Fluent UI 版本的主布局，使用 NavigationView
@@ -769,26 +770,48 @@ class _FluentMainLayoutState extends State<FluentMainLayout> with WindowListener
       builder: (context, child) {
         final bgService = WindowBackgroundService();
         
-        // 如果启用了窗口背景且有有效图片
-        if (bgService.enabled && bgService.hasValidImage) {
+        // 如果启用了窗口背景且有有效媒体
+        if (bgService.enabled && bgService.hasValidMedia) {
           return Stack(
             fit: StackFit.expand,
             children: [
-              // 背景图片层
-              Image.file(
-                bgService.getImageFile()!,
-                fit: BoxFit.cover,
-              ),
-              // 模糊和不透明度层
-              BackdropFilter(
-                filter: ImageFilter.blur(
-                  sigmaX: bgService.blurAmount,
-                  sigmaY: bgService.blurAmount,
+              // 背景媒体层（图片或视频）
+              if (bgService.isVideo)
+                // 视频背景
+                VideoBackgroundPlayer(
+                  videoPath: bgService.mediaPath!,
+                  blurAmount: bgService.blurAmount,
+                  opacity: bgService.opacity,
+                )
+              else
+                // 图片背景（性能优化：RepaintBoundary 隔离重绘）
+                RepaintBoundary(
+                  child: Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      Image.file(
+                        bgService.getMediaFile()!,
+                        fit: BoxFit.cover,
+                        // 性能优化：限制解码尺寸
+                        cacheWidth: 1920,
+                        cacheHeight: 1080,
+                        isAntiAlias: true,
+                        filterQuality: FilterQuality.medium,
+                      ),
+                      // 模糊和不透明度层（限制模糊程度避免GPU过载）
+                      if (bgService.blurAmount > 0 && bgService.blurAmount <= 40)
+                        BackdropFilter(
+                          filter: ImageFilter.blur(
+                            sigmaX: bgService.blurAmount,
+                            sigmaY: bgService.blurAmount,
+                          ),
+                          child: Container(
+                            color: Colors.black.withOpacity(1 - bgService.opacity),
+                          ),
+                        ),
+                    ],
+                  ),
                 ),
-                child: Container(
-                  color: Colors.black.withOpacity(1 - bgService.opacity),
-                ),
-              ),
               // 内容层
               child!,
             ],

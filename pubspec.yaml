@@ -16,7 +16,7 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 # https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html
 # In Windows, build-name is used as the major, minor, and patch parts
 # of the product and file versions while build-number is used as the build suffix.
-version: 1.0.7+5
+version: 1.0.8+5
 
 environment:
   sdk: ^3.8.1
@@ -101,6 +101,20 @@ dependencies:
   fluent_ui: ^4.11.0
   flutter_svg: ^2.0.10+1
   flutter_local_notifications: 19.5.0
+  
+  # Video player for video backgrounds (Android/iOS)
+  video_player: ^2.9.2
+  
+  # Media kit for video playback on Windows/Desktop platforms
+  media_kit: ^1.1.11
+  media_kit_video: ^1.2.5
+  media_kit_libs_windows_video: ^1.0.9
+
+# 依赖覆盖：解决 screen_brightness_android 的网络问题
+dependency_overrides:
+  # 使用空实现替代 screen_brightness 相关包
+  screen_brightness_android: ^2.1.0
+  screen_brightness_platform_interface: ^2.1.0
 
 dev_dependencies:
   flutter_test:

@@ -7,6 +7,7 @@ enum PlayerBackgroundType {
   adaptive,  // 自适应（基于封面提取颜色）
   solidColor, // 纯色背景
   image,      // 图片背景
+  video,      // 视频背景
 }
 
 /// 播放器背景设置服务
@@ -18,26 +19,29 @@ class PlayerBackgroundService extends ChangeNotifier {
   // SharedPreferences 键名
   static const String _keyBackgroundType = 'player_background_type';
   static const String _keySolidColor = 'player_background_solid_color';
-  static const String _keyImagePath = 'player_background_image_path';
+  static const String _keyMediaPath = 'player_background_media_path';
+  static const String _keyImagePath = 'player_background_image_path'; // 兼容旧版本
   static const String _keyBlurAmount = 'player_background_blur_amount';
   static const String _keyEnableGradient = 'player_background_enable_gradient';
 
   // 当前设置
   PlayerBackgroundType _backgroundType = PlayerBackgroundType.adaptive;
   Color _solidColor = Colors.grey[900]!;
-  String? _imagePath;
+  String? _mediaPath; // 图片或视频路径
   double _blurAmount = 10.0; // 默认模糊程度（sigma值）
   bool _enableGradient = false; // 是否启用封面渐变效果
 
   // Getters
   PlayerBackgroundType get backgroundType => _backgroundType;
   Color get solidColor => _solidColor;
-  String? get imagePath => _imagePath;
+  String? get mediaPath => _mediaPath;
+  String? get imagePath => _mediaPath; // 兼容旧代码
   double get blurAmount => _blurAmount;
   bool get enableGradient => _enableGradient;
   bool get isAdaptive => _backgroundType == PlayerBackgroundType.adaptive;
   bool get isSolidColor => _backgroundType == PlayerBackgroundType.solidColor;
   bool get isImage => _backgroundType == PlayerBackgroundType.image;
+  bool get isVideo => _backgroundType == PlayerBackgroundType.video;
 
   /// 初始化服务
   Future<void> initialize() async {
@@ -45,7 +49,9 @@ class PlayerBackgroundService extends ChangeNotifier {
     
     // 读取背景类型
     final typeIndex = prefs.getInt(_keyBackgroundType) ?? 0;
-    _backgroundType = PlayerBackgroundType.values[typeIndex];
+    if (typeIndex < PlayerBackgroundType.values.length) {
+      _backgroundType = PlayerBackgroundType.values[typeIndex];
+    }
     
     // 读取纯色
     final colorValue = prefs.getInt(_keySolidColor);
@@ -53,8 +59,13 @@ class PlayerBackgroundService extends ChangeNotifier {
       _solidColor = Color(colorValue);
     }
     
-    // 读取图片路径
-    _imagePath = prefs.getString(_keyImagePath);
+    // 读取媒体路径（优先读取新键名，向后兼容旧键名）
+    _mediaPath = prefs.getString(_keyMediaPath) ?? prefs.getString(_keyImagePath);
+    
+    // 根据文件扩展名自动检测类型（如果是从旧版本迁移）
+    if (_mediaPath != null && _backgroundType == PlayerBackgroundType.image) {
+      _detectAndUpdateMediaType();
+    }
     
     // 读取模糊程度
     _blurAmount = prefs.getDouble(_keyBlurAmount) ?? 10.0;
@@ -64,6 +75,16 @@ class PlayerBackgroundService extends ChangeNotifier {
     
     notifyListeners();
     print('🎨 [PlayerBackground] 已初始化: $_backgroundType, 模糊: $_blurAmount, 渐变: $_enableGradient');
+  }
+  
+  /// 根据文件扩展名检测并更新媒体类型
+  void _detectAndUpdateMediaType() {
+    if (_mediaPath == null) return;
+    
+    final ext = _mediaPath!.toLowerCase().split('.').last;
+    if (ext == 'mp4' || ext == 'mov' || ext == 'avi' || ext == 'mkv' || ext == 'webm' || ext == 'm4v') {
+      _backgroundType = PlayerBackgroundType.video;
+    }
   }
 
   /// 设置背景类型
@@ -90,21 +111,36 @@ class PlayerBackgroundService extends ChangeNotifier {
     print('🎨 [PlayerBackground] 纯色已更改: ${color.value.toRadixString(16)}');
   }
 
-  /// 设置图片背景
-  Future<void> setImageBackground(String imagePath) async {
+  /// 设置媒体背景（图片或视频）
+  Future<void> setMediaBackground(String mediaPath) async {
     // 验证文件是否存在
-    final file = File(imagePath);
+    final file = File(mediaPath);
     if (!await file.exists()) {
-      print('❌ [PlayerBackground] 图片文件不存在: $imagePath');
+      print('❌ [PlayerBackground] 媒体文件不存在: $mediaPath');
       return;
     }
     
-    _imagePath = imagePath;
+    _mediaPath = mediaPath;
+    
+    // 自动检测媒体类型
+    final ext = mediaPath.toLowerCase().split('.').last;
+    if (['mp4', 'mov', 'avi', 'mkv', 'webm', 'm4v'].contains(ext)) {
+      _backgroundType = PlayerBackgroundType.video;
+    } else {
+      _backgroundType = PlayerBackgroundType.image;
+    }
+    
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_keyImagePath, imagePath);
+    await prefs.setString(_keyMediaPath, mediaPath);
+    await prefs.setInt(_keyBackgroundType, _backgroundType.index);
     
     notifyListeners();
-    print('🎨 [PlayerBackground] 图片背景已设置: $imagePath');
+    print('🎨 [PlayerBackground] 媒体背景已设置: $mediaPath (类型: $_backgroundType)');
+  }
+  
+  /// 设置图片背景（兼容旧代码）
+  Future<void> setImageBackground(String imagePath) async {
+    await setMediaBackground(imagePath);
   }
 
   /// 设置模糊程度
@@ -119,14 +155,20 @@ class PlayerBackgroundService extends ChangeNotifier {
     print('🎨 [PlayerBackground] 模糊程度已更改: $_blurAmount');
   }
 
-  /// 清除图片背景
-  Future<void> clearImageBackground() async {
-    _imagePath = null;
+  /// 清除媒体背景
+  Future<void> clearMediaBackground() async {
+    _mediaPath = null;
     final prefs = await SharedPreferences.getInstance();
-    await prefs.remove(_keyImagePath);
+    await prefs.remove(_keyMediaPath);
+    await prefs.remove(_keyImagePath); // 同时清除旧键名
     
     notifyListeners();
-    print('🎨 [PlayerBackground] 图片背景已清除');
+    print('🎨 [PlayerBackground] 媒体背景已清除');
+  }
+  
+  /// 清除图片背景（兼容旧代码）
+  Future<void> clearImageBackground() async {
+    await clearMediaBackground();
   }
 
   /// 获取背景类型的显示名称
@@ -138,6 +180,8 @@ class PlayerBackgroundService extends ChangeNotifier {
         return '纯色背景';
       case PlayerBackgroundType.image:
         return '图片背景';
+      case PlayerBackgroundType.video:
+        return '视频背景';
     }
   }
 
@@ -161,8 +205,29 @@ class PlayerBackgroundService extends ChangeNotifier {
       case PlayerBackgroundType.solidColor:
         return '使用自定义纯色';
       case PlayerBackgroundType.image:
-        return _imagePath != null ? '自定义图片' : '未设置图片';
+        return _mediaPath != null ? '自定义图片' : '未设置图片';
+      case PlayerBackgroundType.video:
+        return _mediaPath != null ? '自定义视频' : '未设置视频';
     }
+  }
+  
+  /// 检查文件是否为支持的图片格式
+  bool isImageFile(String path) {
+    final ext = path.toLowerCase().split('.').last;
+    return ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp'].contains(ext);
+  }
+  
+  /// 检查文件是否为支持的视频格式
+  bool isVideoFile(String path) {
+    final ext = path.toLowerCase().split('.').last;
+    return ['mp4', 'mov', 'avi', 'mkv', 'webm', 'm4v'].contains(ext);
+  }
+  
+  /// 获取媒体文件（如果存在）
+  File? getMediaFile() {
+    if (_mediaPath == null || _mediaPath!.isEmpty) return null;
+    final file = File(_mediaPath!);
+    return file.existsSync() ? file : null;
   }
 }
 

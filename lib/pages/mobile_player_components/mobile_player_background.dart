@@ -6,9 +6,10 @@ import '../../services/player_service.dart';
 import '../../services/player_background_service.dart';
 import '../../models/track.dart';
 import '../../models/song_detail.dart';
+import '../../widgets/video_background_player.dart';
 
 /// 移动端播放器背景组件
-/// 根据设置显示不同类型的背景（自适应、纯色、图片）
+/// 根据设置显示不同类型的背景（自适应、纯色、图片、视频）
 class MobilePlayerBackground extends StatelessWidget {
   const MobilePlayerBackground({super.key});
 
@@ -45,6 +46,10 @@ class MobilePlayerBackground extends StatelessWidget {
       case PlayerBackgroundType.image:
         // 图片背景
         return _buildImageBackground(backgroundService);
+        
+      case PlayerBackgroundType.video:
+        // 视频背景
+        return _buildVideoBackground(backgroundService);
     }
   }
 
@@ -167,33 +172,84 @@ class MobilePlayerBackground extends StatelessWidget {
 
   /// 构建图片背景
   Widget _buildImageBackground(PlayerBackgroundService backgroundService) {
-    if (backgroundService.imagePath != null) {
-      final imageFile = File(backgroundService.imagePath!);
-      if (imageFile.existsSync()) {
-        return Stack(
-          children: [
-            // 图片层
-            Positioned.fill(
-              child: Image.file(
-                imageFile,
-                fit: BoxFit.cover, // 保持原比例裁剪
-              ),
-            ),
-            // 模糊层
-            if (backgroundService.blurAmount > 0)
+    if (backgroundService.mediaPath != null) {
+      final mediaFile = File(backgroundService.mediaPath!);
+      if (mediaFile.existsSync()) {
+        // 性能优化：RepaintBoundary 隔离重绘区域
+        return RepaintBoundary(
+          child: Stack(
+            children: [
+              // 图片层
               Positioned.fill(
-                child: BackdropFilter(
-                  filter: ImageFilter.blur(
-                    sigmaX: backgroundService.blurAmount,
-                    sigmaY: backgroundService.blurAmount,
+                child: Image.file(
+                  mediaFile,
+                  fit: BoxFit.cover,
+                  // 性能优化：限制解码尺寸，避免大图片阻塞主线程
+                  cacheWidth: 1920,
+                  cacheHeight: 1080,
+                  isAntiAlias: true,
+                  filterQuality: FilterQuality.medium,
+                ),
+              ),
+              // 模糊层（性能优化：限制模糊程度避免GPU过载）
+              if (backgroundService.blurAmount > 0 && backgroundService.blurAmount <= 40)
+                Positioned.fill(
+                  child: BackdropFilter(
+                    filter: ImageFilter.blur(
+                      sigmaX: backgroundService.blurAmount,
+                      sigmaY: backgroundService.blurAmount,
+                    ),
+                    child: Container(
+                      color: Colors.black.withOpacity(0.3), // 添加半透明遮罩
+                    ),
                   ),
+                )
+              else if (backgroundService.blurAmount == 0)
+                // 无模糊时也添加浅色遮罩以确保文字可读
+                Positioned.fill(
                   child: Container(
-                    color: Colors.black.withOpacity(0.3), // 添加半透明遮罩
+                    color: Colors.black.withOpacity(0.2),
                   ),
                 ),
-              )
-            else
-              // 无模糊时也添加浅色遮罩以确保文字可读
+            ],
+          ),
+        );
+      }
+    }
+    
+    // 如果没有设置图片，使用默认背景
+    return Container(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [
+            Colors.grey[900]!,
+            Colors.black,
+            Colors.black,
+          ],
+        ),
+      ),
+    );
+  }
+  
+  /// 构建视频背景
+  Widget _buildVideoBackground(PlayerBackgroundService backgroundService) {
+    if (backgroundService.mediaPath != null) {
+      final mediaFile = File(backgroundService.mediaPath!);
+      if (mediaFile.existsSync()) {
+        return Stack(
+          children: [
+            // 视频层
+            Positioned.fill(
+              child: VideoBackgroundPlayer(
+                videoPath: backgroundService.mediaPath!,
+                blurAmount: backgroundService.blurAmount,
+                opacity: 1.0,
+              ),
+            ),
+            // 半透明遮罩确保文字可读
+            if (backgroundService.blurAmount == 0)
               Positioned.fill(
                 child: Container(
                   color: Colors.black.withOpacity(0.2),
@@ -204,7 +260,7 @@ class MobilePlayerBackground extends StatelessWidget {
       }
     }
     
-    // 如果没有设置图片，使用默认背景
+    // 如果没有设置视频，使用默认背景
     return Container(
       decoration: BoxDecoration(
         gradient: LinearGradient(

@@ -317,13 +317,9 @@ class _MainLayoutState extends State<MainLayout>
   /// 构建桌面端布局（Windows/Linux/macOS）
   Widget _buildDesktopLayout(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
-    final isHomePage = _selectedIndex == 0;
-    final scaffoldBackground = isHomePage
-        ? Colors.transparent
-        : colorScheme.surface;
 
     return Scaffold(
-      backgroundColor: scaffoldBackground,
+      backgroundColor: colorScheme.surface,
       body: Column(
         children: [
           // Windows 平台显示自定义标题栏
@@ -405,10 +401,9 @@ class _MainLayoutState extends State<MainLayout>
   /// 构建移动端布局（Android/iOS）
   Widget _buildMobileLayout(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
-    final isHomePage = _selectedIndex == 0;
 
     return Scaffold(
-      backgroundColor: isHomePage ? Colors.transparent : colorScheme.surface,
+      backgroundColor: colorScheme.surface,
       body: Stack(
         children: [
           // 主内容层

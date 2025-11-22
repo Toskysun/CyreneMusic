@@ -22,6 +22,7 @@ import 'package:cyrene_music/services/url_service.dart';
 import 'package:cyrene_music/services/version_service.dart';
 import 'package:cyrene_music/utils/theme_manager.dart';
 import 'package:flutter_acrylic/flutter_acrylic.dart';
+import 'package:media_kit/media_kit.dart';
 
 
 // 条件导入 flutter_displaymode（仅 Android）
@@ -30,6 +31,11 @@ import 'package:flutter_displaymode/flutter_displaymode.dart' if (dart.library.h
 void main() async {
   // 初始化播放器服务
   WidgetsFlutterBinding.ensureInitialized();
+  
+  // 初始化 media_kit（仅在桌面平台，用于视频背景）
+  if (Platform.isWindows || Platform.isMacOS || Platform.isLinux) {
+    MediaKit.ensureInitialized();
+  }
   
   // 添加应用启动日志
   DeveloperModeService().addLog('🚀 应用启动');

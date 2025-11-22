@@ -1008,7 +1008,7 @@ class _HomePageState extends State<HomePage>
     bool showTabs,
   ) {
     return Scaffold(
-      backgroundColor: Colors.transparent,
+      backgroundColor: colorScheme.surface,
       body: _buildSlidingSwitcher(
         _buildMaterialContentArea(context, colorScheme, showTabs),
       ),
@@ -1139,13 +1139,8 @@ class _HomePageState extends State<HomePage>
     );
 
     return Scaffold(
-      backgroundColor: Colors.transparent,
-      body: useWindowEffect
-          ? content
-          : Container(
-              color: fluentTheme.micaBackgroundColor,
-              child: content,
-            ),
+      backgroundColor: useWindowEffect ? Colors.transparent : fluentTheme.micaBackgroundColor,
+      body: content,
     );
   }
 

@@ -65,7 +65,7 @@ class _WindowBackgroundDialogState extends State<WindowBackgroundDialog> {
                     SizedBox(width: 8),
                     Expanded(
                       child: Text(
-                        '此功能为赞助用户独享，成为赞助用户即可使用自定义窗口背景图片',
+                        '此功能为赞助用户独享，成为赞助用户即可使用自定义窗口背景（图片或视频）',
                         style: TextStyle(fontSize: 12, color: Colors.orange),
                       ),
                     ),
@@ -78,7 +78,7 @@ class _WindowBackgroundDialogState extends State<WindowBackgroundDialog> {
             // 启用开关
             Row(
               children: [
-                const Expanded(child: Text('启用窗口背景图片')),
+                const Expanded(child: Text('启用窗口背景')),
                 fluent_ui.ToggleSwitch(
                   checked: service.enabled && isSponsor,
                   onChanged: isSponsor
@@ -94,7 +94,7 @@ class _WindowBackgroundDialogState extends State<WindowBackgroundDialog> {
             
             const SizedBox(height: 8),
             const Text(
-              '为整个窗口设置背景图片（独立于播放器背景）',
+              '为整个窗口设置背景图片或视频（独立于播放器背景）',
               style: TextStyle(fontSize: 11, color: Colors.grey),
             ),
 
@@ -103,7 +103,7 @@ class _WindowBackgroundDialogState extends State<WindowBackgroundDialog> {
               const fluent_ui.Divider(),
               const SizedBox(height: 16),
 
-              // 图片选择
+              // 媒体文件选择
               Row(
                 children: [
                   Expanded(
@@ -112,19 +112,26 @@ class _WindowBackgroundDialogState extends State<WindowBackgroundDialog> {
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          const Icon(fluent_ui.FluentIcons.photo_collection, size: 16),
+                          Icon(
+                            service.isVideo 
+                                ? fluent_ui.FluentIcons.video 
+                                : fluent_ui.FluentIcons.photo_collection, 
+                            size: 16
+                          ),
                           const SizedBox(width: 8),
-                          Text(service.imagePath != null ? '更换图片' : '选择图片'),
+                          Text(service.mediaPath != null 
+                              ? (service.isVideo ? '更换视频' : '更换图片')
+                              : '选择图片/视频'),
                         ],
                       ),
                     ),
                   ),
-                  if (service.imagePath != null) ...[
+                  if (service.mediaPath != null) ...[
                     const SizedBox(width: 8),
                     fluent_ui.IconButton(
                       icon: const Icon(fluent_ui.FluentIcons.clear),
                       onPressed: () async {
-                        await service.clearImage();
+                        await service.clearMedia();
                         setState(() {});
                         widget.onChanged();
                       },
@@ -133,10 +140,10 @@ class _WindowBackgroundDialogState extends State<WindowBackgroundDialog> {
                 ],
               ),
 
-              if (service.imagePath != null) ...[
+              if (service.mediaPath != null) ...[
                 const SizedBox(height: 8),
                 Text(
-                  '当前图片: ${service.imagePath!.split(Platform.pathSeparator).last}',
+                  '当前${service.isVideo ? '视频' : '图片'}: ${service.mediaPath!.split(Platform.pathSeparator).last}',
                   style: const TextStyle(fontSize: 11, color: Colors.grey),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
@@ -190,7 +197,7 @@ class _WindowBackgroundDialogState extends State<WindowBackgroundDialog> {
               const SizedBox(height: 16),
 
               // 预览
-              if (service.hasValidImage) ...[
+              if (service.hasValidMedia) ...[
                 const Text('预览', style: TextStyle(fontWeight: FontWeight.bold)),
                 const SizedBox(height: 8),
                 Container(
@@ -201,24 +208,45 @@ class _WindowBackgroundDialogState extends State<WindowBackgroundDialog> {
                   ),
                   child: ClipRRect(
                     borderRadius: BorderRadius.circular(8),
-                    child: Stack(
-                      fit: StackFit.expand,
-                      children: [
-                        Image.file(
-                          service.getImageFile()!,
-                          fit: BoxFit.cover,
-                        ),
-                        BackdropFilter(
-                          filter: ImageFilter.blur(
-                            sigmaX: service.blurAmount,
-                            sigmaY: service.blurAmount,
+                    child: service.isVideo
+                        ? Center(
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                const Icon(
+                                  fluent_ui.FluentIcons.video,
+                                  size: 48,
+                                  color: Colors.grey,
+                                ),
+                                const SizedBox(height: 8),
+                                Text(
+                                  '视频背景\n${service.mediaPath!.split(Platform.pathSeparator).last}',
+                                  style: const TextStyle(fontSize: 12, color: Colors.grey),
+                                  textAlign: TextAlign.center,
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ],
+                            ),
+                          )
+                        : Stack(
+                            fit: StackFit.expand,
+                            children: [
+                              Image.file(
+                                service.getMediaFile()!,
+                                fit: BoxFit.cover,
+                              ),
+                              BackdropFilter(
+                                filter: ImageFilter.blur(
+                                  sigmaX: service.blurAmount,
+                                  sigmaY: service.blurAmount,
+                                ),
+                                child: Container(
+                                  color: Colors.black.withOpacity(1 - service.opacity),
+                                ),
+                              ),
+                            ],
                           ),
-                          child: Container(
-                            color: Colors.black.withOpacity(1 - service.opacity),
-                          ),
-                        ),
-                      ],
-                    ),
                   ),
                 ),
               ],
@@ -235,24 +263,28 @@ class _WindowBackgroundDialogState extends State<WindowBackgroundDialog> {
     );
   }
 
-  /// 选择背景图片
+  /// 选择背景媒体文件（图片或视频）
   Future<void> _selectBackgroundImage() async {
     final result = await FilePicker.platform.pickFiles(
-      type: FileType.image,
-      dialogTitle: '选择窗口背景图片',
+      type: FileType.custom,
+      allowedExtensions: ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp', 'mp4', 'mov', 'avi', 'mkv', 'webm', 'm4v'],
+      dialogTitle: '选择窗口背景（图片或视频）',
     );
 
     if (result != null && result.files.single.path != null) {
-      final imagePath = result.files.single.path!;
-      await WindowBackgroundService().setImagePath(imagePath);
+      final mediaPath = result.files.single.path!;
+      final service = WindowBackgroundService();
+      
+      await service.setMediaPath(mediaPath);
       setState(() {});
       widget.onChanged();
       
       if (mounted) {
+        final isVideo = service.isVideoFile(mediaPath);
         fluent_ui.displayInfoBar(
           context,
           builder: (context, close) => fluent_ui.InfoBar(
-            title: const Text('背景图片已设置'),
+            title: Text(isVideo ? '背景视频已设置' : '背景图片已设置'),
             severity: fluent_ui.InfoBarSeverity.success,
           ),
         );

@@ -108,7 +108,9 @@ class _PlayerBackgroundDialogState extends State<PlayerBackgroundDialog> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      backgroundService.imagePath != null ? '图片背景（已设置）' : '图片背景',
+                      backgroundService.mediaPath != null && backgroundService.isImage 
+                          ? '图片背景（已设置）' 
+                          : '图片背景',
                     ),
                     if (!isSponsor)
                       const Padding(
@@ -129,22 +131,54 @@ class _PlayerBackgroundDialogState extends State<PlayerBackgroundDialog> {
                       }
                     : null, // 非赞助用户禁用
               ),
-              if (currentType == PlayerBackgroundType.image) ...[
+              
+              const SizedBox(height: 8),
+              
+              // 视频背景（赞助用户独享）
+              fluent_ui.RadioButton(
+                content: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      backgroundService.mediaPath != null && backgroundService.isVideo 
+                          ? '视频背景（已设置）' 
+                          : '视频背景',
+                    ),
+                    if (!isSponsor)
+                      const Padding(
+                        padding: EdgeInsets.only(top: 4.0),
+                        child: Text(
+                          '🎁 赞助用户独享功能',
+                          style: TextStyle(fontSize: 11, color: Colors.orange),
+                        ),
+                      ),
+                  ],
+                ),
+                checked: currentType == PlayerBackgroundType.video,
+                onChanged: isSponsor
+                    ? (v) async {
+                        await backgroundService.setBackgroundType(PlayerBackgroundType.video);
+                        setState(() {});
+                        widget.onChanged();
+                      }
+                    : null, // 非赞助用户禁用
+              ),
+              if (currentType == PlayerBackgroundType.image || currentType == PlayerBackgroundType.video) ...[
                 const SizedBox(height: 8),
                 Row(
                   children: [
                     Expanded(
                       child: fluent_ui.FilledButton(
-                        onPressed: _selectBackgroundImage,
-                        child: const Text('选择图片'),
+                        onPressed: _selectBackgroundMedia,
+                        child: Text(currentType == PlayerBackgroundType.image ? '选择图片' : '选择视频'),
                       ),
                     ),
-                    if (backgroundService.imagePath != null) ...[
+                    if (backgroundService.mediaPath != null) ...[
                       const SizedBox(width: 8),
                       fluent_ui.IconButton(
                         icon: const Icon(fluent_ui.FluentIcons.clear),
                         onPressed: () async {
-                          await backgroundService.clearImageBackground();
+                          await backgroundService.clearMediaBackground();
                           setState(() {});
                           widget.onChanged();
                         },
@@ -288,7 +322,7 @@ class _PlayerBackgroundDialogState extends State<PlayerBackgroundDialog> {
               subtitle: Text(
                 !isSponsor
                     ? '成为赞助用户即可使用自定义图片背景'
-                    : (backgroundService.imagePath != null
+                    : (backgroundService.mediaPath != null && backgroundService.isImage
                         ? '已设置自定义图片'
                         : '未设置图片'),
               ),
@@ -303,35 +337,76 @@ class _PlayerBackgroundDialogState extends State<PlayerBackgroundDialog> {
                     }
                   : null,
             ),
+            
+            // 视频背景（赞助用户独享）
+            RadioListTile<PlayerBackgroundType>(
+              title: Row(
+                children: [
+                  const Text('视频背景'),
+                  if (!isSponsor) ...[
+                    const SizedBox(width: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: Colors.orange.withOpacity(0.2),
+                        borderRadius: BorderRadius.circular(4),
+                        border: Border.all(color: Colors.orange, width: 1),
+                      ),
+                      child: const Text(
+                        '赞助独享',
+                        style: TextStyle(fontSize: 10, color: Colors.orange),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+              subtitle: Text(
+                !isSponsor
+                    ? '成为赞助用户即可使用自定义视频背景'
+                    : (backgroundService.mediaPath != null && backgroundService.isVideo
+                        ? '已设置自定义视频'
+                        : '未设置视频'),
+              ),
+              value: PlayerBackgroundType.video,
+              groupValue: currentType,
+              enabled: isSponsor, // 非赞助用户禁用
+              onChanged: isSponsor
+                  ? (value) async {
+                      await backgroundService.setBackgroundType(value!);
+                      setState(() {});
+                      widget.onChanged();
+                    }
+                  : null,
+            ),
                 
-            // 图片选择和模糊设置（仅在选择图片背景时显示）
-            if (currentType == PlayerBackgroundType.image) ...[
+            // 媒体选择和模糊设置（仅在选择图片或视频背景时显示）
+            if (currentType == PlayerBackgroundType.image || currentType == PlayerBackgroundType.video) ...[
               const SizedBox(height: 8),
               Padding(
                 padding: const EdgeInsets.only(left: 16, right: 16),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // 选择图片按钮
+                    // 选择媒体按钮
                     Row(
                       children: [
                         Expanded(
                           child: OutlinedButton.icon(
-                            onPressed: _selectBackgroundImage,
-                            icon: const Icon(Icons.image),
-                            label: const Text('选择图片'),
+                            onPressed: _selectBackgroundMedia,
+                            icon: Icon(currentType == PlayerBackgroundType.image ? Icons.image : Icons.video_library),
+                            label: Text(currentType == PlayerBackgroundType.image ? '选择图片' : '选择视频'),
                           ),
                         ),
-                        if (backgroundService.imagePath != null) ...[
+                        if (backgroundService.mediaPath != null) ...[
                           const SizedBox(width: 8),
                           IconButton(
                             onPressed: () async {
-                              await backgroundService.clearImageBackground();
+                              await backgroundService.clearMediaBackground();
                               setState(() {});
                               widget.onChanged();
                             },
                             icon: const Icon(Icons.clear),
-                            tooltip: '清除图片',
+                            tooltip: '清除${currentType == PlayerBackgroundType.image ? '图片' : '视频'}',
                           ),
                         ],
                       ],
@@ -623,28 +698,51 @@ class _PlayerBackgroundDialogState extends State<PlayerBackgroundDialog> {
     }
   }
 
-  /// 选择背景图片
-  Future<void> _selectBackgroundImage() async {
+  /// 选择背景媒体（图片或视频）
+  Future<void> _selectBackgroundMedia() async {
+    final backgroundService = PlayerBackgroundService();
+    final isVideo = backgroundService.backgroundType == PlayerBackgroundType.video;
+    
     final result = await FilePicker.platform.pickFiles(
-      type: FileType.image,
-      dialogTitle: '选择背景图片',
+      type: FileType.custom,
+      allowedExtensions: isVideo
+          ? ['mp4', 'mov', 'avi', 'mkv', 'webm', 'm4v']
+          : ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp'],
+      dialogTitle: isVideo ? '选择背景视频' : '选择背景图片',
     );
 
     if (result != null && result.files.single.path != null) {
-      final imagePath = result.files.single.path!;
-      await PlayerBackgroundService().setImageBackground(imagePath);
+      final mediaPath = result.files.single.path!;
+      await backgroundService.setMediaBackground(mediaPath);
       setState(() {});
       widget.onChanged();
       
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('背景图片已设置'),
-            duration: Duration(seconds: 2),
-          ),
-        );
+        final isFluent = Platform.isWindows && ThemeManager().isFluentFramework;
+        
+        if (isFluent) {
+          fluent_ui.displayInfoBar(
+            context,
+            builder: (context, close) => fluent_ui.InfoBar(
+              title: Text(isVideo ? '背景视频已设置' : '背景图片已设置'),
+              severity: fluent_ui.InfoBarSeverity.success,
+            ),
+          );
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(isVideo ? '背景视频已设置' : '背景图片已设置'),
+              duration: const Duration(seconds: 2),
+            ),
+          );
+        }
       }
     }
+  }
+  
+  /// 选择背景图片（兼容旧代码）
+  Future<void> _selectBackgroundImage() async {
+    await _selectBackgroundMedia();
   }
 }
 

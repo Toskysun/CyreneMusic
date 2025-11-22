@@ -99,12 +99,13 @@ class ThemeManager extends ChangeNotifier {
       useMaterial3: true,
       fontFamily: 'Microsoft YaHei',
       colorScheme: colorScheme,
-      cardTheme: const CardThemeData(
+      cardTheme: CardThemeData(
         elevation: 0,
-        shape: RoundedRectangleBorder(
+        shape: const RoundedRectangleBorder(
           borderRadius: BorderRadius.all(Radius.circular(12)),
         ),
-        color: Colors.transparent,
+        // 使用正常的背景色，避免透明导致深色模式下看不见文字
+        color: colorScheme.surface,
         surfaceTintColor: Colors.transparent,
       ),
       navigationRailTheme: NavigationRailThemeData(
@@ -326,8 +327,8 @@ class ThemeManager extends ChangeNotifier {
     try {
       final prefs = await SharedPreferences.getInstance();
       
-      // 加载主题模式
-      final themeModeIndex = prefs.getInt('theme_mode') ?? 0;
+      // 加载主题模式（默认为 light 亮色模式，避免首次启动跟随系统深色模式导致显示异常）
+      final themeModeIndex = prefs.getInt('theme_mode') ?? ThemeMode.light.index;
       _themeMode = ThemeMode.values[themeModeIndex];
       
       // 加载跟随系统主题色设置（默认为 true）
