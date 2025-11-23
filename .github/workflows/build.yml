@@ -2,8 +2,14 @@ name: Multi-Platform Build
 
 on:
   push:
+    branches:
+      - main
     tags:
       - 'v*'
+  pull_request:
+    types: [closed]
+    branches:
+      - main
   workflow_dispatch:
     inputs:
       build_android:
@@ -32,12 +38,20 @@ on:
         type: boolean
         default: true
 
+env:
+  IS_PR_RELEASE: >-
+    ${{ github.event_name == 'pull_request'
+        && github.event.pull_request.merged == true
+        && startsWith(github.event.pull_request.title, 'v') }}
+
 jobs:
   # Android 构建
   build-android:
     name: Build Android APK
     runs-on: ubuntu-latest
-    if: ${{ github.event_name == 'push' || inputs.build_android }}
+    if: ${{ github.event_name == 'push'
+        || (github.event_name == 'workflow_dispatch' && inputs.build_android)
+        || env.IS_PR_RELEASE == 'true' }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -73,7 +87,9 @@ jobs:
   build-windows:
     name: Build Windows
     runs-on: windows-latest
-    if: ${{ github.event_name == 'push' || inputs.build_windows }}
+    if: ${{ github.event_name == 'push'
+        || (github.event_name == 'workflow_dispatch' && inputs.build_windows)
+        || env.IS_PR_RELEASE == 'true' }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -108,7 +124,9 @@ jobs:
   build-linux:
     name: Build Linux
     runs-on: ubuntu-latest
-    if: ${{ github.event_name == 'push' || inputs.build_linux }}
+    if: ${{ github.event_name == 'push'
+        || (github.event_name == 'workflow_dispatch' && inputs.build_linux)
+        || env.IS_PR_RELEASE == 'true' }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -152,7 +170,9 @@ jobs:
   build-macos:
     name: Build macOS
     runs-on: macos-latest
-    if: ${{ github.event_name == 'push' || inputs.build_macos }}
+    if: ${{ github.event_name == 'push'
+        || (github.event_name == 'workflow_dispatch' && inputs.build_macos)
+        || env.IS_PR_RELEASE == 'true' }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -188,7 +208,9 @@ jobs:
   build-ios:
     name: Build iOS
     runs-on: macos-latest
-    if: ${{ github.event_name == 'push' || inputs.build_ios }}
+    if: ${{ github.event_name == 'push'
+        || (github.event_name == 'workflow_dispatch' && inputs.build_ios)
+        || env.IS_PR_RELEASE == 'true' }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -223,7 +245,10 @@ jobs:
     name: Create Release
     needs: [build-android, build-windows, build-linux, build-macos, build-ios]
     runs-on: ubuntu-latest
-    if: ${{ always() && startsWith(github.ref, 'refs/tags/') }}
+    if: ${{ always() && (
+          (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/'))
+          || env.IS_PR_RELEASE == 'true'
+        ) }}
     steps:
       - name: Download all artifacts
         uses: actions/download-artifact@v4
@@ -233,9 +258,31 @@ jobs:
       - name: Display structure
         run: ls -R artifacts
 
+      - name: Determine release metadata
+        id: release_meta
+        uses: actions/github-script@v7
+        env:
+          IS_PR_RELEASE: ${{ env.IS_PR_RELEASE }}
+        with:
+          script: |
+            const isPrRelease = process.env.IS_PR_RELEASE === 'true';
+            if (isPrRelease) {
+              const title = context.payload.pull_request.title.trim();
+              const tag = title.startsWith('v') ? title : `v${title}`;
+              core.setOutput('tag', tag);
+              core.setOutput('target', context.payload.pull_request.merge_commit_sha);
+            } else {
+              const ref = context.ref;
+              const tag = ref.startsWith('refs/tags/') ? ref.replace('refs/tags/', '') : ref;
+              core.setOutput('tag', tag);
+              core.setOutput('target', context.sha);
+            }
+
       - name: Create Release
         uses: softprops/action-gh-release@v1
         with:
+          tag_name: ${{ steps.release_meta.outputs.tag }}
+          target_commitish: ${{ steps.release_meta.outputs.target }}
           files: |
             artifacts/android-apk/*.apk
             artifacts/windows-x64/*.zip
