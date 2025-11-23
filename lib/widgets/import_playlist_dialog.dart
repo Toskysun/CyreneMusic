@@ -713,6 +713,17 @@ class ImportPlaylistDialog {
       if (!context.mounted) return;
       Navigator.pop(context); // 关闭进度对话框
 
+      final platformKey = sourcePlaylist.platform == MusicPlatform.netease ? 'netease' : 'qq';
+      final playlistId = sourcePlaylist.id.toString();
+      final bound = await playlistService.updateImportConfig(
+        targetPlaylist.id,
+        source: platformKey,
+        sourcePlaylistId: playlistId,
+      );
+      if (!bound) {
+        print('⚠️ [ImportPlaylistDialog] 更新导入配置失败 playlist=${targetPlaylist.id}');
+      }
+
       // 显示结果
       if (ThemeManager().isFluentFramework) {
         await fluent.showDialog(

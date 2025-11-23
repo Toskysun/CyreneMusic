@@ -8,6 +8,7 @@ import '../services/music_service.dart';
 import '../services/auth_service.dart';
 import '../services/admin_service.dart';
 import '../services/notification_service.dart';
+import '../services/playback_state_service.dart';
 import '../utils/theme_manager.dart';
 
 /// 开发者页面
@@ -885,8 +886,74 @@ class _DeveloperPageState extends State<DeveloperPage> with SingleTickerProvider
           icon: const Icon(Icons.notifications),
           label: const Text('发送测试通知'),
         ),
+        const SizedBox(height: 8),
+        FilledButton.icon(
+          onPressed: () async {
+            await _testPlaybackResumeNotification();
+          },
+          icon: const Icon(Icons.play_circle_outline),
+          label: const Text('测试播放恢复通知'),
+        ),
       ],
     );
+  }
+
+  /// 测试播放恢复通知
+  Future<void> _testPlaybackResumeNotification() async {
+    try {
+      // 获取上次播放状态（如果有的话）
+      final state = await PlaybackStateService().getLastPlaybackState();
+      
+      String trackName;
+      String artist;
+      String? coverUrl;
+      String? platformInfo;
+      
+      if (state != null) {
+        // 使用实际保存的播放状态
+        trackName = state.track.name;
+        artist = state.track.artists;
+        coverUrl = state.coverUrl;
+        platformInfo = state.isCrossPlatform ? state.platformDisplayText : null;
+        DeveloperModeService().addLog('📱 使用真实播放状态: $trackName - $artist');
+        DeveloperModeService().addLog('🖼️ 封面URL: $coverUrl');
+        if (platformInfo != null) {
+          DeveloperModeService().addLog('🌐 平台信息: $platformInfo');
+        }
+      } else {
+        // 如果没有保存的状态，使用测试数据
+        trackName = '测试歌曲';
+        artist = '测试歌手';
+        coverUrl = 'https://p2.music.126.net/6y-UleORITEDbvrOLV0Q8A==/5639395138885805.jpg';
+        platformInfo = null; // 测试时不显示平台信息
+        DeveloperModeService().addLog('📱 使用测试数据（没有保存的播放状态）');
+      }
+      
+      // 显示恢复播放通知
+      await NotificationService().showResumePlaybackNotification(
+        trackName: trackName,
+        artist: artist,
+        coverUrl: coverUrl,
+        platformInfo: platformInfo,
+        payload: 'test_resume_playback',
+      );
+      
+      DeveloperModeService().addLog('✅ 播放恢复通知已发送');
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('播放恢复通知已发送')),
+        );
+      }
+    } catch (e) {
+      DeveloperModeService().addLog('❌ 发送播放恢复通知失败: $e');
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('发送失败: $e')),
+        );
+      }
+    }
   }
 
   /// 构建数据区块
@@ -1486,6 +1553,20 @@ class _DeveloperPageState extends State<DeveloperPage> with SingleTickerProvider
               Icon(fluent.FluentIcons.ringer),
               SizedBox(width: 8),
               Text('发送测试通知'),
+            ],
+          ),
+        ),
+        const SizedBox(height: 8),
+        fluent.FilledButton(
+          onPressed: () async {
+            await _testPlaybackResumeNotification();
+          },
+          child: const Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(fluent.FluentIcons.play),
+              SizedBox(width: 8),
+              Text('测试播放恢复通知'),
             ],
           ),
         ),

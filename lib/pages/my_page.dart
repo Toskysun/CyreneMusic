@@ -71,6 +71,56 @@ class _MyPageState extends State<MyPage> {
     }
   }
 
+  void _showUserNotification(
+    String message, {
+    fluent.InfoBarSeverity severity = fluent.InfoBarSeverity.info,
+    Duration duration = const Duration(seconds: 2),
+    Color? materialBackground,
+  }) {
+    if (!mounted) return;
+    if (_themeManager.isFluentFramework) {
+      fluent.displayInfoBar(
+        context,
+        builder: (context, close) => fluent.InfoBar(
+          title: const Text('提示'),
+          content: Text(message),
+          severity: severity,
+          action: fluent.IconButton(
+            icon: const Icon(fluent.FluentIcons.clear),
+            onPressed: close,
+          ),
+        ),
+      );
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(message),
+          duration: duration,
+          backgroundColor: materialBackground,
+        ),
+      );
+    }
+  }
+
+  bool _hasImportConfig(Playlist playlist) {
+    return (playlist.source?.isNotEmpty ?? false) &&
+        (playlist.sourcePlaylistId?.isNotEmpty ?? false);
+  }
+
+  String _formatSyncResultMessage(PlaylistSyncResult result) {
+    if (result.insertedCount <= 0) {
+      return '同步完成，暂无新增歌曲';
+    }
+    final preview = result.newTracks
+        .map((t) => t.name)
+        .where((name) => name.isNotEmpty)
+        .take(3)
+        .toList();
+    final suffix = result.insertedCount > preview.length ? '…' : '';
+    final details = preview.isEmpty ? '' : '：${preview.join('、')}$suffix';
+    return '同步完成，新增 ${result.insertedCount} 首$details';
+  }
+
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
@@ -260,6 +310,21 @@ class _MyPageState extends State<MyPage> {
                   fluent.IconButton(
                     icon: const Icon(fluent.FluentIcons.sync),
                     onPressed: () async {
+                      if (!_hasImportConfig(playlist)) {
+                        fluent.displayInfoBar(
+                          context,
+                          builder: (context, close) => fluent.InfoBar(
+                            title: const Text('同步'),
+                            content: const Text('请先在“导入管理”中绑定来源后再同步'),
+                            severity: fluent.InfoBarSeverity.warning,
+                            action: fluent.IconButton(
+                              icon: const Icon(fluent.FluentIcons.clear),
+                              onPressed: close,
+                            ),
+                          ),
+                        );
+                        return;
+                      }
                       print('🔘 [MyPage] 开始同步(Fluent): playlistId=${playlist.id}');
                       fluent.displayInfoBar(
                         context,
@@ -273,13 +338,13 @@ class _MyPageState extends State<MyPage> {
                           ),
                         ),
                       );
-                      final inserted = await _playlistService.syncPlaylist(playlist.id);
+                      final result = await _playlistService.syncPlaylist(playlist.id);
                       if (!mounted) return;
                       fluent.displayInfoBar(
                         context,
                         builder: (context, close) => fluent.InfoBar(
                           title: const Text('同步完成'),
-                          content: Text('新增 $inserted 首'),
+                          content: Text(_formatSyncResultMessage(result)),
                           severity: fluent.InfoBarSeverity.success,
                           action: fluent.IconButton(
                             icon: const Icon(fluent.FluentIcons.clear),
@@ -807,6 +872,31 @@ class _MyPageState extends State<MyPage> {
     );
   }
 
+  Future<void> _syncPlaylistFromList(Playlist playlist) async {
+    if (!_hasImportConfig(playlist)) {
+      _showUserNotification(
+        '请先在“导入管理”中绑定歌单来源后再同步',
+        severity: fluent.InfoBarSeverity.warning,
+      );
+      return;
+    }
+
+    _showUserNotification(
+      '正在同步...',
+      duration: const Duration(seconds: 1),
+    );
+    final result = await _playlistService.syncPlaylist(playlist.id);
+    _showUserNotification(
+      _formatSyncResultMessage(result),
+      severity: result.insertedCount > 0
+          ? fluent.InfoBarSeverity.success
+          : fluent.InfoBarSeverity.info,
+    );
+    if (_selectedPlaylist?.id == playlist.id) {
+      await _playlistService.loadPlaylistTracks(playlist.id);
+    }
+  }
+
   /// 构建歌单列表
   Widget _buildPlaylistsList(ColorScheme colorScheme) {
     final playlists = _playlistService.playlists;
@@ -839,6 +929,7 @@ class _MyPageState extends State<MyPage> {
 
     return Column(
       children: playlists.map((playlist) {
+        final canSync = _hasImportConfig(playlist);
         return Card(
           margin: const EdgeInsets.only(bottom: 8),
           child: ListTile(
@@ -848,7 +939,27 @@ class _MyPageState extends State<MyPage> {
             ),
             title: Text(playlist.name),
             subtitle: Text('${playlist.trackCount} 首歌曲'),
-            trailing: const Icon(Icons.chevron_right),
+            trailing: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // 只有非默认歌单才显示删除按钮
+                if (!playlist.isDefault) ...[
+                  IconButton(
+                    icon: const Icon(Icons.sync, size: 20),
+                    color: canSync ? colorScheme.primary : null,
+                    onPressed: canSync ? () => _syncPlaylistFromList(playlist) : null,
+                    tooltip: canSync ? '同步歌单' : '请先设置导入来源',
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.delete_outline, size: 20),
+                    color: Colors.redAccent,
+                    onPressed: () => _confirmDeletePlaylist(playlist),
+                    tooltip: '删除歌单',
+                  ),
+                ],
+                const Icon(Icons.chevron_right),
+              ],
+            ),
             onTap: () => _openPlaylistDetail(playlist),
           ),
         );
@@ -979,23 +1090,17 @@ class _MyPageState extends State<MyPage> {
       final track = item.toTrack();
       await PlayerService().playTrack(track);
 
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('开始播放: ${item.trackName}'),
-            duration: const Duration(seconds: 2),
-          ),
-        );
-      }
+      _showUserNotification(
+        '开始播放: ${item.trackName}',
+        severity: fluent.InfoBarSeverity.success,
+        duration: const Duration(seconds: 2),
+      );
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('播放失败: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
+      _showUserNotification(
+        '播放失败: $e',
+        severity: fluent.InfoBarSeverity.error,
+        materialBackground: Colors.red,
+      );
     }
   }
 
@@ -1115,19 +1220,18 @@ class _MyPageState extends State<MyPage> {
       tracksToDelete,
     );
 
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('已删除 $deletedCount 首歌曲'),
-          duration: const Duration(seconds: 2),
-        ),
-      );
+    if (!mounted) return;
 
-      setState(() {
-        _isEditMode = false;
-        _selectedTrackIds.clear();
-      });
-    }
+    _showUserNotification(
+      '已删除 $deletedCount 首歌曲',
+      severity: fluent.InfoBarSeverity.success,
+      duration: const Duration(seconds: 2),
+    );
+
+    setState(() {
+      _isEditMode = false;
+      _selectedTrackIds.clear();
+    });
   }
 
   /// 显示导入歌单对话框
@@ -1179,11 +1283,10 @@ class _MyPageState extends State<MyPage> {
                   }
                   Navigator.pop(context);
                   await _playlistService.createPlaylist(name);
-                  if (mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text('歌单「$name」创建成功')),
-                    );
-                  }
+                  _showUserNotification(
+                    '歌单「$name」创建成功',
+                    severity: fluent.InfoBarSeverity.success,
+                  );
                 },
                 child: const Text('创建'),
               ),
@@ -1216,8 +1319,9 @@ class _MyPageState extends State<MyPage> {
               FilledButton(
                 onPressed: () async {
                   if (playlistName.trim().isEmpty) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('歌单名称不能为空')),
+                    _showUserNotification(
+                      '歌单名称不能为空',
+                      severity: fluent.InfoBarSeverity.warning,
                     );
                     return;
                   }
@@ -1225,11 +1329,10 @@ class _MyPageState extends State<MyPage> {
                   Navigator.pop(context);
                   await _playlistService.createPlaylist(playlistName.trim());
 
-                  if (mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text('歌单「$playlistName」创建成功')),
-                    );
-                  }
+                  _showUserNotification(
+                    '歌单「$playlistName」创建成功',
+                    severity: fluent.InfoBarSeverity.success,
+                  );
                 },
                 child: const Text('创建'),
               ),
@@ -1364,16 +1467,23 @@ class _MyPageState extends State<MyPage> {
           IconButton(
             icon: const Icon(Icons.sync),
             onPressed: () async {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('正在同步...'),
-                  duration: Duration(seconds: 1),
-                ),
+              if (!_hasImportConfig(playlist)) {
+                _showUserNotification(
+                  '请先在“导入管理”中绑定来源后再同步',
+                  severity: fluent.InfoBarSeverity.warning,
+                );
+                return;
+              }
+              _showUserNotification(
+                '正在同步...',
+                duration: const Duration(seconds: 1),
               );
-              final inserted = await _playlistService.syncPlaylist(playlist.id);
-              if (!mounted) return;
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text('同步完成，新增 $inserted 首')),
+              final result = await _playlistService.syncPlaylist(playlist.id);
+              _showUserNotification(
+                _formatSyncResultMessage(result),
+                severity: result.insertedCount > 0
+                    ? fluent.InfoBarSeverity.success
+                    : fluent.InfoBarSeverity.info,
               );
               await _playlistService.loadPlaylistTracks(playlist.id);
             },
@@ -1595,14 +1705,11 @@ class _MyPageState extends State<MyPage> {
 
     PlayerService().playTrack(trackList[index]);
 
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('正在播放: ${tracks[index].name}'),
-          duration: const Duration(seconds: 1),
-        ),
-      );
-    }
+    _showUserNotification(
+      '正在播放: ${tracks[index].name}',
+      severity: fluent.InfoBarSeverity.success,
+      duration: const Duration(seconds: 1),
+    );
   }
 
   /// 播放歌单全部歌曲
@@ -1620,14 +1727,11 @@ class _MyPageState extends State<MyPage> {
 
     PlayerService().playTrack(trackList[0]);
 
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('开始播放: ${_selectedPlaylist?.name ?? "歌单"}'),
-          duration: const Duration(seconds: 2),
-        ),
-      );
-    }
+    _showUserNotification(
+      '开始播放: ${_selectedPlaylist?.name ?? "歌单"}',
+      severity: fluent.InfoBarSeverity.success,
+      duration: const Duration(seconds: 2),
+    );
   }
 
   /// 确认移除歌曲
@@ -1683,13 +1787,114 @@ class _MyPageState extends State<MyPage> {
       track,
     );
 
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(success ? '已从歌单移除' : '移除失败'),
-          duration: const Duration(seconds: 2),
+    _showUserNotification(
+      success ? '已从歌单移除' : '移除失败',
+      severity: success ? fluent.InfoBarSeverity.success : fluent.InfoBarSeverity.error,
+      materialBackground: success ? null : Colors.red,
+      duration: const Duration(seconds: 2),
+    );
+  }
+
+  /// 确认删除歌单
+  Future<void> _confirmDeletePlaylist(Playlist playlist) async {
+    // 防止删除默认歌单
+    if (playlist.isDefault) {
+      _showUserNotification(
+        '默认歌单不能删除',
+        severity: fluent.InfoBarSeverity.warning,
+        materialBackground: Colors.orange,
+      );
+      return;
+    }
+
+    bool? confirmed;
+    if (_themeManager.isFluentFramework) {
+      confirmed = await fluent.showDialog<bool>(
+        context: context,
+        builder: (context) => fluent.ContentDialog(
+          title: const Text('删除歌单'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('确定要删除歌单「${playlist.name}」吗？'),
+              const SizedBox(height: 8),
+              if (playlist.trackCount > 0)
+                Text(
+                  '该歌单包含 ${playlist.trackCount} 首歌曲，删除后将无法恢复。',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: fluent.FluentTheme.of(context).resources.textFillColorSecondary,
+                  ),
+                ),
+            ],
+          ),
+          actions: [
+            fluent.Button(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('取消'),
+            ),
+            fluent.FilledButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('删除'),
+            ),
+          ],
         ),
       );
+    } else {
+      confirmed = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('删除歌单'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('确定要删除歌单「${playlist.name}」吗？'),
+              const SizedBox(height: 8),
+              if (playlist.trackCount > 0)
+                Text(
+                  '该歌单包含 ${playlist.trackCount} 首歌曲，删除后将无法恢复。',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
+                ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('取消'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(context, true),
+              style: FilledButton.styleFrom(
+                backgroundColor: Colors.redAccent,
+              ),
+              child: const Text('删除'),
+            ),
+          ],
+        ),
+      );
+    }
+
+    if (confirmed != true) return;
+
+    // 执行删除操作
+    final success = await _playlistService.deletePlaylist(playlist.id);
+
+    if (!mounted) return;
+
+    _showUserNotification(
+      success ? '歌单「${playlist.name}」已删除' : '删除失败',
+      severity: success ? fluent.InfoBarSeverity.success : fluent.InfoBarSeverity.error,
+      materialBackground: success ? null : Colors.red,
+      duration: const Duration(seconds: 2),
+    );
+
+    if (success && _selectedPlaylist?.id == playlist.id) {
+      _backToList();
     }
   }
 }

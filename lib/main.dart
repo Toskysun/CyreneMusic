@@ -16,6 +16,7 @@ import 'package:cyrene_music/services/persistent_storage_service.dart';
 import 'package:cyrene_music/services/player_background_service.dart';
 import 'package:cyrene_music/services/player_service.dart';
 import 'package:cyrene_music/services/notification_service.dart';
+import 'package:cyrene_music/services/playback_resume_service.dart';
 import 'package:cyrene_music/services/permission_service.dart';
 import 'package:cyrene_music/services/system_media_service.dart';
 import 'package:cyrene_music/services/tray_service.dart';
@@ -164,6 +165,23 @@ void main() async {
     await AndroidFloatingLyricService().initialize();
     DeveloperModeService().addLog('📱 Android悬浮歌词服务已初始化');
   }
+  
+  // 检查并显示恢复播放通知（延迟2秒，等待UI完全加载）
+  print('⏰ [Main] 将在2秒后检查播放恢复状态...');
+  DeveloperModeService().addLog('⏰ 将在2秒后检查播放恢复状态...');
+  
+  Future.delayed(const Duration(seconds: 2), () {
+    print('🔄 [Main] 开始检查播放恢复状态...');
+    DeveloperModeService().addLog('🔄 开始检查播放恢复状态...');
+    
+    PlaybackResumeService().checkAndShowResumeNotification().then((_) {
+      print('✅ [Main] 播放恢复检查完成');
+      DeveloperModeService().addLog('✅ 播放恢复检查完成');
+    }).catchError((e) {
+      print('❌ [Main] 播放恢复检查失败: $e');
+      DeveloperModeService().addLog('❌ 播放恢复检查失败: $e');
+    });
+  });
   
   runApp(const MyApp());
   

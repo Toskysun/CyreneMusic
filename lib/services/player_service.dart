@@ -25,6 +25,7 @@ import 'desktop_lyric_service.dart';
 import 'android_floating_lyric_service.dart';
 import 'player_background_service.dart';
 import 'local_library_service.dart';
+import 'playback_state_service.dart';
 import 'dart:async' as async_lib;
 import 'dart:async' show TimeoutException;
 
@@ -62,6 +63,9 @@ class PlayerService extends ChangeNotifier {
   async_lib.Timer? _statsTimer; // 统计定时器
   DateTime? _playStartTime; // 播放开始时间
   int _sessionListeningTime = 0; // 当前会话累积的听歌时长
+
+  // 播放状态保存定时器
+  async_lib.Timer? _stateSaveTimer;
 
   // 桌面歌词相关
   List<LyricLine> _lyrics = [];
@@ -110,6 +114,7 @@ class PlayerService extends ChangeNotifier {
         case ap.PlayerState.playing:
           _state = PlayerState.playing;
           _startListeningTimeTracking(); // 开始听歌时长追踪
+          _startStateSaveTimer(); // 开始定期保存播放状态
           // 🔥 通知Android原生层播放状态（后台歌词更新关键）
           if (Platform.isAndroid) {
             AndroidFloatingLyricService().setPlayingState(true);
@@ -118,6 +123,8 @@ class PlayerService extends ChangeNotifier {
         case ap.PlayerState.paused:
           _state = PlayerState.paused;
           _pauseListeningTimeTracking(); // 暂停听歌时长追踪
+          _saveCurrentPlaybackState(); // 暂停时保存状态
+          _stopStateSaveTimer(); // 停止定期保存
           // 🔥 通知Android原生层播放状态（后台歌词更新关键）
           if (Platform.isAndroid) {
             AndroidFloatingLyricService().setPlayingState(false);
@@ -126,6 +133,7 @@ class PlayerService extends ChangeNotifier {
         case ap.PlayerState.stopped:
           _state = PlayerState.idle;
           _pauseListeningTimeTracking(); // 暂停听歌时长追踪
+          _stopStateSaveTimer(); // 停止定期保存
           // 🔥 通知Android原生层播放状态（后台歌词更新关键）
           if (Platform.isAndroid) {
             AndroidFloatingLyricService().setPlayingState(false);
@@ -135,6 +143,7 @@ class PlayerService extends ChangeNotifier {
           _state = PlayerState.idle;
           _position = Duration.zero;
           _pauseListeningTimeTracking(); // 暂停听歌时长追踪
+          _stopStateSaveTimer(); // 停止定期保存
           // 🔥 通知Android原生层播放状态（后台歌词更新关键）
           if (Platform.isAndroid) {
             AndroidFloatingLyricService().setPlayingState(false);
@@ -778,12 +787,57 @@ class PlayerService extends ChangeNotifier {
     }
   }
 
+  /// 开始定期保存播放状态定时器
+  void _startStateSaveTimer() {
+    // 如果已经在运行，不重复启动
+    if (_stateSaveTimer != null && _stateSaveTimer!.isActive) return;
+    
+    // 每10秒保存一次播放状态
+    _stateSaveTimer = async_lib.Timer.periodic(const Duration(seconds: 10), (timer) {
+      _saveCurrentPlaybackState();
+    });
+    
+    print('💾 [PlayerService] 开始定期保存播放状态（每10秒）');
+  }
+
+  /// 停止保存播放状态定时器
+  void _stopStateSaveTimer() {
+    if (_stateSaveTimer != null) {
+      _stateSaveTimer?.cancel();
+      _stateSaveTimer = null;
+      print('💾 [PlayerService] 停止定期保存播放状态');
+    }
+  }
+
+  /// 保存当前播放状态
+  void _saveCurrentPlaybackState() {
+    if (_currentTrack == null || _state != PlayerState.playing) {
+      return;
+    }
+
+    // 如果播放位置小于5秒，不保存（刚开始播放）
+    if (_position.inSeconds < 5) {
+      return;
+    }
+
+    // 检查是否是从播放队列播放的
+    final isFromPlaylist = PlaylistQueueService().hasQueue;
+
+    PlaybackStateService().savePlaybackState(
+      track: _currentTrack!,
+      position: _position,
+      isFromPlaylist: isFromPlaylist,
+    );
+  }
+
   /// 清理资源
   @override
   void dispose() {
     print('🗑️ [PlayerService] 释放播放器资源...');
     // 停止统计定时器
     _pauseListeningTimeTracking();
+    // 停止状态保存定时器
+    _stopStateSaveTimer();
     // 同步清理当前临时文件
     _cleanupCurrentTempFile();
     _audioPlayer.stop();
@@ -1139,6 +1193,27 @@ class PlayerService extends ChangeNotifier {
   /// 悬浮歌词也能持续更新
   void updateFloatingLyricManually() {
     _updateFloatingLyric();
+  }
+
+  /// 从保存的状态恢复播放
+  Future<void> resumeFromSavedState(PlaybackState state) async {
+    try {
+      print('🔄 [PlayerService] 从保存的状态恢复播放: ${state.track.name}');
+      
+      // 播放歌曲
+      await playTrack(state.track);
+      
+      // 等待播放开始
+      await Future.delayed(const Duration(milliseconds: 500));
+      
+      // 跳转到保存的位置
+      if (state.position.inSeconds > 0) {
+        await seek(state.position);
+        print('⏩ [PlayerService] 已跳转到保存的位置: ${state.position.inSeconds}秒');
+      }
+    } catch (e) {
+      print('❌ [PlayerService] 恢复播放失败: $e');
+    }
   }
 }
 

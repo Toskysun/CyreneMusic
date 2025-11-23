@@ -1,8 +1,15 @@
 import 'dart:io';
+import 'dart:ui' as ui;
 import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:path/path.dart' as p;
+import 'package:path_provider/path_provider.dart';
+import 'package:http/http.dart' as http;
 import 'developer_mode_service.dart';
+
+/// 通知操作回调
+typedef NotificationActionCallback = void Function(String action, String? payload);
 
 class NotificationService {
   static final NotificationService _instance = NotificationService._internal();
@@ -13,6 +20,7 @@ class NotificationService {
       FlutterLocalNotificationsPlugin();
 
   bool _isInitialized = false;
+  NotificationActionCallback? _actionCallback;
 
   Future<void> initialize() async {
     if (_isInitialized) return;
@@ -61,6 +69,15 @@ class NotificationService {
         initializationSettings,
         onDidReceiveNotificationResponse: (NotificationResponse details) {
           print('🔔 [NotificationService] Notification clicked: ${details.payload}');
+          print('🔔 [NotificationService] Action ID: ${details.actionId}');
+          
+          // 如果有操作ID，触发回调
+          if (details.actionId != null && _actionCallback != null) {
+            _actionCallback!(details.actionId!, details.payload);
+          } else if (details.actionId == null && _actionCallback != null) {
+            // 点击通知本身（不是按钮）
+            _actionCallback!('tap', details.payload);
+          }
         },
       );
       _isInitialized = true;
@@ -142,6 +159,281 @@ class NotificationService {
       DeveloperModeService().addLog('✅ 通知发送请求已发出');
     } catch (e) {
       DeveloperModeService().addLog('❌ 发送通知失败: $e');
+    }
+  }
+
+  /// 设置通知操作回调
+  void setActionCallback(NotificationActionCallback callback) {
+    _actionCallback = callback;
+    print('🔔 [NotificationService] 通知操作回调已设置');
+  }
+
+  /// 显示带操作按钮的通知（用于恢复播放）
+  Future<void> showResumePlaybackNotification({
+    required String trackName,
+    required String artist,
+    String? coverUrl,
+    String? platformInfo,  // 平台信息，如 "来自你的 Android"
+    String? payload,
+  }) async {
+    if (!_isInitialized) await initialize();
+
+    // 下载封面图片（如果提供了URL）
+    String? largeIconPath;
+    if (coverUrl != null && coverUrl.isNotEmpty) {
+      largeIconPath = await _downloadCoverImage(coverUrl);
+    }
+
+    // 构建通知文本
+    final hasPlatformInfo = platformInfo != null && platformInfo.isNotEmpty;
+    final isWindowsPlatform = Platform.isWindows;
+    final bodyBase = '$trackName - $artist';
+    final notificationBody = bodyBase;
+    final windowsSubtitle = isWindowsPlatform && hasPlatformInfo ? platformInfo : null;
+
+    final AndroidNotificationDetails androidNotificationDetails =
+        AndroidNotificationDetails(
+      'cyrene_music_playback',
+      'Playback Control',
+      channelDescription: 'Notifications for playback control',
+      importance: Importance.high,
+      priority: Priority.high,
+      ticker: 'Resume playback',
+      subText: hasPlatformInfo ? platformInfo : null,
+      // 添加大图标（专辑封面）- 圆形或方形小图标
+      largeIcon: largeIconPath != null 
+          ? FilePathAndroidBitmap(largeIconPath)
+          : null,
+      // 使用 BigPictureStyle 样式，显示长方形大图
+      styleInformation: largeIconPath != null
+          ? BigPictureStyleInformation(
+              FilePathAndroidBitmap(largeIconPath),
+              largeIcon: FilePathAndroidBitmap(largeIconPath),
+              contentTitle: '从上次离开的位置继续？',
+              summaryText: notificationBody,
+              htmlFormatContentTitle: true,
+              htmlFormatSummaryText: true,
+              // 隐藏展开后的大图标，只显示大图（长方形）
+              hideExpandedLargeIcon: true,
+            )
+          : null,
+      actions: <AndroidNotificationAction>[
+        AndroidNotificationAction(
+          'resume',
+          '继续播放',
+          showsUserInterface: true,
+        ),
+        AndroidNotificationAction(
+          'dismiss',
+          '忽略',
+        ),
+      ],
+    );
+
+    final WindowsNotificationDetails windowsNotificationDetails =
+        WindowsNotificationDetails(
+      subtitle: windowsSubtitle,
+      // Windows 使用 images 参数（复数），传入 WindowsImage 列表
+      images: largeIconPath != null 
+          ? <WindowsImage>[
+              WindowsImage(
+                Uri.file(largeIconPath, windows: true),
+                altText: '专辑封面',
+                // 不设置 crop，保持默认（圆角正方形）
+                // 设置图片位置为应用徽标位置（显示在左侧小图标位置）
+                placement: WindowsImagePlacement.appLogoOverride,
+              ),
+            ]
+          : const <WindowsImage>[],
+      actions: <WindowsAction>[
+        WindowsAction(
+          content: '继续播放',
+          arguments: 'resume',
+        ),
+        WindowsAction(
+          content: '忽略',
+          arguments: 'dismiss',
+        ),
+      ],
+    );
+
+    final NotificationDetails notificationDetails = NotificationDetails(
+      android: androidNotificationDetails,
+      windows: windowsNotificationDetails,
+    );
+
+    try {
+      DeveloperModeService().addLog('🔔 显示恢复播放通知: $trackName');
+      if (largeIconPath != null) {
+        DeveloperModeService().addLog('🖼️ 封面图片: $largeIconPath');
+      }
+      
+      await _flutterLocalNotificationsPlugin.show(
+        100, // 使用固定ID，避免重复通知
+        '从上次离开的位置继续？',
+        notificationBody,
+        notificationDetails,
+        payload: payload,
+      );
+      DeveloperModeService().addLog('✅ 恢复播放通知已显示');
+      if (platformInfo != null && platformInfo.isNotEmpty) {
+        DeveloperModeService().addLog('📱 平台信息: $platformInfo');
+      }
+    } catch (e) {
+      DeveloperModeService().addLog('❌ 显示恢复播放通知失败: $e');
+    }
+  }
+
+  /// 下载封面图片到本地
+  Future<String?> _downloadCoverImage(String imageUrl) async {
+    try {
+      print('🖼️ [NotificationService] 开始下载封面: $imageUrl');
+      
+      // 获取临时目录
+      final tempDir = await getTemporaryDirectory();
+      final notificationDir = Directory(p.join(tempDir.path, 'notification_covers'));
+      
+      // 创建目录（如果不存在）
+      if (!await notificationDir.exists()) {
+        await notificationDir.create(recursive: true);
+      }
+      
+      // 生成文件名（使用URL的hash）
+      final fileName = 'cover_${imageUrl.hashCode.abs()}.jpg';
+      final filePath = p.join(notificationDir.path, fileName);
+      final file = File(filePath);
+      
+      // 如果是 Windows，检查圆角版本是否存在
+      if (Platform.isWindows) {
+        final roundedPath = filePath.replaceAll('.jpg', '_rounded.png');
+        final roundedFile = File(roundedPath);
+        if (await roundedFile.exists()) {
+          print('✅ [NotificationService] 使用缓存的圆角封面: $roundedPath');
+          return roundedPath;
+        }
+      }
+      
+      // 如果文件已存在，直接使用
+      if (await file.exists()) {
+        print('✅ [NotificationService] 使用缓存的封面: $filePath');
+        
+        // Windows 平台需要创建圆角版本
+        if (Platform.isWindows) {
+          final roundedPath = await _createRoundedImage(filePath);
+          if (roundedPath != null) {
+            return roundedPath;
+          }
+        }
+        
+        return filePath;
+      }
+      
+      // 下载图片
+      final response = await http.get(Uri.parse(imageUrl)).timeout(
+        const Duration(seconds: 5),
+      );
+      
+      if (response.statusCode == 200) {
+        await file.writeAsBytes(response.bodyBytes);
+        
+        // 如果是 Windows 平台，处理圆角
+        if (Platform.isWindows) {
+          final roundedPath = await _createRoundedImage(filePath);
+          if (roundedPath != null) {
+            print('✅ [NotificationService] 圆角封面创建完成: $roundedPath');
+            return roundedPath;
+          }
+        }
+        
+        print('✅ [NotificationService] 封面下载完成: $filePath');
+        return filePath;
+      } else {
+        print('⚠️ [NotificationService] 封面下载失败: HTTP ${response.statusCode}');
+        return null;
+      }
+    } catch (e) {
+      print('❌ [NotificationService] 下载封面失败: $e');
+      return null;
+    }
+  }
+
+  /// 创建圆角图片（用于 Windows 通知）
+  Future<String?> _createRoundedImage(String originalPath) async {
+    try {
+      print('🎨 [NotificationService] 开始创建圆角图片...');
+      
+      // 读取原始图片
+      final originalFile = File(originalPath);
+      final imageBytes = await originalFile.readAsBytes();
+      final codec = await ui.instantiateImageCodec(imageBytes);
+      final frame = await codec.getNextFrame();
+      final image = frame.image;
+      
+      // 创建画布
+      final size = 200; // 通知图标大小
+      final recorder = ui.PictureRecorder();
+      final canvas = Canvas(recorder);
+      final paint = Paint()..isAntiAlias = true;
+      
+      // 绘制圆角矩形路径
+      final radius = size * 0.15; // 圆角半径为边长的 15%
+      final rect = Rect.fromLTWH(0, 0, size.toDouble(), size.toDouble());
+      final rrect = RRect.fromRectAndRadius(rect, Radius.circular(radius));
+      
+      // 裁剪为圆角矩形
+      canvas.clipRRect(rrect);
+      
+      // 绘制图片（缩放并居中）
+      final srcRect = Rect.fromLTWH(0, 0, image.width.toDouble(), image.height.toDouble());
+      final dstRect = Rect.fromLTWH(0, 0, size.toDouble(), size.toDouble());
+      canvas.drawImageRect(image, srcRect, dstRect, paint);
+      
+      // 转换为图片
+      final picture = recorder.endRecording();
+      final img = await picture.toImage(size, size);
+      final byteData = await img.toByteData(format: ui.ImageByteFormat.png);
+      
+      if (byteData == null) {
+        print('❌ [NotificationService] 无法生成圆角图片数据');
+        return null;
+      }
+      
+      // 保存圆角图片
+      final roundedPath = originalPath.replaceAll('.jpg', '_rounded.png');
+      final roundedFile = File(roundedPath);
+      await roundedFile.writeAsBytes(byteData.buffer.asUint8List());
+      
+      print('✅ [NotificationService] 圆角图片已保存: $roundedPath');
+      return roundedPath;
+    } catch (e) {
+      print('❌ [NotificationService] 创建圆角图片失败: $e');
+      return null; // 失败时返回 null，使用原始图片
+    }
+  }
+
+  /// 清理旧的封面图片缓存
+  Future<void> clearCoverCache() async {
+    try {
+      final tempDir = await getTemporaryDirectory();
+      final notificationDir = Directory(p.join(tempDir.path, 'notification_covers'));
+      
+      if (await notificationDir.exists()) {
+        await notificationDir.delete(recursive: true);
+        print('🗑️ [NotificationService] 封面缓存已清理');
+        DeveloperModeService().addLog('🗑️ 通知封面缓存已清理');
+      }
+    } catch (e) {
+      print('❌ [NotificationService] 清理封面缓存失败: $e');
+    }
+  }
+
+  /// 取消特定通知
+  Future<void> cancelNotification(int id) async {
+    try {
+      await _flutterLocalNotificationsPlugin.cancel(id);
+      print('🔔 [NotificationService] 已取消通知 ID: $id');
+    } catch (e) {
+      print('❌ [NotificationService] 取消通知失败: $e');
     }
   }
 }

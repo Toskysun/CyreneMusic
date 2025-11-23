@@ -6,6 +6,28 @@ import '../models/track.dart';
 import 'auth_service.dart';
 import 'url_service.dart';
 
+class PlaylistSyncResult {
+  final int insertedCount;
+  final List<PlaylistTrack> newTracks;
+  final String message;
+
+  const PlaylistSyncResult({
+    required this.insertedCount,
+    required this.newTracks,
+    this.message = '',
+  });
+
+  factory PlaylistSyncResult.empty({String message = ''}) {
+    return PlaylistSyncResult(
+      insertedCount: 0,
+      newTracks: const <PlaylistTrack>[],
+      message: message,
+    );
+  }
+
+  bool get hasUpdates => insertedCount > 0;
+}
+
 /// 歌单服务
 class PlaylistService extends ChangeNotifier {
   static final PlaylistService _instance = PlaylistService._internal();
@@ -58,8 +80,8 @@ class PlaylistService extends ChangeNotifier {
   }
 
   /// 触发服务端同步
-  Future<int> syncPlaylist(int playlistId) async {
-    if (!AuthService().isLoggedIn) return 0;
+  Future<PlaylistSyncResult> syncPlaylist(int playlistId) async {
+    if (!AuthService().isLoggedIn) return PlaylistSyncResult.empty();
     try {
       final baseUrl = UrlService().baseUrl;
       final token = AuthService().token!;
@@ -78,15 +100,59 @@ class PlaylistService extends ChangeNotifier {
       }
       if (resp.statusCode == 200) {
         final data = json.decode(utf8.decode(resp.bodyBytes)) as Map<String, dynamic>;
+        if ((data['status'] as int?) != 200) {
+          final failureMessage = data['message'] as String? ?? '同步失败';
+          print('⚠️ [PlaylistService] 同步失败: $failureMessage');
+          return PlaylistSyncResult.empty(message: failureMessage);
+        }
         final inserted = data['insertedCount'] as int? ?? 0;
+        final newTracks = (data['newTracks'] as List<dynamic>? ?? [])
+            .map((item) => PlaylistTrack.fromJson(item as Map<String, dynamic>))
+            .toList();
+        final message = data['message'] as String? ?? '同步完成';
         print('✅ [PlaylistService] 同步完成，新增 $inserted 首');
-        return inserted;
+        if (inserted > 0) {
+          _applySyncUpdates(playlistId, inserted, newTracks);
+        }
+        return PlaylistSyncResult(
+          insertedCount: inserted,
+          newTracks: newTracks,
+          message: message,
+        );
+      } else if (resp.statusCode == 401) {
+        print('⚠️ [PlaylistService] 未授权，需要重新登录');
+        await AuthService().handleUnauthorized();
+        return PlaylistSyncResult.empty(message: '未登录或登录已过期');
       }
       print('⚠️ [PlaylistService] 同步失败: HTTP ${resp.statusCode}');
     } catch (e) {
       print('❌ [PlaylistService] 同步异常: $e');
+      return PlaylistSyncResult.empty(message: '同步失败: $e');
     }
-    return 0;
+    return PlaylistSyncResult.empty(message: '同步失败');
+  }
+
+  void _applySyncUpdates(int playlistId, int inserted, List<PlaylistTrack> newTracks) {
+    final idx = _playlists.indexWhere((p) => p.id == playlistId);
+    if (idx != -1) {
+      final playlist = _playlists[idx];
+      _playlists[idx] = Playlist(
+        id: playlist.id,
+        name: playlist.name,
+        isDefault: playlist.isDefault,
+        trackCount: playlist.trackCount + inserted,
+        createdAt: playlist.createdAt,
+        updatedAt: DateTime.now(),
+        source: playlist.source,
+        sourcePlaylistId: playlist.sourcePlaylistId,
+      );
+    }
+
+    if (_currentPlaylistId == playlistId && newTracks.isNotEmpty) {
+      _currentTracks = [...newTracks, ..._currentTracks];
+    }
+
+    notifyListeners();
   }
 
   List<Playlist> _playlists = [];
@@ -333,12 +399,15 @@ class PlaylistService extends ChangeNotifier {
         throw Exception('无有效令牌');
       }
 
-      final response = await http.delete(
-        Uri.parse('$baseUrl/playlists/$playlistId'),
+      final response = await http.post(
+        Uri.parse('$baseUrl/playlists/$playlistId/delete'),
         headers: {
           'Content-Type': 'application/json',
           'Authorization': 'Bearer $token',
         },
+        // Bun/Elysia 在检测到 Content-Type: application/json 时会尝试解析请求体，
+        // 即使是删除歌单这种无参数请求。传入空 JSON 保证解析阶段不会抛出 PARSE 错误。
+        body: json.encode({}),
       ).timeout(
         const Duration(seconds: 10),
         onTimeout: () => throw Exception('请求超时'),

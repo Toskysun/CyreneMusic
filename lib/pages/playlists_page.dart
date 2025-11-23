@@ -205,6 +205,14 @@ class _PlaylistsPageState extends State<PlaylistsPage>
         SnackBar(content: Text('同步完成，新增 $ok 首')),
       );
       await _playlistService.loadPlaylistTracks(target.id);
+      final bound = await _playlistService.updateImportConfig(
+        target.id,
+        source: platform == MusicPlatform.netease ? 'netease' : 'qq',
+        sourcePlaylistId: sourcePlaylistId,
+      );
+      if (!bound) {
+        print('⚠️ [PlaylistsPage] 更新导入配置失败，需手动绑定');
+      }
     } catch (e) {
       if (!mounted) return;
       Navigator.pop(context);
@@ -214,17 +222,67 @@ class _PlaylistsPageState extends State<PlaylistsPage>
     }
   }
 
-  void _syncSelectedPlaylist() async {
-    if (_selectedPlaylist == null) return;
+  bool _hasImportConfig(Playlist playlist) {
+    return (playlist.source?.isNotEmpty ?? false) &&
+        (playlist.sourcePlaylistId?.isNotEmpty ?? false);
+  }
+
+  String _formatSyncResultMessage(PlaylistSyncResult result) {
+    if (result.insertedCount <= 0) {
+      return '同步完成，暂无新增歌曲';
+    }
+    final preview = result.newTracks
+        .map((t) => t.name)
+        .where((name) => name.isNotEmpty)
+        .take(3)
+        .toList();
+    final suffix = result.insertedCount > preview.length ? '…' : '';
+    final details = preview.isEmpty ? '' : '：${preview.join('、')}$suffix';
+    return '同步完成，新增 ${result.insertedCount} 首$details';
+  }
+
+  Future<void> _syncPlaylistFromList(Playlist playlist) async {
+    if (!_hasImportConfig(playlist)) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('请先在“导入管理”中绑定歌单来源后再同步')),
+      );
+      return;
+    }
+
+    if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('正在同步...'), duration: Duration(seconds: 1)),
     );
-    final inserted = await _playlistService.syncPlaylist(_selectedPlaylist!.id);
+    final result = await _playlistService.syncPlaylist(playlist.id);
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('同步完成，新增 $inserted 首')),
+      SnackBar(content: Text(_formatSyncResultMessage(result))),
     );
-    await _playlistService.loadPlaylistTracks(_selectedPlaylist!.id);
+    if (_selectedPlaylist?.id == playlist.id) {
+      await _playlistService.loadPlaylistTracks(playlist.id);
+    }
+  }
+
+  void _syncSelectedPlaylist() async {
+    if (_selectedPlaylist == null) return;
+    final target = _selectedPlaylist!;
+    if (!_hasImportConfig(target)) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('请先在“导入管理”中绑定歌单来源后再同步')),
+      );
+      return;
+    }
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('正在同步...'), duration: Duration(seconds: 1)),
+    );
+    final result = await _playlistService.syncPlaylist(target.id);
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(_formatSyncResultMessage(result))),
+    );
+    await _playlistService.loadPlaylistTracks(target.id);
   }
 
   @override
@@ -426,6 +484,7 @@ class _PlaylistsPageState extends State<PlaylistsPage>
 
   /// 构建歌单项
   Widget _buildPlaylistItem(Playlist playlist, ColorScheme colorScheme) {
+    final canSync = _hasImportConfig(playlist);
     return Card(
       margin: const EdgeInsets.only(bottom: 8),
       child: ListTile(
@@ -480,6 +539,12 @@ class _PlaylistsPageState extends State<PlaylistsPage>
                 icon: const Icon(Icons.edit, size: 20),
                 onPressed: () => _showRenamePlaylistDialog(playlist),
                 tooltip: '重命名',
+              ),
+              IconButton(
+                icon: const Icon(Icons.sync, size: 20),
+                color: canSync ? colorScheme.primary : null,
+                onPressed: canSync ? () => _syncPlaylistFromList(playlist) : null,
+                tooltip: canSync ? '同步歌单' : '请先设置导入来源',
               ),
               IconButton(
                 icon: const Icon(Icons.delete, size: 20),
@@ -944,16 +1009,22 @@ class _PlaylistsPageState extends State<PlaylistsPage>
           IconButton(
             icon: const Icon(Icons.sync),
             onPressed: () async {
+              if (!_hasImportConfig(playlist)) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('请先设置导入来源后再同步')),
+                );
+                return;
+              }
               ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(
                   content: Text('正在同步...'),
                   duration: Duration(seconds: 1),
                 ),
               );
-              final inserted = await _playlistService.syncPlaylist(playlist.id);
+              final result = await _playlistService.syncPlaylist(playlist.id);
               if (!mounted) return;
               ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text('同步完成，新增 $inserted 首')),
+                SnackBar(content: Text(_formatSyncResultMessage(result))),
               );
               await _playlistService.loadPlaylistTracks(playlist.id);
             },
