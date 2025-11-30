@@ -488,17 +488,7 @@ class _PlaylistsPageState extends State<PlaylistsPage>
     return Card(
       margin: const EdgeInsets.only(bottom: 8),
       child: ListTile(
-        leading: CircleAvatar(
-          backgroundColor: playlist.isDefault
-              ? colorScheme.primaryContainer
-              : colorScheme.secondaryContainer,
-          child: Icon(
-            playlist.isDefault ? Icons.favorite : Icons.queue_music,
-            color: playlist.isDefault
-                ? colorScheme.onPrimaryContainer
-                : colorScheme.onSecondaryContainer,
-          ),
-        ),
+        leading: _buildPlaylistCover(playlist, colorScheme),
         title: Row(
           children: [
             Expanded(
@@ -556,6 +546,72 @@ class _PlaylistsPageState extends State<PlaylistsPage>
           ],
         ),
         onTap: () => _openPlaylistDetail(playlist),
+      ),
+    );
+  }
+
+  /// 构建歌单封面
+  Widget _buildPlaylistCover(Playlist playlist, ColorScheme colorScheme) {
+    // 如果有封面图片，显示封面
+    if (playlist.coverUrl != null && playlist.coverUrl!.isNotEmpty) {
+      return ClipRRect(
+        borderRadius: BorderRadius.circular(8),
+        child: CachedNetworkImage(
+          imageUrl: playlist.coverUrl!,
+          width: 48,
+          height: 48,
+          fit: BoxFit.cover,
+          placeholder: (context, url) => Container(
+            width: 48,
+            height: 48,
+            decoration: BoxDecoration(
+              color: playlist.isDefault
+                  ? colorScheme.primaryContainer
+                  : colorScheme.secondaryContainer,
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Icon(
+              playlist.isDefault ? Icons.favorite : Icons.queue_music,
+              color: playlist.isDefault
+                  ? colorScheme.onPrimaryContainer
+                  : colorScheme.onSecondaryContainer,
+            ),
+          ),
+          errorWidget: (context, url, error) => Container(
+            width: 48,
+            height: 48,
+            decoration: BoxDecoration(
+              color: playlist.isDefault
+                  ? colorScheme.primaryContainer
+                  : colorScheme.secondaryContainer,
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Icon(
+              playlist.isDefault ? Icons.favorite : Icons.queue_music,
+              color: playlist.isDefault
+                  ? colorScheme.onPrimaryContainer
+                  : colorScheme.onSecondaryContainer,
+            ),
+          ),
+        ),
+      );
+    }
+    
+    // 没有封面时显示默认图标
+    return Container(
+      width: 48,
+      height: 48,
+      decoration: BoxDecoration(
+        color: playlist.isDefault
+            ? colorScheme.primaryContainer
+            : colorScheme.secondaryContainer,
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Icon(
+        playlist.isDefault ? Icons.favorite : Icons.queue_music,
+        color: playlist.isDefault
+            ? colorScheme.onPrimaryContainer
+            : colorScheme.onSecondaryContainer,
       ),
     );
   }

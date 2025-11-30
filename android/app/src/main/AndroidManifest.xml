@@ -67,6 +67,12 @@
             </intent-filter>
         </receiver>
         
+        <!-- 悬浮歌词前台服务 -->
+        <service
+            android:name=".FloatingLyricService"
+            android:foregroundServiceType="mediaPlayback"
+            android:exported="false"/>
+        
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->
         <meta-data

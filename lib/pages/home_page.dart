@@ -7,6 +7,7 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:bitsdojo_window/bitsdojo_window.dart';
 import 'package:fluent_ui/fluent_ui.dart' as fluent;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../services/music_service.dart';
 import '../services/player_service.dart';
 import '../services/version_service.dart';
@@ -37,6 +38,7 @@ import 'home_page/daily_recommend_detail_page.dart';
 import 'home_page/home_breadcrumbs.dart';
 import 'home_page/home_overlay_controller.dart';
 import 'home_page/home_widgets.dart';
+import '../services/global_back_handler_service.dart';
 import 'home_page/toplist_detail.dart';
 
 /// 首页 - 展示音乐和视频内容
@@ -227,6 +229,7 @@ class _HomePageState extends State<HomePage>
     _homeSearchService.removeListener(_onExternalSearchRequested);
     _bannerController.dispose();
     _homeOverlayController.setBackHandler(null);
+    GlobalBackHandlerService().unregister('home_overlay');
     super.dispose();
   }
 
@@ -1278,6 +1281,16 @@ class _HomePageState extends State<HomePage>
     BuildContext context,
     ColorScheme colorScheme,
   ) {
+    // 根据当前主题亮度设置状态栏样式（仅 Android 需要）
+    final brightness = Theme.of(context).brightness;
+    final systemOverlayStyle = brightness == Brightness.light
+        ? SystemUiOverlayStyle.dark.copyWith(
+            statusBarColor: Colors.transparent,
+          )
+        : SystemUiOverlayStyle.light.copyWith(
+            statusBarColor: Colors.transparent,
+          );
+
     return SliverAppBar(
       floating: true,
       snap: true,
@@ -1285,6 +1298,7 @@ class _HomePageState extends State<HomePage>
       surfaceTintColor: Colors.transparent,
       elevation: 0,
       scrolledUnderElevation: 0,
+      systemOverlayStyle: Platform.isAndroid ? systemOverlayStyle : null,
       title: Text(
         '首页',
         style: TextStyle(
@@ -1649,36 +1663,53 @@ class _HomePageState extends State<HomePage>
   void _syncGlobalBackHandler() {
     if (!mounted) {
       _homeOverlayController.setBackHandler(null);
+      GlobalBackHandlerService().unregister('home_overlay');
       return;
     }
 
     if (_showSearch) {
-      _homeOverlayController.setBackHandler(() {
+      final handler = () {
         if (!mounted) return;
         setState(() {
           _showSearch = false;
           _initialSearchKeyword = null;
         });
         _syncGlobalBackHandler();
+      };
+      _homeOverlayController.setBackHandler(handler);
+      GlobalBackHandlerService().register('home_overlay', () {
+        handler();
+        return true;
       });
       return;
     }
 
     if (_showDailyDetail) {
-      _homeOverlayController.setBackHandler(() {
+      final handler = () {
         _closeDailyDetail();
+      };
+      _homeOverlayController.setBackHandler(handler);
+      GlobalBackHandlerService().register('home_overlay', () {
+        handler();
+        return true;
       });
       return;
     }
 
     if (_showDiscoverDetail && _discoverPlaylistId != null) {
-      _homeOverlayController.setBackHandler(() {
+      final handler = () {
         _closeDiscoverDetail();
+      };
+      _homeOverlayController.setBackHandler(handler);
+      GlobalBackHandlerService().register('home_overlay', () {
+        handler();
+        return true;
       });
       return;
     }
 
     _homeOverlayController.setBackHandler(null);
+    GlobalBackHandlerService().unregister('home_overlay');
   }
 
   ThemeData _materialHomeThemeWithFont(ThemeData base) {

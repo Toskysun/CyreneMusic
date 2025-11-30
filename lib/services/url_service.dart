@@ -14,7 +14,7 @@ class UrlService extends ChangeNotifier {
   UrlService._internal();
 
   /// 官方源地址
-  static const String officialBaseUrl = 'http://114.66.31.209:4055';
+  static const String officialBaseUrl = 'https://music.cyrene.ltd';
 
   /// 当前源类型
   BackendSourceType _sourceType = BackendSourceType.official;
@@ -158,6 +158,8 @@ class UrlService extends ChangeNotifier {
   String get neteaseForYouUrl => '$baseUrl/recommend/for_you';
   // Netease playlist detail
   String get neteasePlaylistDetailUrl => '$baseUrl/playlist';
+  // Netease user playlists (for import)
+  String get neteaseUserPlaylistsUrl => '$baseUrl/netease/user/playlists';
 
   // QQ Music API
   String get qqSearchUrl => '$baseUrl/qq/search';

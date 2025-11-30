@@ -6,6 +6,7 @@ import '../services/url_service.dart';
 import '../services/playlist_service.dart';
 import '../services/auth_service.dart';
 import '../services/kugou_login_service.dart';
+import '../services/netease_login_service.dart';
 import '../models/playlist.dart';
 import '../models/track.dart';
 import '../utils/theme_manager.dart';
@@ -243,6 +244,8 @@ class ImportPlaylistDialog {
   static Future<void> show(BuildContext context) async {
     final controller = TextEditingController();
     MusicPlatform selectedPlatform = MusicPlatform.netease;
+    // 网易云导入方式: 'account' 从账号导入, 'url' 从URL/ID导入
+    String neteaseImportMode = 'account';
     Map<String, dynamic>? result;
     if (ThemeManager().isFluentFramework) {
       String? errorText;
@@ -263,7 +266,11 @@ class ImportPlaylistDialog {
                     return fluent.MenuFlyoutItem(
                       text: Text('${platform.icon} ${platform.name}'),
                       onPressed: () {
-                        setState(() => selectedPlatform = platform);
+                        setState(() {
+                          selectedPlatform = platform;
+                          controller.clear();
+                          errorText = null;
+                        });
                       },
                     );
                   }).toList(),
@@ -276,6 +283,53 @@ class ImportPlaylistDialog {
                     content: Text('点击"下一步"将显示您绑定的酷狗账号中的歌单'),
                     severity: fluent.InfoBarSeverity.info,
                   ),
+                ] else if (selectedPlatform == MusicPlatform.netease) ...[
+                  // 网易云音乐：支持两种导入方式
+                  const Text('导入方式', style: TextStyle(fontWeight: FontWeight.w600)),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      fluent.RadioButton(
+                        checked: neteaseImportMode == 'account',
+                        onChanged: (v) => setState(() {
+                          neteaseImportMode = 'account';
+                          controller.clear();
+                          errorText = null;
+                        }),
+                      ),
+                      const SizedBox(width: 8),
+                      const Text('从绑定账号导入'),
+                      const SizedBox(width: 24),
+                      fluent.RadioButton(
+                        checked: neteaseImportMode == 'url',
+                        onChanged: (v) => setState(() {
+                          neteaseImportMode = 'url';
+                          errorText = null;
+                        }),
+                      ),
+                      const SizedBox(width: 8),
+                      const Text('输入歌单ID/URL'),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  if (neteaseImportMode == 'account') ...[
+                    const fluent.InfoBar(
+                      title: Text('从账号导入'),
+                      content: Text('点击"下一步"将显示您绑定的网易云账号中的歌单'),
+                      severity: fluent.InfoBarSeverity.info,
+                    ),
+                  ] else ...[
+                    Text(
+                      _getInputHintText(selectedPlatform),
+                      style: const TextStyle(fontSize: 12),
+                    ),
+                    const SizedBox(height: 12),
+                    fluent.TextBox(
+                      controller: controller,
+                      placeholder: '歌单ID或URL',
+                      maxLines: 2,
+                    ),
+                  ],
                 ] else ...[
                   const Text('输入歌单信息', style: TextStyle(fontWeight: FontWeight.w600)),
                   const SizedBox(height: 8),
@@ -308,6 +362,14 @@ class ImportPlaylistDialog {
                     Navigator.pop(context, {
                       'platform': selectedPlatform,
                       'isKugou': true,
+                    });
+                    return;
+                  }
+                  // 网易云从账号导入
+                  if (selectedPlatform == MusicPlatform.netease && neteaseImportMode == 'account') {
+                    Navigator.pop(context, {
+                      'platform': selectedPlatform,
+                      'isNeteaseAccount': true,
                     });
                     return;
                   }
@@ -373,7 +435,12 @@ class ImportPlaylistDialog {
                       ),
                       selected: isSelected,
                       onSelected: (selected) {
-                        if (selected) setState(() => selectedPlatform = platform);
+                        if (selected) {
+                          setState(() {
+                            selectedPlatform = platform;
+                            controller.clear();
+                          });
+                        }
                       },
                     );
                   }).toList(),
@@ -397,6 +464,66 @@ class ImportPlaylistDialog {
                       ],
                     ),
                   ),
+                ] else if (selectedPlatform == MusicPlatform.netease) ...[
+                  // 网易云音乐：支持两种导入方式
+                  const Text('导入方式', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      Radio<String>(
+                        value: 'account',
+                        groupValue: neteaseImportMode,
+                        onChanged: (v) => setState(() {
+                          neteaseImportMode = v!;
+                          controller.clear();
+                        }),
+                      ),
+                      const Text('从绑定账号导入'),
+                      const SizedBox(width: 16),
+                      Radio<String>(
+                        value: 'url',
+                        groupValue: neteaseImportMode,
+                        onChanged: (v) => setState(() => neteaseImportMode = v!),
+                      ),
+                      const Text('输入歌单ID/URL'),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  if (neteaseImportMode == 'account') ...[
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Theme.of(context).colorScheme.primaryContainer,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(Icons.info_outline, color: Theme.of(context).colorScheme.primary),
+                          const SizedBox(width: 12),
+                          const Expanded(
+                            child: Text('点击"下一步"将显示您绑定的网易云账号中的歌单'),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ] else ...[
+                    Text(
+                      _getInputHintText(selectedPlatform),
+                      style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.onSurfaceVariant),
+                    ),
+                    const SizedBox(height: 16),
+                    TextField(
+                      controller: controller,
+                      decoration: const InputDecoration(
+                        labelText: '歌单ID或URL',
+                        hintText: '例如: 19723756 或完整URL',
+                        border: OutlineInputBorder(),
+                      ),
+                      autofocus: true,
+                      maxLines: 2,
+                      minLines: 1,
+                    ),
+                  ],
                 ] else ...[
                   const Text('输入歌单信息', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
                   const SizedBox(height: 8),
@@ -431,6 +558,14 @@ class ImportPlaylistDialog {
                     Navigator.pop(context, {
                       'platform': selectedPlatform,
                       'isKugou': true,
+                    });
+                    return;
+                  }
+                  // 网易云从账号导入
+                  if (selectedPlatform == MusicPlatform.netease && neteaseImportMode == 'account') {
+                    Navigator.pop(context, {
+                      'platform': selectedPlatform,
+                      'isNeteaseAccount': true,
                     });
                     return;
                   }
@@ -471,6 +606,11 @@ class ImportPlaylistDialog {
       // 酷狗音乐走单独的流程
       if (result['isKugou'] == true) {
         await _showKugouPlaylistsDialog(context);
+        return;
+      }
+      // 网易云从账号导入
+      if (result['isNeteaseAccount'] == true) {
+        await _showNeteasePlaylistsDialog(context);
         return;
       }
       final playlistId = result['playlistId'] as String;
@@ -712,6 +852,288 @@ class ImportPlaylistDialog {
 
       if (selectedPlaylist != null && context.mounted) {
         await _fetchAndImportKugouPlaylist(context, selectedPlaylist);
+      }
+    } catch (e) {
+      if (!context.mounted) return;
+      Navigator.pop(context); // 关闭加载对话框
+
+      if (ThemeManager().isFluentFramework) {
+        await fluent.showDialog(
+          context: context,
+          builder: (context) => fluent.ContentDialog(
+            title: const Text('获取歌单失败'),
+            content: Text('$e'),
+            actions: [
+              fluent.FilledButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('确定'),
+              ),
+            ],
+          ),
+        );
+      } else {
+        await showDialog(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('获取歌单失败'),
+            content: Text('$e'),
+            actions: [
+              FilledButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('确定'),
+              ),
+            ],
+          ),
+        );
+      }
+    }
+  }
+
+  /// 显示网易云歌单选择对话框
+  static Future<void> _showNeteasePlaylistsDialog(BuildContext context) async {
+    final neteaseService = NeteaseLoginService();
+    
+    // 先检查是否已绑定网易云账号
+    final isBound = await neteaseService.isNeteaseBound();
+    if (!isBound) {
+      if (!context.mounted) return;
+      if (ThemeManager().isFluentFramework) {
+        await fluent.showDialog(
+          context: context,
+          builder: (context) => fluent.ContentDialog(
+            title: const Text('未绑定网易云账号'),
+            content: const Text('请先在「设置 → 第三方账号」中绑定网易云账号后再导入歌单。'),
+            actions: [
+              fluent.FilledButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('确定'),
+              ),
+            ],
+          ),
+        );
+      } else {
+        await showDialog(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('未绑定网易云账号'),
+            content: const Text('请先在「设置 → 第三方账号」中绑定网易云账号后再导入歌单。'),
+            actions: [
+              FilledButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('确定'),
+              ),
+            ],
+          ),
+        );
+      }
+      return;
+    }
+
+    if (!context.mounted) return;
+
+    // 显示加载中
+    if (ThemeManager().isFluentFramework) {
+      fluent.showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => const Center(
+          child: fluent.Card(
+            padding: EdgeInsets.all(24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                fluent.ProgressRing(),
+                SizedBox(height: 16),
+                Text('正在获取网易云歌单...'),
+              ],
+            ),
+          ),
+        ),
+      );
+    } else {
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => const Center(
+          child: Card(
+            child: Padding(
+              padding: EdgeInsets.all(24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  CircularProgressIndicator(),
+                  SizedBox(height: 16),
+                  Text('正在获取网易云歌单...'),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
+    try {
+      final playlists = await neteaseService.fetchUserPlaylists(limit: 100);
+      if (!context.mounted) return;
+      Navigator.pop(context); // 关闭加载对话框
+
+      if (playlists.isEmpty) {
+        if (ThemeManager().isFluentFramework) {
+          await fluent.showDialog(
+            context: context,
+            builder: (context) => fluent.ContentDialog(
+              title: const Text('暂无歌单'),
+              content: const Text('您的网易云账号中暂无歌单。'),
+              actions: [
+                fluent.FilledButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('确定'),
+                ),
+              ],
+            ),
+          );
+        } else {
+          await showDialog(
+            context: context,
+            builder: (context) => AlertDialog(
+              title: const Text('暂无歌单'),
+              content: const Text('您的网易云账号中暂无歌单。'),
+              actions: [
+                FilledButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('确定'),
+                ),
+              ],
+            ),
+          );
+        }
+        return;
+      }
+
+      // 显示歌单选择对话框
+      NeteasePlaylistInfo? selectedPlaylist;
+      if (ThemeManager().isFluentFramework) {
+        selectedPlaylist = await fluent.showDialog<NeteasePlaylistInfo>(
+          context: context,
+          builder: (context) => fluent.ContentDialog(
+            title: const Text('选择要导入的网易云歌单'),
+            content: SizedBox(
+              width: 480,
+              height: 400,
+              child: ListView.builder(
+                itemCount: playlists.length,
+                itemBuilder: (context, index) {
+                  final playlist = playlists[index];
+                  return fluent.ListTile(
+                    leading: playlist.coverImgUrl.isNotEmpty
+                        ? ClipRRect(
+                            borderRadius: BorderRadius.circular(4),
+                            child: Image.network(
+                              playlist.coverImgUrl,
+                              width: 48,
+                              height: 48,
+                              fit: BoxFit.cover,
+                              errorBuilder: (_, __, ___) => Container(
+                                width: 48,
+                                height: 48,
+                                color: Colors.grey[300],
+                                child: const Icon(fluent.FluentIcons.music_in_collection),
+                              ),
+                            ),
+                          )
+                        : Container(
+                            width: 48,
+                            height: 48,
+                            decoration: BoxDecoration(
+                              color: Colors.grey[300],
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: const Icon(fluent.FluentIcons.music_in_collection),
+                          ),
+                    title: Text(playlist.name, maxLines: 1, overflow: TextOverflow.ellipsis),
+                    subtitle: Text(
+                      '${playlist.trackCount} 首歌曲${playlist.subscribed ? ' · 收藏' : ''}',
+                      style: TextStyle(
+                        color: playlist.subscribed ? Colors.orange : null,
+                      ),
+                    ),
+                    onPressed: () => Navigator.pop(context, playlist),
+                  );
+                },
+              ),
+            ),
+            actions: [
+              fluent.Button(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('取消'),
+              ),
+            ],
+          ),
+        );
+      } else {
+        selectedPlaylist = await showDialog<NeteasePlaylistInfo>(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('选择要导入的网易云歌单'),
+            content: SizedBox(
+              width: double.maxFinite,
+              height: 400,
+              child: ListView.builder(
+                shrinkWrap: true,
+                itemCount: playlists.length,
+                itemBuilder: (context, index) {
+                  final playlist = playlists[index];
+                  return ListTile(
+                    leading: playlist.coverImgUrl.isNotEmpty
+                        ? ClipRRect(
+                            borderRadius: BorderRadius.circular(4),
+                            child: Image.network(
+                              playlist.coverImgUrl,
+                              width: 48,
+                              height: 48,
+                              fit: BoxFit.cover,
+                              errorBuilder: (_, __, ___) => Container(
+                                width: 48,
+                                height: 48,
+                                color: Colors.grey[300],
+                                child: const Icon(Icons.library_music),
+                              ),
+                            ),
+                          )
+                        : Container(
+                            width: 48,
+                            height: 48,
+                            decoration: BoxDecoration(
+                              color: Colors.grey[300],
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: const Icon(Icons.library_music),
+                          ),
+                    title: Text(playlist.name, maxLines: 1, overflow: TextOverflow.ellipsis),
+                    subtitle: Text(
+                      '${playlist.trackCount} 首歌曲${playlist.subscribed ? ' · 收藏' : ''}',
+                      style: TextStyle(
+                        color: playlist.subscribed ? Colors.orange : null,
+                      ),
+                    ),
+                    onTap: () => Navigator.pop(context, playlist),
+                  );
+                },
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('取消'),
+              ),
+            ],
+          ),
+        );
+      }
+
+      if (selectedPlaylist != null && context.mounted) {
+        // 使用现有的 _fetchAndImportPlaylist 方法，传入歌单ID
+        await _fetchAndImportPlaylist(context, MusicPlatform.netease, selectedPlaylist.id);
       }
     } catch (e) {
       if (!context.mounted) return;

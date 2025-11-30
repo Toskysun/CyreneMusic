@@ -4,7 +4,7 @@
 #define MyAppName "Cyrene Music"
 #define MyAppVersion "1.0.70"
 #define MyAppPublisher "morax"
-#define MyAppURL "https://music.cialloo.site"
+#define MyAppURL "https://music.cyrele.ltd"
 #define MyAppExeName "cyrene_music.exe"
 #define MyAppAssocName MyAppName + " File"
 #define MyAppAssocExt ".myp"

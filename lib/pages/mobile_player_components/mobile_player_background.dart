@@ -2,27 +2,190 @@ import 'dart:io';
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:palette_generator/palette_generator.dart';
 import '../../services/player_service.dart';
 import '../../services/player_background_service.dart';
 import '../../models/track.dart';
 import '../../models/song_detail.dart';
 import '../../widgets/video_background_player.dart';
+import '../../widgets/mesh_gradient_background.dart';
+
+/// 动态背景颜色缓存管理器（移动端）
+class _MobileDynamicColorCache {
+  static final _MobileDynamicColorCache _instance = _MobileDynamicColorCache._internal();
+  factory _MobileDynamicColorCache() => _instance;
+  _MobileDynamicColorCache._internal();
+
+  final Map<String, List<Color>> _cache = {};
+  String? _currentExtractingUrl;
+
+  List<Color>? getColors(String imageUrl) => _cache[imageUrl];
+  
+  void setColors(String imageUrl, List<Color> colors) {
+    _cache[imageUrl] = colors;
+    if (_cache.length > 20) {
+      _cache.remove(_cache.keys.first);
+    }
+  }
+
+  bool isExtracting(String imageUrl) => _currentExtractingUrl == imageUrl;
+  void setExtracting(String? imageUrl) => _currentExtractingUrl = imageUrl;
+}
 
 /// 移动端播放器背景组件
-/// 根据设置显示不同类型的背景（自适应、纯色、图片、视频）
-class MobilePlayerBackground extends StatelessWidget {
+/// 根据设置显示不同类型的背景（自适应、纯色、图片、视频、动态）
+/// 动态模式下使用 Apple Music 风格的 Mesh Gradient 背景
+class MobilePlayerBackground extends StatefulWidget {
   const MobilePlayerBackground({super.key});
 
   @override
+  State<MobilePlayerBackground> createState() => _MobilePlayerBackgroundState();
+}
+
+class _MobilePlayerBackgroundState extends State<MobilePlayerBackground> {
+  // 动态背景颜色
+  List<Color> _dynamicColors = [Colors.grey[900]!, Colors.grey[800]!, Colors.grey[700]!];
+  String? _currentImageUrl;
+  bool _isFirstBuild = true;
+  int _pendingExtractionId = 0;
+  String? _lastScheduledImageUrl;
+
+  @override
+  void initState() {
+    super.initState();
+    PlayerBackgroundService().addListener(_onBackgroundChanged);
+    PlayerService().addListener(_onPlayerServiceChanged);
+  }
+
+  @override
+  void dispose() {
+    PlayerBackgroundService().removeListener(_onBackgroundChanged);
+    PlayerService().removeListener(_onPlayerServiceChanged);
+    super.dispose();
+  }
+
+  void _onPlayerServiceChanged() {
+    if (mounted && PlayerBackgroundService().backgroundType == PlayerBackgroundType.dynamic) {
+      _scheduleColorExtraction();
+    }
+  }
+
+  void _onBackgroundChanged() {
+    if (mounted) {
+      setState(() {});
+      if (PlayerBackgroundService().backgroundType == PlayerBackgroundType.dynamic) {
+        _scheduleColorExtraction();
+      }
+    }
+  }
+
+  /// 延迟调度颜色提取（带防抖）
+  void _scheduleColorExtraction() {
+    final backgroundService = PlayerBackgroundService();
+    if (backgroundService.backgroundType != PlayerBackgroundType.dynamic) return;
+
+    final song = PlayerService().currentSong;
+    final track = PlayerService().currentTrack;
+    final imageUrl = song?.pic ?? track?.picUrl ?? '';
+
+    if (imageUrl.isEmpty || imageUrl == _currentImageUrl) return;
+    if (imageUrl == _lastScheduledImageUrl) return;
+
+    _lastScheduledImageUrl = imageUrl;
+
+    final cachedColors = _MobileDynamicColorCache().getColors(imageUrl);
+    if (cachedColors != null) {
+      _currentImageUrl = imageUrl;
+      if (mounted) {
+        setState(() => _dynamicColors = cachedColors);
+      }
+      return;
+    }
+
+    _pendingExtractionId++;
+    final currentId = _pendingExtractionId;
+
+    Future.delayed(const Duration(milliseconds: 300), () {
+      if (currentId != _pendingExtractionId || !mounted) return;
+      _extractColorsFromImage(imageUrl);
+    });
+  }
+
+  /// 从图片中提取颜色
+  Future<void> _extractColorsFromImage(String imageUrl) async {
+    if (_MobileDynamicColorCache().isExtracting(imageUrl)) return;
+    
+    final cachedColors = _MobileDynamicColorCache().getColors(imageUrl);
+    if (cachedColors != null) {
+      _currentImageUrl = imageUrl;
+      if (mounted) setState(() => _dynamicColors = cachedColors);
+      return;
+    }
+    
+    _MobileDynamicColorCache().setExtracting(imageUrl);
+    _currentImageUrl = imageUrl;
+
+    try {
+      final imageProvider = CachedNetworkImageProvider(imageUrl);
+      final paletteGenerator = await PaletteGenerator.fromImageProvider(
+        imageProvider,
+        size: const Size(32, 32),
+        maximumColorCount: 6,
+        timeout: const Duration(seconds: 1),
+      );
+
+      final colors = _extractColors(
+        vibrantColor: paletteGenerator.vibrantColor?.color,
+        mutedColor: paletteGenerator.mutedColor?.color,
+        dominantColor: paletteGenerator.dominantColor?.color,
+        lightVibrantColor: paletteGenerator.lightVibrantColor?.color,
+        darkVibrantColor: paletteGenerator.darkVibrantColor?.color,
+      );
+
+      _MobileDynamicColorCache().setColors(imageUrl, colors);
+
+      if (mounted && _currentImageUrl == imageUrl) {
+        setState(() => _dynamicColors = colors);
+      }
+    } catch (e) {
+      // 静默失败
+    } finally {
+      _MobileDynamicColorCache().setExtracting(null);
+    }
+  }
+
+  /// 提取颜色
+  List<Color> _extractColors({
+    Color? vibrantColor,
+    Color? mutedColor,
+    Color? dominantColor,
+    Color? lightVibrantColor,
+    Color? darkVibrantColor,
+  }) {
+    final colors = <Color>[];
+    
+    if (vibrantColor != null) colors.add(vibrantColor);
+    if (mutedColor != null) colors.add(mutedColor);
+    if (dominantColor != null) colors.add(dominantColor);
+    if (lightVibrantColor != null) colors.add(lightVibrantColor);
+    if (darkVibrantColor != null) colors.add(darkVibrantColor);
+    
+    while (colors.length < 3) {
+      colors.add(Colors.grey[800]!);
+    }
+    
+    return colors.take(3).toList();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    // 同时监听 PlayerBackgroundService 和 PlayerService
-    // 以便在切换歌曲时刷新封面
-    return AnimatedBuilder(
-      animation: Listenable.merge([PlayerBackgroundService(), PlayerService()]),
-      builder: (context, child) {
-        return _buildBackground();
-      },
-    );
+    if (_isFirstBuild) {
+      _isFirstBuild = false;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _scheduleColorExtraction();
+      });
+    }
+    return _buildBackground();
   }
 
   /// 构建背景
@@ -41,6 +204,10 @@ class MobilePlayerBackground extends StatelessWidget {
           return _buildColorGradientBackground();
         }
         
+      case PlayerBackgroundType.dynamic:
+        // 动态背景 - Apple Music 风格的 Mesh Gradient
+        return _buildDynamicMeshBackground(song, track);
+        
       case PlayerBackgroundType.solidColor:
         // 纯色背景
         return _buildSolidColorBackground(backgroundService);
@@ -53,6 +220,20 @@ class MobilePlayerBackground extends StatelessWidget {
         // 视频背景
         return _buildVideoBackground(backgroundService);
     }
+  }
+
+  /// 构建动态 Mesh Gradient 背景（Apple Music 风格）
+  Widget _buildDynamicMeshBackground(SongDetail? song, Track? track) {
+    final greyColor = Colors.grey[900] ?? const Color(0xFF212121);
+    
+    return RepaintBoundary(
+      child: MeshGradientBackground(
+        colors: _dynamicColors,
+        speed: 0.3,
+        backgroundColor: _dynamicColors.isNotEmpty ? _dynamicColors[0] : greyColor,
+        animate: true,
+      ),
+    );
   }
 
   /// 构建封面渐变背景（新样式：移动端顶部封面，向下渐变）

@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:shelf/shelf.dart' as shelf;
 import 'package:shelf/shelf_io.dart' as shelf_io;
 import 'package:http/http.dart' as http;
+import 'developer_mode_service.dart';
 
 /// 本地 HTTP 代理服务
 /// 用于处理 QQ 音乐等需要特殊请求头的音频流
@@ -22,6 +23,7 @@ class ProxyService {
   Future<bool> start() async {
     if (_isRunning) {
       print('🌐 [ProxyService] 代理服务器已在运行');
+      DeveloperModeService().addLog('🌐 [ProxyService] 代理服务器已在运行');
       return true;
     }
 
@@ -29,6 +31,9 @@ class ProxyService {
       // 尝试多个端口，避免端口冲突
       for (int port = 8888; port < 8898; port++) {
         try {
+          print('🌐 [ProxyService] 尝试端口: $port');
+          DeveloperModeService().addLog('🌐 [ProxyService] 尝试端口: $port');
+          
           _server = await shelf_io.serve(
             _handleRequest,
             InternetAddress.loopbackIPv4,
@@ -37,17 +42,23 @@ class ProxyService {
           _port = port;
           _isRunning = true;
           print('✅ [ProxyService] 代理服务器已启动: http://localhost:$_port');
+          DeveloperModeService().addLog('✅ [ProxyService] 代理服务器已启动: http://localhost:$_port');
           return true;
         } catch (e) {
+          print('⚠️ [ProxyService] 端口 $port 启动失败: $e');
+          DeveloperModeService().addLog('⚠️ [ProxyService] 端口 $port 启动失败: $e');
           // 端口被占用，尝试下一个
           if (port == 8897) {
-            throw Exception('无法找到可用端口');
+            throw Exception('无法找到可用端口 (8888-8897)');
           }
         }
       }
       return false;
-    } catch (e) {
+    } catch (e, stackTrace) {
       print('❌ [ProxyService] 启动代理服务器失败: $e');
+      print('Stack trace: $stackTrace');
+      DeveloperModeService().addLog('❌ [ProxyService] 启动代理服务器失败: $e');
+      DeveloperModeService().addLog('📜 [ProxyService] 堆栈: ${stackTrace.toString().split('\n').take(5).join(' | ')}');
       _isRunning = false;
       return false;
     }
@@ -60,6 +71,7 @@ class ProxyService {
       _server = null;
       _isRunning = false;
       print('⏹️ [ProxyService] 代理服务器已停止');
+      DeveloperModeService().addLog('⏹️ [ProxyService] 代理服务器已停止');
     }
   }
 
@@ -76,6 +88,7 @@ class ProxyService {
       final platform = request.url.queryParameters['platform'] ?? 'qq';
 
       print('🌐 [ProxyService] 代理请求: $targetUrl');
+      DeveloperModeService().addLog('🌐 [ProxyService] 代理请求: ${targetUrl.length > 100 ? '${targetUrl.substring(0, 100)}...' : targetUrl}');
 
       // 设置请求头
       final headers = <String, String>{
@@ -110,6 +123,7 @@ class ProxyService {
         }
 
         print('✅ [ProxyService] 开始流式传输音频数据');
+        DeveloperModeService().addLog('✅ [ProxyService] 开始流式传输音频数据');
 
         // 流式传输响应数据
         return shelf.Response.ok(
@@ -118,6 +132,7 @@ class ProxyService {
         );
       } else {
         print('❌ [ProxyService] 上游服务器返回: ${streamedResponse.statusCode}');
+        DeveloperModeService().addLog('❌ [ProxyService] 上游服务器返回: ${streamedResponse.statusCode}');
         return shelf.Response(
           streamedResponse.statusCode,
           body: 'Upstream server error: ${streamedResponse.statusCode}',
@@ -126,6 +141,8 @@ class ProxyService {
     } catch (e, stackTrace) {
       print('❌ [ProxyService] 处理请求失败: $e');
       print('Stack trace: $stackTrace');
+      DeveloperModeService().addLog('❌ [ProxyService] 处理请求失败: $e');
+      DeveloperModeService().addLog('📜 [ProxyService] 堆栈: ${stackTrace.toString().split('\n').take(3).join(' | ')}');
       return shelf.Response.internalServerError(
         body: 'Proxy error: $e',
       );
@@ -136,6 +153,7 @@ class ProxyService {
   String getProxyUrl(String originalUrl, String platform) {
     if (!_isRunning) {
       print('⚠️ [ProxyService] 代理服务器未运行，返回原始 URL');
+      DeveloperModeService().addLog('⚠️ [ProxyService] 代理服务器未运行，返回原始 URL');
       return originalUrl;
     }
     
@@ -143,6 +161,7 @@ class ProxyService {
     final proxyUrl = 'http://localhost:$_port/proxy?url=$encodedUrl&platform=$platform';
     
     print('🔗 [ProxyService] 生成代理 URL: $proxyUrl');
+    DeveloperModeService().addLog('🔗 [ProxyService] 生成代理 URL (端口: $_port, 平台: $platform)');
     return proxyUrl;
   }
 

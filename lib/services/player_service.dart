@@ -26,6 +26,8 @@ import 'android_floating_lyric_service.dart';
 import 'player_background_service.dart';
 import 'local_library_service.dart';
 import 'playback_state_service.dart';
+import 'developer_mode_service.dart';
+import 'url_service.dart';
 import 'dart:async' as async_lib;
 import 'dart:async' show TimeoutException;
 
@@ -188,11 +190,14 @@ class PlayerService extends ChangeNotifier {
 
     // 启动本地代理服务器
     print('🌐 [PlayerService] 启动本地代理服务器...');
+    DeveloperModeService().addLog('🌐 [PlayerService] 启动本地代理服务器...');
     final proxyStarted = await ProxyService().start();
     if (proxyStarted) {
       print('✅ [PlayerService] 本地代理服务器已就绪');
+      DeveloperModeService().addLog('✅ [PlayerService] 本地代理服务器已就绪 (端口: ${ProxyService().port})');
     } else {
       print('⚠️ [PlayerService] 本地代理服务器启动失败，将使用备用方案');
+      DeveloperModeService().addLog('⚠️ [PlayerService] 本地代理服务器启动失败，将使用备用方案（下载后播放）');
     }
     
     // 设置桌面歌词播放控制回调（Windows）
@@ -447,25 +452,71 @@ class PlayerService extends ChangeNotifier {
 
       // 3. 播放音乐
       if (track.source == MusicSource.qq || track.source == MusicSource.kugou) {
-        // QQ音乐和酷狗音乐使用本地代理播放（边下载边播放）
-        if (ProxyService().isRunning) {
-          print('🎶 [PlayerService] 使用本地代理播放 ${track.getSourceName()}');
-          final platform = track.source == MusicSource.qq ? 'qq' : 'kugou';
-          final proxyUrl = ProxyService().getProxyUrl(songDetail.url, platform);
-          await _audioPlayer.play(ap.UrlSource(proxyUrl));
-          print('✅ [PlayerService] 通过代理开始流式播放');
+        // QQ音乐和酷狗音乐需要代理播放
+        DeveloperModeService().addLog('🎶 [PlayerService] 准备播放 ${track.getSourceName()} 音乐');
+        final platform = track.source == MusicSource.qq ? 'qq' : 'kugou';
+        
+        // 移动端使用服务器代理，桌面端使用本地代理
+        final isMobile = Platform.isAndroid || Platform.isIOS;
+        
+        if (isMobile) {
+          // 移动端：先尝试服务器代理流式播放，失败则下载后播放
+          DeveloperModeService().addLog('📱 [PlayerService] 移动端使用服务器代理');
+          final serverProxyUrl = _getServerProxyUrl(songDetail.url, platform);
+          DeveloperModeService().addLog('🔗 [PlayerService] 服务器代理URL: ${serverProxyUrl.length > 80 ? '${serverProxyUrl.substring(0, 80)}...' : serverProxyUrl}');
+          
+          try {
+            // 先尝试流式播放
+            await _audioPlayer.play(ap.UrlSource(serverProxyUrl));
+            print('✅ [PlayerService] 通过服务器代理流式播放成功');
+            DeveloperModeService().addLog('✅ [PlayerService] 通过服务器代理流式播放成功');
+          } catch (playError) {
+            // 流式播放失败，回退到下载后播放
+            print('⚠️ [PlayerService] 流式播放失败，尝试下载后播放: $playError');
+            DeveloperModeService().addLog('⚠️ [PlayerService] 流式播放失败: $playError');
+            DeveloperModeService().addLog('🔄 [PlayerService] 回退到下载后播放');
+            final tempFilePath = await _downloadViaProxyAndPlay(serverProxyUrl, songDetail.name);
+            if (tempFilePath != null) {
+              _currentTempFilePath = tempFilePath;
+            }
+          }
         } else {
-          // 备用方案：下载后播放
-          print('⚠️ [PlayerService] 代理不可用，使用备用方案（下载后播放）');
-          final tempFilePath = await _downloadAndPlay(songDetail);
-          if (tempFilePath != null) {
-            _currentTempFilePath = tempFilePath;
+          // 桌面端：使用本地代理
+          DeveloperModeService().addLog('🖥️ [PlayerService] 桌面端使用本地代理');
+          DeveloperModeService().addLog('🔍 [PlayerService] 本地代理状态: ${ProxyService().isRunning ? "运行中 (端口: ${ProxyService().port})" : "未运行"}');
+          
+          if (ProxyService().isRunning) {
+            final proxyUrl = ProxyService().getProxyUrl(songDetail.url, platform);
+            DeveloperModeService().addLog('🔗 [PlayerService] 本地代理URL: ${proxyUrl.length > 80 ? '${proxyUrl.substring(0, 80)}...' : proxyUrl}');
+            
+            try {
+              await _audioPlayer.play(ap.UrlSource(proxyUrl));
+              print('✅ [PlayerService] 通过本地代理开始流式播放');
+              DeveloperModeService().addLog('✅ [PlayerService] 通过本地代理开始流式播放');
+            } catch (playError) {
+              print('❌ [PlayerService] 本地代理播放失败: $playError');
+              DeveloperModeService().addLog('❌ [PlayerService] 本地代理播放失败: $playError');
+              DeveloperModeService().addLog('🔄 [PlayerService] 尝试备用方案（下载后播放）');
+              final tempFilePath = await _downloadAndPlay(songDetail);
+              if (tempFilePath != null) {
+                _currentTempFilePath = tempFilePath;
+              }
+            }
+          } else {
+            // 本地代理不可用，使用下载后播放
+            print('⚠️ [PlayerService] 本地代理不可用，使用备用方案（下载后播放）');
+            DeveloperModeService().addLog('⚠️ [PlayerService] 本地代理不可用，使用备用方案（下载后播放）');
+            final tempFilePath = await _downloadAndPlay(songDetail);
+            if (tempFilePath != null) {
+              _currentTempFilePath = tempFilePath;
+            }
           }
         }
       } else {
         // 网易云音乐直接播放
         await _audioPlayer.play(ap.UrlSource(songDetail.url));
         print('✅ [PlayerService] 开始播放: ${songDetail.url}');
+        DeveloperModeService().addLog('✅ [PlayerService] 开始播放网易云音乐');
       }
 
       // 4. 异步缓存歌曲（不阻塞播放）
@@ -483,10 +534,57 @@ class PlayerService extends ChangeNotifier {
     }
   }
 
+  /// 获取服务器代理 URL（用于移动端播放 QQ 音乐和酷狗音乐）
+  String _getServerProxyUrl(String originalUrl, String platform) {
+    final baseUrl = UrlService().baseUrl;
+    final encodedUrl = Uri.encodeComponent(originalUrl);
+    return '$baseUrl/audio-proxy/stream?url=$encodedUrl&platform=$platform';
+  }
+
+  /// 通过服务器代理下载音频并播放（用于移动端 QQ 音乐和酷狗音乐）
+  Future<String?> _downloadViaProxyAndPlay(String proxyUrl, String songName) async {
+    try {
+      print('📥 [PlayerService] 通过服务器代理下载: $songName');
+      DeveloperModeService().addLog('📥 [PlayerService] 通过服务器代理下载: $songName');
+      
+      // 获取临时目录
+      final tempDir = await getTemporaryDirectory();
+      final timestamp = DateTime.now().millisecondsSinceEpoch;
+      final tempFilePath = '${tempDir.path}/temp_audio_$timestamp.mp3';
+      
+      // 通过服务器代理下载（服务器已经处理了 referer 等请求头）
+      final response = await http.get(Uri.parse(proxyUrl));
+      
+      if (response.statusCode == 200) {
+        // 保存到临时文件
+        final file = File(tempFilePath);
+        await file.writeAsBytes(response.bodyBytes);
+        print('✅ [PlayerService] 代理下载完成: ${response.bodyBytes.length} bytes');
+        DeveloperModeService().addLog('✅ [PlayerService] 代理下载完成: ${(response.bodyBytes.length / 1024 / 1024).toStringAsFixed(2)} MB');
+        
+        // 播放临时文件
+        await _audioPlayer.play(ap.DeviceFileSource(tempFilePath));
+        print('▶️ [PlayerService] 开始播放临时文件');
+        DeveloperModeService().addLog('▶️ [PlayerService] 开始播放临时文件');
+        
+        return tempFilePath;
+      } else {
+        print('❌ [PlayerService] 代理下载失败: HTTP ${response.statusCode}');
+        DeveloperModeService().addLog('❌ [PlayerService] 代理下载失败: HTTP ${response.statusCode}');
+        return null;
+      }
+    } catch (e) {
+      print('❌ [PlayerService] 代理下载异常: $e');
+      DeveloperModeService().addLog('❌ [PlayerService] 代理下载异常: $e');
+      return null;
+    }
+  }
+
   /// 下载音频文件并播放（用于QQ音乐和酷狗音乐）
   Future<String?> _downloadAndPlay(SongDetail songDetail) async {
     try {
       print('📥 [PlayerService] 开始下载音频: ${songDetail.name}');
+      DeveloperModeService().addLog('📥 [PlayerService] 开始下载音频: ${songDetail.name}');
       
       // 获取临时目录
       final tempDir = await getTemporaryDirectory();
@@ -494,11 +592,19 @@ class PlayerService extends ChangeNotifier {
       final tempFilePath = '${tempDir.path}/temp_audio_$timestamp.mp3';
       
       // 设置请求头（QQ音乐需要 referer）
-      final headers = <String, String>{};
+      final headers = <String, String>{
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+      };
       if (songDetail.source == MusicSource.qq) {
         headers['referer'] = 'https://y.qq.com';
         print('🔐 [PlayerService] 设置 referer: https://y.qq.com');
+        DeveloperModeService().addLog('🔐 [PlayerService] 设置 QQ 音乐 referer');
+      } else if (songDetail.source == MusicSource.kugou) {
+        headers['referer'] = 'https://www.kugou.com';
+        DeveloperModeService().addLog('🔐 [PlayerService] 设置酷狗音乐 referer');
       }
+      
+      DeveloperModeService().addLog('🔗 [PlayerService] 下载URL: ${songDetail.url.length > 80 ? '${songDetail.url.substring(0, 80)}...' : songDetail.url}');
       
       // 下载音频文件
       final response = await http.get(
@@ -512,18 +618,22 @@ class PlayerService extends ChangeNotifier {
         await file.writeAsBytes(response.bodyBytes);
         print('✅ [PlayerService] 下载完成: ${response.bodyBytes.length} bytes');
         print('📁 [PlayerService] 临时文件: $tempFilePath');
+        DeveloperModeService().addLog('✅ [PlayerService] 下载完成: ${(response.bodyBytes.length / 1024 / 1024).toStringAsFixed(2)} MB');
         
         // 播放临时文件
         await _audioPlayer.play(ap.DeviceFileSource(tempFilePath));
         print('▶️ [PlayerService] 开始播放临时文件');
+        DeveloperModeService().addLog('▶️ [PlayerService] 开始播放临时文件');
         
         return tempFilePath;
       } else {
         print('❌ [PlayerService] 下载失败: HTTP ${response.statusCode}');
+        DeveloperModeService().addLog('❌ [PlayerService] 下载失败: HTTP ${response.statusCode}');
         return null;
       }
     } catch (e) {
       print('❌ [PlayerService] 下载音频失败: $e');
+      DeveloperModeService().addLog('❌ [PlayerService] 下载音频失败: $e');
       return null;
     }
   }

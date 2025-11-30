@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -33,12 +34,17 @@ class LyricStyleService extends ChangeNotifier {
   Future<void> _loadStyle() async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      final styleIndex = prefs.getInt(_storageKey) ?? 0;
+      final savedStyleIndex = prefs.getInt(_storageKey);
       
-      if (styleIndex >= 0 && styleIndex < LyricStyle.values.length) {
-        _currentStyle = LyricStyle.values[styleIndex];
+      if (savedStyleIndex != null && savedStyleIndex >= 0 && savedStyleIndex < LyricStyle.values.length) {
+        // 用户已设置过，使用用户设置
+        _currentStyle = LyricStyle.values[savedStyleIndex];
       } else {
-        _currentStyle = LyricStyle.defaultStyle;
+        // 用户未设置过，使用平台默认值
+        // 桌面端默认使用流体云样式，移动端默认使用默认样式
+        _currentStyle = Platform.isWindows || Platform.isMacOS || Platform.isLinux
+            ? LyricStyle.fluidCloud
+            : LyricStyle.defaultStyle;
       }
       
       notifyListeners();

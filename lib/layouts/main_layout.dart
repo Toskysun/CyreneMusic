@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../widgets/custom_title_bar.dart';
 import '../widgets/mini_player.dart';
 import '../pages/home_page.dart';
@@ -14,6 +15,7 @@ import '../pages/support_page.dart';
 import '../services/auth_service.dart';
 import '../services/layout_preference_service.dart';
 import '../services/developer_mode_service.dart';
+import '../services/global_back_handler_service.dart';
 import '../utils/page_visibility_notifier.dart';
 import '../utils/theme_manager.dart';
 import '../pages/auth/auth_page.dart';
@@ -196,6 +198,26 @@ class _MainLayoutState extends State<MainLayout>
         }
       });
     }
+  }
+
+  /// 处理 Android 返回键
+  void _handleAndroidBack() {
+    // 1. 首先检查全局返回处理器（二级页面等）
+    if (GlobalBackHandlerService().handleBack()) {
+      return;
+    }
+    
+    // 2. 如果不在首页，返回首页
+    if (_selectedIndex != 0) {
+      setState(() {
+        _selectedIndex = 0;
+      });
+      PageVisibilityNotifier().setCurrentPage(0);
+      return;
+    }
+    
+    // 3. 在首页，退出应用
+    SystemNavigator.pop();
   }
 
   void _handleUserButtonTap() {
@@ -402,36 +424,43 @@ class _MainLayoutState extends State<MainLayout>
   Widget _buildMobileLayout(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
 
-    return Scaffold(
-      backgroundColor: colorScheme.surface,
-      body: Stack(
-        children: [
-          // 主内容层
-          Column(
-            children: [
-              if (Platform.isWindows) const CustomTitleBar(),
-              Expanded(child: _pages[_selectedIndex]),
-            ],
-          ),
-          // 悬浮迷你播放器（不占用布局空间）
-          Positioned(
-            left: 0,
-            right: 0,
-            bottom: 0,
-            child: AnimatedBuilder(
-              animation: PlayerService(),
-              builder: (context, child) {
-                final hasMiniPlayer =
-                    PlayerService().currentTrack != null ||
-                    PlayerService().currentSong != null;
-                if (!hasMiniPlayer) return const SizedBox.shrink();
-                return const MiniPlayer();
-              },
+    return PopScope(
+      canPop: false, // 始终拦截返回键
+      onPopInvokedWithResult: (didPop, result) {
+        if (didPop) return;
+        _handleAndroidBack();
+      },
+      child: Scaffold(
+        backgroundColor: colorScheme.surface,
+        body: Stack(
+          children: [
+            // 主内容层
+            Column(
+              children: [
+                if (Platform.isWindows) const CustomTitleBar(),
+                Expanded(child: _pages[_selectedIndex]),
+              ],
             ),
-          ),
-        ],
+            // 悬浮迷你播放器（不占用布局空间）
+            Positioned(
+              left: 0,
+              right: 0,
+              bottom: 0,
+              child: AnimatedBuilder(
+                animation: PlayerService(),
+                builder: (context, child) {
+                  final hasMiniPlayer =
+                      PlayerService().currentTrack != null ||
+                      PlayerService().currentSong != null;
+                  if (!hasMiniPlayer) return const SizedBox.shrink();
+                  return const MiniPlayer();
+                },
+              ),
+            ),
+          ],
+        ),
+        bottomNavigationBar: _buildGlassBottomNavigationBar(context),
       ),
-      bottomNavigationBar: _buildGlassBottomNavigationBar(context),
     );
   }
 

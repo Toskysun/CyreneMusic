@@ -86,6 +86,10 @@ class PlayCountItem {
         return MusicSource.qq;
       case 'kugou':
         return MusicSource.kugou;
+      case 'kuwo':
+        return MusicSource.kuwo;
+      case 'local':
+        return MusicSource.local;
       default:
         return MusicSource.netease;
     }

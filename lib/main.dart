@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'package:fluent_ui/fluent_ui.dart' as fluent;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:bitsdojo_window/bitsdojo_window.dart';
 import 'package:window_manager/window_manager.dart';
 import 'package:cyrene_music/layouts/fluent_main_layout.dart';
@@ -33,6 +34,16 @@ import 'package:flutter_displaymode/flutter_displaymode.dart' if (dart.library.h
 void main() async {
   // 初始化播放器服务
   WidgetsFlutterBinding.ensureInitialized();
+  
+  // iOS 平台：设置首选竖屏方向（解决初次启动横屏问题）
+  if (Platform.isIOS) {
+    await SystemChrome.setPreferredOrientations([
+      DeviceOrientation.portraitUp,
+      DeviceOrientation.portraitDown,
+      DeviceOrientation.landscapeLeft,
+      DeviceOrientation.landscapeRight,
+    ]);
+  }
   
   // 初始化 media_kit（仅在桌面平台，用于视频背景）
   if (Platform.isWindows || Platform.isMacOS || Platform.isLinux) {

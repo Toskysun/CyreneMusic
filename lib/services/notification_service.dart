@@ -67,9 +67,16 @@ class NotificationService {
     try {
       await _flutterLocalNotificationsPlugin.initialize(
         initializationSettings,
-        onDidReceiveNotificationResponse: (NotificationResponse details) {
+        onDidReceiveNotificationResponse: (NotificationResponse details) async {
           print('🔔 [NotificationService] Notification clicked: ${details.payload}');
           print('🔔 [NotificationService] Action ID: ${details.actionId}');
+          
+          // 处理下载完成通知的操作
+          final handled = await _handleDownloadNotificationAction(details);
+          print('🔔 [NotificationService] Download notification handled: $handled');
+          if (handled) {
+            return; // 已处理，不继续传递
+          }
           
           // 如果有操作ID，触发回调
           if (details.actionId != null && _actionCallback != null) {
@@ -160,6 +167,58 @@ class NotificationService {
     } catch (e) {
       DeveloperModeService().addLog('❌ 发送通知失败: $e');
     }
+  }
+
+  /// 处理下载完成通知的操作
+  /// 返回 true 表示已处理，false 表示未处理
+  Future<bool> _handleDownloadNotificationAction(NotificationResponse details) async {
+    final payload = details.payload;
+    final actionId = details.actionId;
+    
+    print('🔍 [NotificationService] 检查下载通知: payload=$payload, actionId=$actionId');
+    
+    // 检查是否是下载完成通知（通过 payload）
+    if (payload != null && payload.startsWith('download_complete:')) {
+      final folderPath = payload.substring('download_complete:'.length);
+      
+      if (actionId == 'open_folder' || actionId == null) {
+        // 点击"打开文件夹"按钮或点击通知本身
+        print('📂 [NotificationService] 用户请求打开文件夹: $folderPath');
+        DeveloperModeService().addLog('📂 用户请求打开下载文件夹: $folderPath');
+        await openFolder(folderPath);
+        return true;
+      } else if (actionId == 'dismiss') {
+        // 用户选择忽略
+        print('🚫 [NotificationService] 用户忽略下载完成通知');
+        return true;
+      }
+    }
+    
+    // 检查 Windows 平台的 arguments 格式（actionId 包含路径）
+    if (actionId != null && actionId.startsWith('open_folder:')) {
+      final folderPath = actionId.substring('open_folder:'.length);
+      print('📂 [NotificationService] Windows 用户请求打开文件夹: $folderPath');
+      DeveloperModeService().addLog('📂 用户请求打开下载文件夹: $folderPath');
+      await openFolder(folderPath);
+      return true;
+    }
+    
+    // 检查 Windows 平台的 payload 格式（payload 也可能包含路径）
+    if (payload != null && payload.startsWith('open_folder:')) {
+      final folderPath = payload.substring('open_folder:'.length);
+      print('📂 [NotificationService] Windows 用户请求打开文件夹 (via payload): $folderPath');
+      DeveloperModeService().addLog('📂 用户请求打开下载文件夹: $folderPath');
+      await openFolder(folderPath);
+      return true;
+    }
+    
+    // 检查忽略操作
+    if (actionId == 'dismiss' || payload == 'dismiss') {
+      print('🚫 [NotificationService] 用户忽略通知');
+      return true;
+    }
+    
+    return false;
   }
 
   /// 设置通知操作回调
@@ -444,6 +503,137 @@ class NotificationService {
       print('🔔 [NotificationService] 已取消所有通知');
     } catch (e) {
       print('❌ [NotificationService] 取消所有通知失败: $e');
+    }
+  }
+
+  /// 显示下载完成通知
+  /// 带有"打开文件夹"按钮
+  Future<void> showDownloadCompleteNotification({
+    required String trackName,
+    required String artist,
+    required String filePath,
+    required String folderPath,
+    String? coverUrl,
+  }) async {
+    if (!_isInitialized) await initialize();
+
+    // 下载封面图片（如果提供了URL）
+    String? largeIconPath;
+    if (coverUrl != null && coverUrl.isNotEmpty) {
+      largeIconPath = await _downloadCoverImage(coverUrl);
+    }
+
+    // 通知ID使用文件路径的hash，避免重复
+    final notificationId = filePath.hashCode.abs() % 100000 + 1000;
+
+    final AndroidNotificationDetails androidNotificationDetails =
+        AndroidNotificationDetails(
+      'cyrene_music_download',
+      'Download Notifications',
+      channelDescription: 'Notifications for download completion',
+      importance: Importance.high,
+      priority: Priority.high,
+      ticker: 'Download complete',
+      // 添加大图标（专辑封面）
+      largeIcon: largeIconPath != null 
+          ? FilePathAndroidBitmap(largeIconPath)
+          : null,
+      styleInformation: largeIconPath != null
+          ? BigPictureStyleInformation(
+              FilePathAndroidBitmap(largeIconPath),
+              largeIcon: FilePathAndroidBitmap(largeIconPath),
+              contentTitle: '下载完成',
+              summaryText: '$trackName - $artist',
+              htmlFormatContentTitle: true,
+              htmlFormatSummaryText: true,
+              hideExpandedLargeIcon: true,
+            )
+          : null,
+      actions: <AndroidNotificationAction>[
+        AndroidNotificationAction(
+          'open_folder',
+          '打开文件夹',
+          showsUserInterface: true,
+        ),
+        AndroidNotificationAction(
+          'dismiss',
+          '忽略',
+        ),
+      ],
+    );
+
+    final WindowsNotificationDetails windowsNotificationDetails =
+        WindowsNotificationDetails(
+      subtitle: '已保存到: $folderPath',
+      // Windows 使用 images 参数
+      images: largeIconPath != null 
+          ? <WindowsImage>[
+              WindowsImage(
+                Uri.file(largeIconPath, windows: true),
+                altText: '专辑封面',
+                placement: WindowsImagePlacement.appLogoOverride,
+              ),
+            ]
+          : const <WindowsImage>[],
+      actions: <WindowsAction>[
+        WindowsAction(
+          content: '打开文件夹',
+          arguments: 'open_folder:$folderPath',
+        ),
+        WindowsAction(
+          content: '忽略',
+          arguments: 'dismiss',
+        ),
+      ],
+    );
+
+    final NotificationDetails notificationDetails = NotificationDetails(
+      android: androidNotificationDetails,
+      windows: windowsNotificationDetails,
+    );
+
+    try {
+      DeveloperModeService().addLog('🔔 显示下载完成通知: $trackName');
+      if (largeIconPath != null) {
+        DeveloperModeService().addLog('🖼️ 封面图片: $largeIconPath');
+      }
+      DeveloperModeService().addLog('📁 保存路径: $folderPath');
+      
+      await _flutterLocalNotificationsPlugin.show(
+        notificationId,
+        '下载完成',
+        '$trackName - $artist',
+        notificationDetails,
+        payload: 'download_complete:$folderPath',
+      );
+      DeveloperModeService().addLog('✅ 下载完成通知已显示');
+    } catch (e) {
+      DeveloperModeService().addLog('❌ 显示下载完成通知失败: $e');
+    }
+  }
+
+  /// 打开文件夹（用于通知点击回调）
+  static Future<void> openFolder(String folderPath) async {
+    try {
+      if (Platform.isWindows) {
+        // Windows: 使用 explorer 打开文件夹
+        await Process.run('explorer', [folderPath]);
+        print('📂 [NotificationService] 已打开文件夹: $folderPath');
+      } else if (Platform.isAndroid) {
+        // Android: 使用 open_filex 或其他方式
+        // 这里简单打印日志，实际可以使用 open_filex 包
+        print('📂 [NotificationService] Android 打开文件夹: $folderPath');
+      } else if (Platform.isMacOS) {
+        // macOS: 使用 open 命令
+        await Process.run('open', [folderPath]);
+        print('📂 [NotificationService] 已打开文件夹: $folderPath');
+      } else if (Platform.isLinux) {
+        // Linux: 使用 xdg-open
+        await Process.run('xdg-open', [folderPath]);
+        print('📂 [NotificationService] 已打开文件夹: $folderPath');
+      }
+    } catch (e) {
+      print('❌ [NotificationService] 打开文件夹失败: $e');
     }
   }
 }

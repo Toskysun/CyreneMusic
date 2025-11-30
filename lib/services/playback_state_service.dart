@@ -191,9 +191,12 @@ class PlaybackStateService {
   }
 
   /// 解析音乐源
+  /// 支持两种格式：
+  /// - 简短格式: "netease", "qq", "kugou", "kuwo", "local"
+  /// - 完整格式: "MusicSource.netease", "MusicSource.qq" 等
   MusicSource _parseSource(String source) {
-    // 支持两种格式：'kugou' 或 'MusicSource.kugou'
-    final normalizedSource = source.contains('.') ? source.split('.').last : source;
+    // 统一处理：移除可能的前缀
+    final normalizedSource = source.replaceFirst('MusicSource.', '').toLowerCase();
     
     switch (normalizedSource) {
       case 'netease':
@@ -202,10 +205,12 @@ class PlaybackStateService {
         return MusicSource.qq;
       case 'kugou':
         return MusicSource.kugou;
+      case 'kuwo':
+        return MusicSource.kuwo;
       case 'local':
         return MusicSource.local;
       default:
-        print('⚠️ [PlaybackStateService] 未知音乐源: $source，默认使用网易云');
+        print('⚠️ [PlaybackStateService] 未知音乐源: $source, 默认使用网易云');
         return MusicSource.netease;
     }
   }
@@ -241,4 +246,3 @@ class PlaybackState {
     return '来自你的 $lastPlatform';
   }
 }
-

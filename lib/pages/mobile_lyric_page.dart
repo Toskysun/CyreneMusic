@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'dart:ui'; // 导入 ImageFilter
 import '../services/player_service.dart';
@@ -211,7 +212,16 @@ class _MobileLyricPageState extends State<MobileLyricPage> {
     final track = player.currentTrack;
     final picUrl = song?.pic ?? track?.picUrl ?? '';
 
-    return Scaffold(
+    // 歌词页面始终使用深色背景，状态栏图标应为浅色
+    const lyricOverlayStyle = SystemUiOverlayStyle(
+      statusBarColor: Colors.transparent,
+      statusBarIconBrightness: Brightness.light,
+      statusBarBrightness: Brightness.dark,
+    );
+
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      value: lyricOverlayStyle,
+      child: Scaffold(
       backgroundColor: Colors.black,
       body: Stack(
         children: [
@@ -263,6 +273,7 @@ class _MobileLyricPageState extends State<MobileLyricPage> {
             ),
           ),
         ],
+      ),
       ),
     );
   }

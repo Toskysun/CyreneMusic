@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:fluent_ui/fluent_ui.dart' as fluent;
 import '../../services/player_service.dart';
 import '../../services/player_background_service.dart';
+import '../../utils/theme_manager.dart';
 import '../../models/track.dart';
 import '../../models/song_detail.dart';
 import '../../widgets/search_widget.dart';
@@ -247,26 +249,66 @@ class PlayerSongInfo extends StatelessWidget {
       return;
     }
     if (!context.mounted) return;
-    // 悬浮窗展示（与搜索一致的 Dialog 样式）
-    showDialog(
-      context: context,
-      barrierColor: Colors.black87,
-      builder: (context) => Dialog(
-        backgroundColor: Colors.transparent,
-        insetPadding: const EdgeInsets.all(16),
-        child: Container(
+    
+    final isFluent = ThemeManager().isFluentFramework;
+    
+    if (isFluent) {
+      // Fluent UI 样式对话框
+      final fluentTheme = fluent.FluentTheme.of(context);
+      final backgroundColor = fluentTheme.micaBackgroundColor ?? 
+          fluentTheme.scaffoldBackgroundColor;
+      
+      fluent.showDialog(
+        context: context,
+        barrierDismissible: true,
+        barrierColor: Colors.black87,
+        builder: (context) => fluent.ContentDialog(
           constraints: const BoxConstraints(maxWidth: 800, maxHeight: 700),
-          decoration: BoxDecoration(
-            color: Theme.of(context).colorScheme.surface,
-            borderRadius: BorderRadius.circular(28),
+          style: fluent.ContentDialogThemeData(
+            padding: EdgeInsets.zero,
+            bodyPadding: EdgeInsets.zero,
+            decoration: BoxDecoration(
+              color: backgroundColor,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(
+                color: fluentTheme.resources.surfaceStrokeColorDefault,
+                width: 1,
+              ),
+            ),
           ),
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(28),
-            child: ArtistDetailContent(artistId: id),
+          content: ClipRRect(
+            borderRadius: BorderRadius.circular(8),
+            child: SizedBox(
+              width: 800,
+              height: 700,
+              child: ArtistDetailContent(artistId: id),
+            ),
           ),
         ),
-      ),
-    );
+      );
+    } else {
+      // Material 样式对话框
+      showDialog(
+        context: context,
+        barrierDismissible: true,
+        barrierColor: Colors.black87,
+        builder: (context) => Dialog(
+          backgroundColor: Colors.transparent,
+          insetPadding: const EdgeInsets.all(16),
+          child: Container(
+            constraints: const BoxConstraints(maxWidth: 800, maxHeight: 700),
+            decoration: BoxDecoration(
+              color: Theme.of(context).colorScheme.surface,
+              borderRadius: BorderRadius.circular(28),
+            ),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(28),
+              child: ArtistDetailContent(artistId: id),
+            ),
+          ),
+        ),
+      );
+    }
   }
 
   /// 分割歌手字符串（支持多种分隔符）
@@ -289,31 +331,74 @@ class PlayerSongInfo extends StatelessWidget {
 
   /// 在对话框中打开搜索
   void _searchInDialog(BuildContext context, String keyword) {
-    showDialog(
-      context: context,
-      barrierColor: Colors.black87,
-      builder: (context) => Dialog(
-        backgroundColor: Colors.transparent,
-        insetPadding: const EdgeInsets.all(16),
-        child: Container(
-          constraints: const BoxConstraints(
-            maxWidth: 800,
-            maxHeight: 700,
+    final isFluent = ThemeManager().isFluentFramework;
+    
+    if (isFluent) {
+      // Fluent UI 样式对话框
+      final fluentTheme = fluent.FluentTheme.of(context);
+      final backgroundColor = fluentTheme.micaBackgroundColor ?? 
+          fluentTheme.scaffoldBackgroundColor;
+      
+      fluent.showDialog(
+        context: context,
+        barrierDismissible: true,
+        barrierColor: Colors.black87,
+        builder: (context) => fluent.ContentDialog(
+          constraints: const BoxConstraints(maxWidth: 800, maxHeight: 700),
+          style: fluent.ContentDialogThemeData(
+            padding: EdgeInsets.zero,
+            bodyPadding: EdgeInsets.zero,
+            decoration: BoxDecoration(
+              color: backgroundColor,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(
+                color: fluentTheme.resources.surfaceStrokeColorDefault,
+                width: 1,
+              ),
+            ),
           ),
-          decoration: BoxDecoration(
-            color: Theme.of(context).colorScheme.surface,
-            borderRadius: BorderRadius.circular(28),
-          ),
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(28),
-            child: SearchWidget(
-              onClose: () => Navigator.pop(context),
-              initialKeyword: keyword,
+          content: ClipRRect(
+            borderRadius: BorderRadius.circular(8),
+            child: SizedBox(
+              width: 800,
+              height: 700,
+              child: SearchWidget(
+                onClose: () => Navigator.pop(context),
+                initialKeyword: keyword,
+              ),
             ),
           ),
         ),
-      ),
-    );
+      );
+    } else {
+      // Material 样式对话框
+      showDialog(
+        context: context,
+        barrierDismissible: true,
+        barrierColor: Colors.black87,
+        builder: (context) => Dialog(
+          backgroundColor: Colors.transparent,
+          insetPadding: const EdgeInsets.all(16),
+          child: Container(
+            constraints: const BoxConstraints(
+              maxWidth: 800,
+              maxHeight: 700,
+            ),
+            decoration: BoxDecoration(
+              color: Theme.of(context).colorScheme.surface,
+              borderRadius: BorderRadius.circular(28),
+            ),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(28),
+              child: SearchWidget(
+                onClose: () => Navigator.pop(context),
+                initialKeyword: keyword,
+              ),
+            ),
+          ),
+        ),
+      );
+    }
   }
 
   /// 根据背景色亮度判断应该使用深色还是浅色文字

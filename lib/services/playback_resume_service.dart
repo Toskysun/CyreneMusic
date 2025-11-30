@@ -71,13 +71,11 @@ class PlaybackResumeService {
 
   /// 处理通知操作
   void _handleNotificationAction(String action) {
-    if (_pendingState == null) return;
-
     switch (action) {
       case 'resume':
       case 'tap': // 点击通知本身也视为继续播放
         print('▶️ [PlaybackResumeService] 用户选择继续播放');
-        _resumePlayback();
+        manualResume();
         break;
       case 'dismiss':
         print('🚫 [PlaybackResumeService] 用户选择忽略');

@@ -20,10 +20,10 @@ import org.json.JSONArray
 
 /// Android 悬浮歌词插件
 /// 提供系统级悬浮窗歌词显示功能
+/// 使用前台服务确保后台歌词更新
 class FloatingLyricPlugin: FlutterPlugin, MethodCallHandler {
     companion object {
         private const val CHANNEL = "android_floating_lyric"
-        private const val UPDATE_INTERVAL_MS = 200L // 歌词更新间隔（毫秒）
     }
     
     private var channel: MethodChannel? = null
@@ -44,11 +44,12 @@ class FloatingLyricPlugin: FlutterPlugin, MethodCallHandler {
     private var backgroundColor = Color.TRANSPARENT
     private var alpha = 1.0f
     
-    // 🔥 后台歌词更新机制（关键修复）
-    private val handler = Handler(Looper.getMainLooper())
-    private var updateRunnable: Runnable? = null
+    // 🔥 后台歌词更新机制（使用前台服务确保后台运行）
+    private val mainHandler = Handler(Looper.getMainLooper())
     private var lyrics: List<LyricLine> = emptyList()
-    private var currentPosition: Long = 0L  // 当前播放位置（毫秒，由Flutter层同步）
+    private var currentPosition: Long = 0L  // 当前播放位置（毫秒）
+    private var lastSyncTime: Long = 0L  // 上次同步时的系统时间（用于后台自动推进）
+    private var lastSyncPosition: Long = 0L  // 上次同步时的播放位置
     private var isPlaying = false  // 是否正在播放
     private var currentLyricIndex = -1  // 当前显示的歌词索引（避免重复更新）
     
@@ -426,7 +427,11 @@ class FloatingLyricPlugin: FlutterPlugin, MethodCallHandler {
     /// 更新播放位置（从Flutter层定期接收）
     private fun updatePlaybackPosition(position: Long) {
         currentPosition = position
-        // 🔥 收到新位置后立即更新歌词显示，确保同步
+        // 🔥 记录同步时间点，用于后台自动推进
+        lastSyncTime = System.currentTimeMillis()
+        lastSyncPosition = position
+        
+        // 收到新位置后立即更新歌词显示，确保同步
         if (isPlaying && isFloatingWindowVisible) {
             updateCurrentLyric()
         }
@@ -434,49 +439,72 @@ class FloatingLyricPlugin: FlutterPlugin, MethodCallHandler {
     
     /// 设置播放状态
     private fun setPlayingState(playing: Boolean) {
+        val wasPlaying = isPlaying
         isPlaying = playing
         
         if (playing && isFloatingWindowVisible) {
+            // 🔥 如果从暂停恢复播放，重新记录同步时间点
+            if (!wasPlaying) {
+                lastSyncTime = System.currentTimeMillis()
+                lastSyncPosition = currentPosition
+            }
             startLyricUpdateLoop()
         } else {
             stopLyricUpdateLoop()
         }
     }
     
-    /// 启动后台歌词更新循环（在Android原生层运行，不依赖Flutter）
+    /// 启动后台歌词更新循环（使用前台服务确保后台运行）
     private fun startLyricUpdateLoop() {
-        // 如果已经在运行，先停止
-        stopLyricUpdateLoop()
+        val ctx = context ?: return
         
-        updateRunnable = object : Runnable {
-            override fun run() {
-                try {
-                    // 🔥 修复：不自动推进时间，完全依赖Flutter层同步的播放位置
-                    // 原生层只负责根据当前位置查找并显示对应的歌词
-                    if (isPlaying) {
-                        updateCurrentLyric()
-                    }
-                    
-                    // 继续下一次更新
-                    if (isFloatingWindowVisible) {
-                        handler.postDelayed(this, UPDATE_INTERVAL_MS)
-                    }
-                } catch (e: Exception) {
-                    android.util.Log.e("FloatingLyric", "❌ 更新歌词失败: ${e.message}", e)
-                }
+        // 初始化同步时间点
+        if (lastSyncTime == 0L) {
+            lastSyncTime = System.currentTimeMillis()
+            lastSyncPosition = currentPosition
+        }
+        
+        // 设置前台服务的更新回调
+        FloatingLyricService.onUpdateCallback = {
+            if (isPlaying && isFloatingWindowVisible) {
+                // 🔥 关键：自动推进播放位置
+                val now = System.currentTimeMillis()
+                val elapsed = now - lastSyncTime
+                currentPosition = lastSyncPosition + elapsed
+                
+                // 更新歌词显示
+                updateCurrentLyric()
             }
         }
         
-        handler.post(updateRunnable!!)
-        android.util.Log.d("FloatingLyric", "✅ 后台歌词更新循环已启动（依赖Flutter同步位置）")
+        // 启动前台服务
+        if (!FloatingLyricService.isRunning) {
+            val serviceIntent = Intent(ctx, FloatingLyricService::class.java)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                ctx.startForegroundService(serviceIntent)
+            } else {
+                ctx.startService(serviceIntent)
+            }
+            android.util.Log.d("FloatingLyric", "✅ 前台服务已启动")
+        }
+        
+        android.util.Log.d("FloatingLyric", "✅ 后台歌词更新循环已启动（使用前台服务）")
     }
     
     /// 停止后台歌词更新循环
     private fun stopLyricUpdateLoop() {
-        updateRunnable?.let {
-            handler.removeCallbacks(it)
-            updateRunnable = null
+        val ctx = context ?: return
+        
+        // 清除回调
+        FloatingLyricService.onUpdateCallback = null
+        
+        // 停止前台服务
+        if (FloatingLyricService.isRunning) {
+            val serviceIntent = Intent(ctx, FloatingLyricService::class.java)
+            ctx.stopService(serviceIntent)
+            android.util.Log.d("FloatingLyric", "🛑 前台服务已停止")
         }
+        
         android.util.Log.d("FloatingLyric", "⏸️ 后台歌词更新循环已停止")
     }
     

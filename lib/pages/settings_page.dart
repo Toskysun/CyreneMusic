@@ -10,6 +10,7 @@ import '../services/cache_service.dart';
 import '../services/download_service.dart';
 import '../services/audio_quality_service.dart';
 import '../services/player_background_service.dart';
+import '../services/global_back_handler_service.dart';
 import 'settings_page/user_card.dart';
 import 'settings_page/third_party_accounts.dart';
 import 'settings_page/appearance_settings.dart';
@@ -100,6 +101,8 @@ class _SettingsPageState extends State<SettingsPage> {
     DownloadService().removeListener(_onDownloadChanged);
     AudioQualityService().removeListener(_onAudioQualityChanged);
     PlayerBackgroundService().removeListener(_onPlayerBackgroundChanged);
+    // 注销返回处理器
+    GlobalBackHandlerService().unregister('settings_sub_page');
     super.dispose();
   }
 
@@ -154,6 +157,14 @@ class _SettingsPageState extends State<SettingsPage> {
     setState(() {
       _currentSubPage = subPage;
     });
+    // 注册返回处理器
+    GlobalBackHandlerService().register('settings_sub_page', () {
+      if (_currentSubPage != SettingsSubPage.none) {
+        closeSubPage();
+        return true;
+      }
+      return false;
+    });
   }
   
   /// 关闭子页面，返回主设置页面
@@ -161,6 +172,8 @@ class _SettingsPageState extends State<SettingsPage> {
     setState(() {
       _currentSubPage = SettingsSubPage.none;
     });
+    // 注销返回处理器
+    GlobalBackHandlerService().unregister('settings_sub_page');
   }
 
   @override

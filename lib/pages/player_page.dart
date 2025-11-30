@@ -395,6 +395,8 @@ class _PlayerPageState extends State<PlayerPage> with WindowListener, TickerProv
                 onBackPressed: () => Navigator.pop(context),
                 onPlaylistPressed: _togglePlaylist,
                 onVolumeControlPressed: _toggleControlCenter,
+                onSleepTimerPressed: () => PlayerDialogs.showSleepTimer(context),
+                onTranslationToggle: _toggleTranslation,
               )
             else
               Stack(

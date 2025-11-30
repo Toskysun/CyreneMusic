@@ -43,6 +43,7 @@ class _PlayerFluidCloudLyricsPanelState extends State<PlayerFluidCloudLyricsPane
   // ===== 布局缓存 =====
   double _itemHeight = 100.0;
   double _viewportHeight = 0.0;
+  bool _hasInitialScrolled = false; // 是否已完成首次滚动
 
   @override
   void initState() {
@@ -90,7 +91,7 @@ class _PlayerFluidCloudLyricsPanelState extends State<PlayerFluidCloudLyricsPane
     }
   }
 
-  /// 滚动到指定索引
+  /// 滚动到指定索引（带动画）
   void _scrollToIndex(int index) {
     if (!_scrollController.hasClients || _viewportHeight <= 0) return;
     
@@ -102,6 +103,14 @@ class _PlayerFluidCloudLyricsPanelState extends State<PlayerFluidCloudLyricsPane
       duration: const Duration(milliseconds: 700),
       curve: const _ElasticOutCurve(),
     );
+  }
+  
+  /// 立即滚动到指定索引（无动画，用于首次进入）
+  void _scrollToIndexImmediate(int index) {
+    if (!_scrollController.hasClients || _viewportHeight <= 0) return;
+    
+    final targetOffset = index * _itemHeight;
+    _scrollController.jumpTo(targetOffset);
   }
 
   /// 激活手动滚动模式
@@ -159,6 +168,16 @@ class _PlayerFluidCloudLyricsPanelState extends State<PlayerFluidCloudLyricsPane
         _viewportHeight = constraints.maxHeight;
         // 可视区域显示约 7 行歌词
         _itemHeight = _viewportHeight / 7;
+        
+        // 首次布局完成后，立即滚动到当前歌词位置
+        if (!_hasInitialScrolled && _viewportHeight > 0) {
+          _hasInitialScrolled = true;
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) {
+              _scrollToIndexImmediate(widget.currentLyricIndex);
+            }
+          });
+        }
 
         return Stack(
           children: [
@@ -304,122 +323,94 @@ class _PlayerFluidCloudLyricsPanelState extends State<PlayerFluidCloudLyricsPane
         child: Transform.translate(
           // 弹性 Y 轴偏移
           offset: Offset(0, elasticOffset),
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 400),
-            curve: Curves.easeOutCubic,
+          child: SizedBox(
             height: _itemHeight,
-            // 动态间距：active 行底部间距更大
-            padding: EdgeInsets.only(left: 16, right: 16, bottom: bottomPadding),
-            alignment: Alignment.centerLeft,
-            child: AnimatedOpacity(
-              duration: const Duration(milliseconds: 400),
-              opacity: opacity,
-              child: ImageFiltered(
-                imageFilter: ImageFilter.blur(sigmaX: blur, sigmaY: blur),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // 原文歌词
-                    AnimatedDefaultTextStyle(
-                      duration: const Duration(milliseconds: 300),
-                      style: TextStyle(
-                        color: isSelected 
-                            ? Colors.orange 
-                            : (isActive ? Colors.white : Colors.white.withOpacity(0.45)),
-                        fontSize: isActive ? 32 : 26,
-                        fontWeight: FontWeight.w900,
-                        fontFamily: 'Microsoft YaHei',
-                        height: 1.25,
-                        letterSpacing: -0.5,
-                        shadows: isActive ? [
-                          Shadow(
-                            color: Colors.white.withOpacity(0.3),
-                            blurRadius: 20,
+            child: OverflowBox(
+              alignment: Alignment.centerLeft,
+              maxHeight: _itemHeight * 1.5, // 允许内容超出50%高度
+              child: Padding(
+                padding: EdgeInsets.only(left: 16, right: 16, bottom: bottomPadding),
+                child: AnimatedOpacity(
+                  duration: const Duration(milliseconds: 400),
+                  opacity: opacity,
+                  child: ImageFiltered(
+                    imageFilter: ImageFilter.blur(sigmaX: blur, sigmaY: blur),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // 原文歌词
+                        AnimatedDefaultTextStyle(
+                          duration: const Duration(milliseconds: 300),
+                          style: TextStyle(
+                            color: isSelected 
+                                ? Colors.orange 
+                                : (isActive ? Colors.white : Colors.white.withOpacity(0.45)),
+                            fontSize: isActive ? 32 : 26,
+                            fontWeight: FontWeight.w900,
+                            fontFamily: 'Microsoft YaHei',
+                            height: 1.25,
+                            letterSpacing: -0.5,
+                            shadows: isActive ? [
+                              Shadow(
+                                color: Colors.white.withOpacity(0.3),
+                                blurRadius: 20,
+                              ),
+                            ] : null,
                           ),
-                        ] : null,
-                      ),
-                      child: Builder(
-                        builder: (context) {
-                          final textWidget = Text(
-                            lyric.text,
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                          );
-                          
-                          // 只有当前行且非手动滚动时才启用卡拉OK效果
-                          if (isActive && !_isUserScrolling) {
-                            return AnimatedBuilder(
-                              animation: PlayerService(),
-                              builder: (context, child) {
-                                final player = PlayerService();
-                                final currentPos = player.position;
-                                
-                                // 计算持续时间
-                                Duration duration;
-                                if (index < widget.lyrics.length - 1) {
-                                  duration = widget.lyrics[index + 1].startTime - lyric.startTime;
-                                } else {
-                                  duration = const Duration(seconds: 5); // 最后一行默认时长
-                                }
-                                
-                                // 防止除以零
-                                if (duration.inMilliseconds == 0) duration = const Duration(seconds: 3);
-                                
-                                final elapsed = currentPos - lyric.startTime;
-                                final progress = (elapsed.inMilliseconds / duration.inMilliseconds).clamp(0.0, 1.0);
-                                
-                                return ShaderMask(
-                                  shaderCallback: (bounds) {
-                                    return LinearGradient(
-                                      colors: [
-                                        Colors.white, 
-                                        Colors.white.withOpacity(0.45)
-                                      ],
-                                      stops: [progress, progress], // 硬边缘扫描
-                                      tileMode: TileMode.clamp,
-                                    ).createShader(bounds);
-                                  },
-                                  blendMode: BlendMode.srcIn,
-                                  child: textWidget,
+                          child: Builder(
+                            builder: (context) {
+                              final textWidget = Text(
+                                lyric.text,
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                              );
+                              
+                              // 只有当前行且非手动滚动时才启用卡拉OK效果
+                              if (isActive && !_isUserScrolling) {
+                                return _KaraokeText(
+                                  text: lyric.text,
+                                  lyric: lyric,
+                                  lyrics: widget.lyrics,
+                                  index: index,
                                 );
-                              },
-                            );
-                          }
-                          
-                          return textWidget;
-                        },
-                      ),
-                    ),
-                    
-                    // 翻译歌词
-                    if (widget.showTranslation && 
-                        lyric.translation != null && 
-                        lyric.translation!.isNotEmpty)
-                      Transform.translate(
-                        offset: Offset(0, translationOffset),
-                        child: Padding(
-                          padding: const EdgeInsets.only(top: 2),
-                          child: AnimatedDefaultTextStyle(
-                            duration: const Duration(milliseconds: 300),
-                            style: TextStyle(
-                              color: isActive 
-                                  ? Colors.white.withOpacity(0.9) 
-                                  : Colors.white.withOpacity(0.6),
-                              fontSize: 18,
-                              fontWeight: FontWeight.w600,
-                              fontFamily: 'Microsoft YaHei',
-                              height: 1.3,
-                            ),
-                            child: Text(
-                              lyric.translation!,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
+                              }
+                              
+                              return textWidget;
+                            },
                           ),
                         ),
-                      ),
-                  ],
+                        
+                        // 翻译歌词
+                        if (widget.showTranslation && 
+                            lyric.translation != null && 
+                            lyric.translation!.isNotEmpty)
+                          Transform.translate(
+                            offset: Offset(0, translationOffset),
+                            child: Padding(
+                              padding: const EdgeInsets.only(top: 2),
+                              child: AnimatedDefaultTextStyle(
+                                duration: const Duration(milliseconds: 300),
+                                style: TextStyle(
+                                  color: isActive 
+                                      ? Colors.white.withOpacity(0.9) 
+                                      : Colors.white.withOpacity(0.6),
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.w600,
+                                  fontFamily: 'Microsoft YaHei',
+                                  height: 1.3,
+                                ),
+                                child: Text(
+                                  lyric.translation!,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
                 ),
               ),
             ),
@@ -511,5 +502,194 @@ class _ElasticOutCurve extends Curve {
     final t2 = t - 1.0;
     // 过冲系数 1.56 产生弹性效果
     return 1.0 + t2 * t2 * ((1.56 + 1) * t2 + 1.56);
+  }
+}
+
+/// 卡拉OK文本组件 - 实现逐行填充效果
+/// 对于多行文本：先从左到右填充第一行，再从左到右填充第二行
+class _KaraokeText extends StatelessWidget {
+  final String text;
+  final LyricLine lyric;
+  final List<LyricLine> lyrics;
+  final int index;
+
+  const _KaraokeText({
+    required this.text,
+    required this.lyric,
+    required this.lyrics,
+    required this.index,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: PlayerService(),
+      builder: (context, child) {
+        final player = PlayerService();
+        final currentPos = player.position;
+        
+        // 计算持续时间
+        Duration duration;
+        if (index < lyrics.length - 1) {
+          duration = lyrics[index + 1].startTime - lyric.startTime;
+        } else {
+          duration = const Duration(seconds: 5);
+        }
+        
+        if (duration.inMilliseconds == 0) duration = const Duration(seconds: 3);
+        
+        final elapsed = currentPos - lyric.startTime;
+        final progress = (elapsed.inMilliseconds / duration.inMilliseconds).clamp(0.0, 1.0);
+        
+        return LayoutBuilder(
+          builder: (context, constraints) {
+            return _buildKaraokeEffect(context, constraints, progress);
+          },
+        );
+      },
+    );
+  }
+
+  Widget _buildKaraokeEffect(BuildContext context, BoxConstraints constraints, double progress) {
+    // 获取当前文本样式
+    final style = DefaultTextStyle.of(context).style;
+    
+    // 创建 TextPainter 来测量文本
+    final textSpan = TextSpan(text: text, style: style);
+    final textPainter = TextPainter(
+      text: textSpan,
+      maxLines: 2,
+      textDirection: TextDirection.ltr,
+    );
+    textPainter.layout(maxWidth: constraints.maxWidth);
+    
+    // 获取每行的信息
+    final lineMetrics = textPainter.computeLineMetrics();
+    final lineCount = lineMetrics.length.clamp(1, 2);
+    
+    if (lineCount == 1) {
+      // 单行：简单的水平渐变
+      return ShaderMask(
+        shaderCallback: (bounds) {
+          return LinearGradient(
+            begin: Alignment.centerLeft,
+            end: Alignment.centerRight,
+            colors: [
+              Colors.white,
+              Colors.white.withOpacity(0.45),
+            ],
+            stops: [progress, progress],
+            tileMode: TileMode.clamp,
+          ).createShader(bounds);
+        },
+        blendMode: BlendMode.srcIn,
+        child: Text(text, maxLines: 2, overflow: TextOverflow.ellipsis),
+      );
+    }
+    
+    // 多行：使用 Stack 叠加实现逐行填充
+    // 计算每行的宽度占比，用于分配进度
+    final line1Width = lineMetrics[0].width;
+    final line2Width = lineMetrics.length > 1 ? lineMetrics[1].width : 0.0;
+    final totalWidth = line1Width + line2Width;
+    
+    // 第一行占总进度的比例
+    final line1Ratio = totalWidth > 0 ? line1Width / totalWidth : 0.5;
+    
+    // 计算每行的进度
+    double line1Progress, line2Progress;
+    if (progress <= line1Ratio) {
+      // 还在填充第一行
+      line1Progress = progress / line1Ratio;
+      line2Progress = 0.0;
+    } else {
+      // 第一行已填满，开始填充第二行
+      line1Progress = 1.0;
+      line2Progress = (progress - line1Ratio) / (1.0 - line1Ratio);
+    }
+    
+    final line1Height = lineMetrics[0].height;
+    // 第二行高度：使用实际的行高，并增加一些余量确保完整显示
+    final line2Height = lineMetrics.length > 1 ? lineMetrics[1].height : 0.0;
+    
+    // 底层：暗色文本
+    final dimText = Text(
+      text,
+      maxLines: 2,
+      overflow: TextOverflow.ellipsis,
+      style: style.copyWith(color: Colors.white.withOpacity(0.45)),
+    );
+    
+    // 上层：亮色文本，通过裁剪显示进度
+    final brightText = Text(
+      text,
+      maxLines: 2,
+      overflow: TextOverflow.ellipsis,
+      style: style.copyWith(color: Colors.white),
+    );
+    
+    return Stack(
+      children: [
+        // 底层暗色文本
+        dimText,
+        
+        // 第一行亮色部分
+        ClipRect(
+          clipper: _LineClipper(
+            lineIndex: 0,
+            progress: line1Progress,
+            lineHeight: line1Height,
+            lineWidth: line1Width,
+          ),
+          child: brightText,
+        ),
+        
+        // 第二行亮色部分
+        if (lineCount > 1)
+          ClipRect(
+            clipper: _LineClipper(
+              lineIndex: 1,
+              progress: line2Progress,
+              lineHeight: line2Height + 10, // 增加余量确保完整显示
+              lineWidth: line2Width,
+              yOffset: line1Height, // 第二行起始位置
+            ),
+            child: brightText,
+          ),
+      ],
+    );
+  }
+}
+
+/// 自定义裁剪器：用于裁剪单行文本的进度
+class _LineClipper extends CustomClipper<Rect> {
+  final int lineIndex;
+  final double progress;
+  final double lineHeight;
+  final double lineWidth;
+  final double yOffset;
+
+  _LineClipper({
+    required this.lineIndex,
+    required this.progress,
+    required this.lineHeight,
+    required this.lineWidth,
+    this.yOffset = 0.0,
+  });
+
+  @override
+  Rect getClip(Size size) {
+    // 裁剪该行从左到右的进度部分
+    final clipWidth = lineWidth * progress;
+    return Rect.fromLTWH(0, yOffset, clipWidth, lineHeight);
+  }
+
+  @override
+  bool shouldReclip(_LineClipper oldClipper) {
+    return oldClipper.progress != progress ||
+           oldClipper.lineIndex != lineIndex ||
+           oldClipper.lineHeight != lineHeight ||
+           oldClipper.lineWidth != lineWidth ||
+           oldClipper.yOffset != yOffset;
   }
 }

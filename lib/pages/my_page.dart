@@ -7,9 +7,11 @@ import '../services/playlist_service.dart';
 import '../services/listening_stats_service.dart';
 import '../services/player_service.dart';
 import '../services/playlist_queue_service.dart';
+import '../services/track_source_switch_service.dart';
 import '../models/playlist.dart';
 import '../models/track.dart';
 import '../widgets/import_playlist_dialog.dart';
+import '../widgets/source_switch_dialog.dart';
 import 'auth/auth_page.dart';
 
 /// 我的页面 - 包含歌单和听歌统计
@@ -203,9 +205,13 @@ class _MyPageState extends State<MyPage> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(
+              const Text(
                 '我的歌单',
-                style: Theme.of(context).textTheme.titleLarge,
+                style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                  fontFamily: 'Microsoft YaHei',
+                ),
               ),
               Row(
                 mainAxisSize: MainAxisSize.min,
@@ -234,9 +240,13 @@ class _MyPageState extends State<MyPage> {
           
           // 播放排行榜
           if (_statsData != null && _statsData!.playCounts.isNotEmpty) ...[
-            Text(
+            const Text(
               '播放排行榜 Top 10',
-              style: Theme.of(context).textTheme.titleLarge,
+              style: TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+                fontFamily: 'Microsoft YaHei',
+              ),
             ),
             const SizedBox(height: 8),
             _buildTopPlaysList(colorScheme),
@@ -317,6 +327,15 @@ class _MyPageState extends State<MyPage> {
                     ),
                     const SizedBox(width: 4),
                   ],
+                  // 换源按钮
+                  if (allTracks.isNotEmpty) ...[
+                    fluent.IconButton(
+                      icon: const Icon(fluent.FluentIcons.switch_widget),
+                      onPressed: () => _showSourceSwitchDialog(playlist, allTracks),
+                    ),
+                    const SizedBox(width: 4),
+                  ],
+                  // 编辑按钮
                   if (allTracks.isNotEmpty) ...[
                     fluent.IconButton(
                       icon: const Icon(fluent.FluentIcons.edit),
@@ -324,6 +343,7 @@ class _MyPageState extends State<MyPage> {
                     ),
                     const SizedBox(width: 4),
                   ],
+                  // 同步按钮
                   fluent.IconButton(
                     icon: const Icon(fluent.FluentIcons.sync),
                     onPressed: () async {
@@ -693,7 +713,14 @@ class _MyPageState extends State<MyPage> {
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            Text('我的歌单', style: Theme.of(context).textTheme.titleLarge),
+                            const Text(
+                              '我的歌单',
+                              style: TextStyle(
+                                fontSize: 20,
+                                fontWeight: FontWeight.bold,
+                                fontFamily: 'Microsoft YaHei',
+                              ),
+                            ),
                             Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
@@ -711,12 +738,19 @@ class _MyPageState extends State<MyPage> {
                           ],
                         ),
                         const SizedBox(height: 8),
-                        _buildPlaylistsList(materialTheme.colorScheme),
+                        _buildFluentPlaylistsList(),
                         const SizedBox(height: 24),
                         if (_statsData != null && _statsData!.playCounts.isNotEmpty) ...[
-                          Text('播放排行榜 Top 10', style: Theme.of(context).textTheme.titleLarge),
+                          const Text(
+                            '播放排行榜 Top 10',
+                            style: TextStyle(
+                              fontSize: 20,
+                              fontWeight: FontWeight.bold,
+                              fontFamily: 'Microsoft YaHei',
+                            ),
+                          ),
                           const SizedBox(height: 8),
-                          _buildTopPlaysList(materialTheme.colorScheme),
+                          _buildFluentTopPlaysList(),
                         ],
                       ],
                     ),
@@ -790,6 +824,272 @@ class _MyPageState extends State<MyPage> {
             style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
           ),
         ],
+      ),
+    );
+  }
+
+  /// Fluent UI 歌单列表
+  Widget _buildFluentPlaylistsList() {
+    final playlists = _playlistService.playlists;
+    final theme = fluent.FluentTheme.of(context);
+
+    if (playlists.isEmpty) {
+      return fluent.Card(
+        padding: const EdgeInsets.all(32),
+        child: Center(
+          child: Column(
+            children: [
+              Icon(
+                fluent.FluentIcons.music_in_collection,
+                size: 48,
+                color: theme.resources.textFillColorTertiary,
+              ),
+              const SizedBox(height: 16),
+              Text(
+                '暂无歌单',
+                style: TextStyle(
+                  color: theme.resources.textFillColorSecondary,
+                  fontFamily: 'Microsoft YaHei',
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return Column(
+      children: playlists.map((playlist) {
+        final canSync = _hasImportConfig(playlist);
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 4),
+          child: fluent.Card(
+            padding: EdgeInsets.zero,
+            child: fluent.ListTile(
+              leading: _buildFluentPlaylistCover(playlist),
+              title: Text(
+                playlist.name,
+                style: const TextStyle(fontFamily: 'Microsoft YaHei'),
+              ),
+              subtitle: Text(
+                '${playlist.trackCount} 首歌曲',
+                style: TextStyle(
+                  color: theme.resources.textFillColorSecondary,
+                  fontFamily: 'Microsoft YaHei',
+                ),
+              ),
+              trailing: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (!playlist.isDefault) ...[
+                    fluent.IconButton(
+                      icon: Icon(
+                        fluent.FluentIcons.sync,
+                        color: canSync ? theme.accentColor : theme.resources.textFillColorDisabled,
+                      ),
+                      onPressed: canSync ? () => _syncPlaylistFromList(playlist) : null,
+                    ),
+                    fluent.IconButton(
+                      icon: const Icon(fluent.FluentIcons.delete, color: Colors.redAccent),
+                      onPressed: () => _confirmDeletePlaylist(playlist),
+                    ),
+                  ],
+                  const Icon(fluent.FluentIcons.chevron_right),
+                ],
+              ),
+              onPressed: () => _openPlaylistDetail(playlist),
+            ),
+          ),
+        );
+      }).toList(),
+    );
+  }
+
+  /// Fluent UI 歌单封面
+  Widget _buildFluentPlaylistCover(Playlist playlist) {
+    final theme = fluent.FluentTheme.of(context);
+    
+    if (playlist.coverUrl != null && playlist.coverUrl!.isNotEmpty) {
+      return ClipRRect(
+        borderRadius: BorderRadius.circular(6),
+        child: CachedNetworkImage(
+          imageUrl: playlist.coverUrl!,
+          width: 48,
+          height: 48,
+          fit: BoxFit.cover,
+          placeholder: (context, url) => Container(
+            width: 48,
+            height: 48,
+            decoration: BoxDecoration(
+              color: theme.resources.controlAltFillColorSecondary,
+              borderRadius: BorderRadius.circular(6),
+            ),
+            child: Icon(
+              playlist.isDefault ? fluent.FluentIcons.heart_fill : fluent.FluentIcons.music_in_collection,
+              color: playlist.isDefault ? Colors.red : theme.accentColor,
+              size: 20,
+            ),
+          ),
+          errorWidget: (context, url, error) => Container(
+            width: 48,
+            height: 48,
+            decoration: BoxDecoration(
+              color: theme.resources.controlAltFillColorSecondary,
+              borderRadius: BorderRadius.circular(6),
+            ),
+            child: Icon(
+              playlist.isDefault ? fluent.FluentIcons.heart_fill : fluent.FluentIcons.music_in_collection,
+              color: playlist.isDefault ? Colors.red : theme.accentColor,
+              size: 20,
+            ),
+          ),
+        ),
+      );
+    }
+    
+    return Container(
+      width: 48,
+      height: 48,
+      decoration: BoxDecoration(
+        color: theme.resources.controlAltFillColorSecondary,
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Icon(
+        playlist.isDefault ? fluent.FluentIcons.heart_fill : fluent.FluentIcons.music_in_collection,
+        color: playlist.isDefault ? Colors.red : theme.accentColor,
+        size: 20,
+      ),
+    );
+  }
+
+  /// Fluent UI 播放排行榜
+  Widget _buildFluentTopPlaysList() {
+    final topPlays = _statsData!.playCounts.take(10).toList();
+    final theme = fluent.FluentTheme.of(context);
+
+    return fluent.Card(
+      padding: EdgeInsets.zero,
+      child: Column(
+        children: topPlays.asMap().entries.map((entry) {
+          final index = entry.key;
+          final item = entry.value;
+          final rank = index + 1;
+          
+          Color? rankColor;
+          if (rank == 1) {
+            rankColor = Colors.amber;
+          } else if (rank == 2) {
+            rankColor = Colors.grey[400];
+          } else if (rank == 3) {
+            rankColor = Colors.orange[300];
+          }
+
+          return Column(
+            children: [
+              fluent.ListTile(
+                leading: Stack(
+                  children: [
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(6),
+                      child: CachedNetworkImage(
+                        imageUrl: item.picUrl,
+                        width: 48,
+                        height: 48,
+                        fit: BoxFit.cover,
+                        placeholder: (context, url) => Container(
+                          width: 48,
+                          height: 48,
+                          decoration: BoxDecoration(
+                            color: theme.resources.controlAltFillColorSecondary,
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: Icon(
+                            fluent.FluentIcons.music_in_collection,
+                            color: theme.resources.textFillColorTertiary,
+                          ),
+                        ),
+                        errorWidget: (context, url, error) => Container(
+                          width: 48,
+                          height: 48,
+                          decoration: BoxDecoration(
+                            color: theme.resources.controlAltFillColorSecondary,
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: Icon(
+                            fluent.FluentIcons.music_in_collection,
+                            color: theme.resources.textFillColorTertiary,
+                          ),
+                        ),
+                      ),
+                    ),
+                    Positioned(
+                      left: 0,
+                      top: 0,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: rankColor ?? theme.accentColor,
+                          borderRadius: const BorderRadius.only(
+                            topLeft: Radius.circular(6),
+                            bottomRight: Radius.circular(6),
+                          ),
+                        ),
+                        child: Text(
+                          '$rank',
+                          style: const TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
+                            fontFamily: 'Microsoft YaHei',
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                title: Text(
+                  item.trackName,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontFamily: 'Microsoft YaHei'),
+                ),
+                subtitle: Text(
+                  item.artists,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: theme.resources.textFillColorSecondary,
+                    fontFamily: 'Microsoft YaHei',
+                  ),
+                ),
+                trailing: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      fluent.FluentIcons.play,
+                      size: 14,
+                      color: theme.resources.textFillColorSecondary,
+                    ),
+                    const SizedBox(width: 4),
+                    Text(
+                      '${item.playCount}',
+                      style: TextStyle(
+                        color: theme.resources.textFillColorSecondary,
+                        fontFamily: 'Microsoft YaHei',
+                      ),
+                    ),
+                  ],
+                ),
+                onPressed: () => _playTrack(item),
+              ),
+              if (index < topPlays.length - 1)
+                Divider(
+                  height: 1,
+                  color: theme.resources.dividerStrokeColorDefault,
+                ),
+            ],
+          );
+        }).toList(),
       ),
     );
   }
@@ -1003,10 +1303,7 @@ class _MyPageState extends State<MyPage> {
         return Card(
           margin: const EdgeInsets.only(bottom: 8),
           child: ListTile(
-            leading: Icon(
-              playlist.isDefault ? Icons.favorite : Icons.library_music,
-              color: playlist.isDefault ? Colors.red : colorScheme.primary,
-            ),
+            leading: _buildPlaylistCover(playlist, colorScheme),
             title: Text(playlist.name),
             subtitle: Text('${playlist.trackCount} 首歌曲'),
             trailing: Row(
@@ -1034,6 +1331,66 @@ class _MyPageState extends State<MyPage> {
           ),
         );
       }).toList(),
+    );
+  }
+
+  /// 构建歌单封面
+  Widget _buildPlaylistCover(Playlist playlist, ColorScheme colorScheme) {
+    // 如果有封面图片，显示封面
+    if (playlist.coverUrl != null && playlist.coverUrl!.isNotEmpty) {
+      return ClipRRect(
+        borderRadius: BorderRadius.circular(8),
+        child: CachedNetworkImage(
+          imageUrl: playlist.coverUrl!,
+          width: 48,
+          height: 48,
+          fit: BoxFit.cover,
+          placeholder: (context, url) => Container(
+            width: 48,
+            height: 48,
+            decoration: BoxDecoration(
+              color: playlist.isDefault
+                  ? colorScheme.primaryContainer
+                  : colorScheme.secondaryContainer,
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Icon(
+              playlist.isDefault ? Icons.favorite : Icons.library_music,
+              color: playlist.isDefault ? Colors.red : colorScheme.primary,
+            ),
+          ),
+          errorWidget: (context, url, error) => Container(
+            width: 48,
+            height: 48,
+            decoration: BoxDecoration(
+              color: playlist.isDefault
+                  ? colorScheme.primaryContainer
+                  : colorScheme.secondaryContainer,
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Icon(
+              playlist.isDefault ? Icons.favorite : Icons.library_music,
+              color: playlist.isDefault ? Colors.red : colorScheme.primary,
+            ),
+          ),
+        ),
+      );
+    }
+    
+    // 没有封面时显示默认图标
+    return Container(
+      width: 48,
+      height: 48,
+      decoration: BoxDecoration(
+        color: playlist.isDefault
+            ? colorScheme.primaryContainer
+            : colorScheme.secondaryContainer,
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Icon(
+        playlist.isDefault ? Icons.favorite : Icons.library_music,
+        color: playlist.isDefault ? Colors.red : colorScheme.primary,
+      ),
     );
   }
 
@@ -1157,7 +1514,10 @@ class _MyPageState extends State<MyPage> {
   /// 播放歌曲
   Future<void> _playTrack(PlayCountItem item) async {
     try {
+      print('🎵 [MyPage] 播放排行榜歌曲: ${item.trackName}');
+      print('   原始 source 字符串: "${item.source}"');
       final track = item.toTrack();
+      print('   转换后 Track.source: ${track.source}');
       await PlayerService().playTrack(track);
 
       _showUserNotification(
@@ -1673,6 +2033,13 @@ class _MyPageState extends State<MyPage> {
               onPressed: _toggleSearchMode,
               tooltip: _isSearchMode ? '关闭搜索' : '搜索歌曲',
             ),
+          // 换源按钮
+          if (tracks.isNotEmpty)
+            IconButton(
+              icon: const Icon(Icons.swap_horiz),
+              onPressed: () => _showSourceSwitchDialog(playlist, tracks),
+              tooltip: '换源',
+            ),
           // 编辑按钮
           if (tracks.isNotEmpty)
             IconButton(
@@ -2117,6 +2484,164 @@ class _MyPageState extends State<MyPage> {
 
     if (success && _selectedPlaylist?.id == playlist.id) {
       _backToList();
+    }
+  }
+
+  /// 显示换源对话框
+  Future<void> _showSourceSwitchDialog(Playlist playlist, List<PlaylistTrack> tracks) async {
+    if (tracks.isEmpty) {
+      _showUserNotification(
+        '歌单为空，无法换源',
+        severity: fluent.InfoBarSeverity.warning,
+      );
+      return;
+    }
+
+    // 获取当前歌单中最常见的来源
+    final sourceCounts = <MusicSource, int>{};
+    for (final track in tracks) {
+      sourceCounts[track.source] = (sourceCounts[track.source] ?? 0) + 1;
+    }
+    final currentSource = sourceCounts.entries
+        .reduce((a, b) => a.value > b.value ? a : b)
+        .key;
+
+    // 第一步：选择平台和歌曲
+    Map<String, dynamic>? selectResult;
+    if (_themeManager.isFluentFramework) {
+      selectResult = await fluent.showDialog<Map<String, dynamic>>(
+        context: context,
+        builder: (context) => SourceSwitchSelectDialog(
+          tracks: tracks,
+          currentSource: currentSource,
+        ),
+      );
+    } else {
+      selectResult = await showDialog<Map<String, dynamic>>(
+        context: context,
+        builder: (context) => SourceSwitchSelectDialog(
+          tracks: tracks,
+          currentSource: currentSource,
+        ),
+      );
+    }
+
+    if (selectResult == null || !mounted) return;
+
+    final targetSource = selectResult['targetSource'] as MusicSource;
+    final selectedTracks = selectResult['selectedTracks'] as List<PlaylistTrack>;
+
+    // 第二步：显示处理进度
+    bool? progressResult;
+    if (_themeManager.isFluentFramework) {
+      progressResult = await fluent.showDialog<bool>(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => SourceSwitchProgressDialog(
+          tracks: selectedTracks,
+          targetSource: targetSource,
+        ),
+      );
+    } else {
+      progressResult = await showDialog<bool>(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => SourceSwitchProgressDialog(
+          tracks: selectedTracks,
+          targetSource: targetSource,
+        ),
+      );
+    }
+
+    if (progressResult != true || !mounted) {
+      TrackSourceSwitchService().clear();
+      return;
+    }
+
+    // 第三步：选择匹配结果
+    List<MapEntry<PlaylistTrack, Track>>? confirmResult;
+    if (_themeManager.isFluentFramework) {
+      confirmResult = await fluent.showDialog<List<MapEntry<PlaylistTrack, Track>>>(
+        context: context,
+        builder: (context) => const SourceSwitchResultDialog(),
+      );
+    } else {
+      confirmResult = await showDialog<List<MapEntry<PlaylistTrack, Track>>>(
+        context: context,
+        builder: (context) => const SourceSwitchResultDialog(),
+      );
+    }
+
+    if (confirmResult == null || confirmResult.isEmpty || !mounted) {
+      TrackSourceSwitchService().clear();
+      return;
+    }
+
+    // 执行换源操作
+    await _executeSourceSwitch(playlist, confirmResult);
+    TrackSourceSwitchService().clear();
+  }
+
+  /// 执行换源操作
+  Future<void> _executeSourceSwitch(
+    Playlist playlist,
+    List<MapEntry<PlaylistTrack, Track>> switchPairs,
+  ) async {
+    _showUserNotification(
+      '正在更新歌单...',
+      duration: const Duration(seconds: 1),
+    );
+
+    int successCount = 0;
+    int failCount = 0;
+
+    for (final pair in switchPairs) {
+      final oldTrack = pair.key;
+      final newTrack = pair.value;
+
+      try {
+        // 先移除旧歌曲
+        final removeSuccess = await _playlistService.removeTrackFromPlaylist(
+          playlist.id,
+          oldTrack,
+        );
+
+        if (removeSuccess) {
+          // 添加新歌曲
+          final addSuccess = await _playlistService.addTrackToPlaylist(
+            playlist.id,
+            newTrack,
+          );
+
+          if (addSuccess) {
+            successCount++;
+          } else {
+            failCount++;
+          }
+        } else {
+          failCount++;
+        }
+      } catch (e) {
+        failCount++;
+        print('❌ [MyPage] 换源失败: $e');
+      }
+    }
+
+    // 刷新歌单
+    await _playlistService.loadPlaylistTracks(playlist.id);
+
+    if (!mounted) return;
+
+    if (failCount == 0) {
+      _showUserNotification(
+        '换源完成，成功更新 $successCount 首歌曲',
+        severity: fluent.InfoBarSeverity.success,
+      );
+    } else {
+      _showUserNotification(
+        '换源完成，成功 $successCount 首，失败 $failCount 首',
+        severity: fluent.InfoBarSeverity.warning,
+      );
     }
   }
 }

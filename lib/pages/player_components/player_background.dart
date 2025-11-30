@@ -30,7 +30,9 @@ class PlayerBackground extends StatelessWidget {
     
     switch (backgroundService.backgroundType) {
       case PlayerBackgroundType.adaptive:
+      case PlayerBackgroundType.dynamic:
         // 自适应背景 - 检查是否启用封面渐变效果
+        // 动态背景在非流体云模式下回退到自适应
         if (backgroundService.enableGradient) {
           return _buildCoverGradientBackground(greyColor);
         } else {

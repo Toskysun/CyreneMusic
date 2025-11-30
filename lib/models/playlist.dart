@@ -6,6 +6,7 @@ class Playlist {
   final String name;
   final bool isDefault; // 是否为默认歌单（我的收藏）
   final int trackCount; // 歌曲数量
+  final String? coverUrl; // 歌单封面（第一首歌的封面）
   final DateTime createdAt;
   final DateTime updatedAt;
   final String? source; // 来源平台：netease/qq
@@ -16,6 +17,7 @@ class Playlist {
     required this.name,
     required this.isDefault,
     required this.trackCount,
+    this.coverUrl,
     required this.createdAt,
     required this.updatedAt,
     this.source,
@@ -28,6 +30,7 @@ class Playlist {
       name: json['name'] as String,
       isDefault: json['isDefault'] as bool? ?? false,
       trackCount: json['trackCount'] as int? ?? 0,
+      coverUrl: json['coverUrl'] as String?,
       createdAt: DateTime.parse(json['createdAt'] as String),
       updatedAt: DateTime.parse(json['updatedAt'] as String),
       source: json['source'] as String?,
@@ -41,6 +44,7 @@ class Playlist {
       'name': name,
       'isDefault': isDefault,
       'trackCount': trackCount,
+      'coverUrl': coverUrl,
       'createdAt': createdAt.toIso8601String(),
       'updatedAt': updatedAt.toIso8601String(),
       'source': source,

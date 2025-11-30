@@ -46,5 +46,7 @@ app.*.map.json
 /website/
 /kugouapi_github/
 /data/
-/backend/
 /musicapi/
+/backend/
+/background_dev/
+/api-enhanced/

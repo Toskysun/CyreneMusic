@@ -760,5 +760,54 @@ class PlaylistService extends ChangeNotifier {
       t.trackId == track.id.toString() && t.source == track.source
     );
   }
+
+  /// 检查歌曲是否在用户的任何歌单中（调用后端 API）
+  Future<TrackInPlaylistResult> isTrackInAnyPlaylist(Track track) async {
+    if (!AuthService().isLoggedIn) {
+      return TrackInPlaylistResult(inPlaylist: false, playlistIds: [], playlistNames: []);
+    }
+
+    try {
+      final baseUrl = UrlService().baseUrl;
+      final token = AuthService().token!;
+      final trackId = track.id.toString();
+      final source = track.source.name;
+      
+      final response = await http.get(
+        Uri.parse('$baseUrl/playlists/check-track?trackId=$trackId&source=$source'),
+        headers: {
+          'Authorization': 'Bearer $token',
+        },
+      ).timeout(const Duration(seconds: 10));
+
+      if (response.statusCode == 200) {
+        final data = json.decode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
+        return TrackInPlaylistResult(
+          inPlaylist: data['inPlaylist'] as bool? ?? false,
+          playlistIds: (data['playlistIds'] as List<dynamic>?)?.map((e) => e as int).toList() ?? [],
+          playlistNames: (data['playlistNames'] as List<dynamic>?)?.map((e) => e as String).toList() ?? [],
+        );
+      } else if (response.statusCode == 401) {
+        await AuthService().handleUnauthorized();
+      }
+    } catch (e) {
+      print('❌ [PlaylistService] 检查歌曲是否在歌单中失败: $e');
+    }
+    
+    return TrackInPlaylistResult(inPlaylist: false, playlistIds: [], playlistNames: []);
+  }
+}
+
+/// 歌曲在歌单中的检查结果
+class TrackInPlaylistResult {
+  final bool inPlaylist;
+  final List<int> playlistIds;
+  final List<String> playlistNames;
+
+  TrackInPlaylistResult({
+    required this.inPlaylist,
+    required this.playlistIds,
+    required this.playlistNames,
+  });
 }
 

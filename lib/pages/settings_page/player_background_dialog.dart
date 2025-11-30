@@ -5,6 +5,7 @@ import 'package:flutter_colorpicker/flutter_colorpicker.dart';
 import 'package:file_picker/file_picker.dart';
 import '../../services/player_background_service.dart';
 import '../../services/auth_service.dart';
+import '../../services/lyric_style_service.dart';
 import '../../utils/theme_manager.dart';
 
 /// 播放器背景设置对话框
@@ -200,6 +201,43 @@ class _PlayerBackgroundDialogState extends State<PlayerBackgroundDialog> {
                   },
                 ),
                 const Text('0 = 清晰，50 = 最模糊', style: TextStyle(fontSize: 12)),
+              ],
+              
+              // 动态背景（仅在流体云样式下显示）
+              if (LyricStyleService().currentStyle == LyricStyle.fluidCloud) ...[
+                const SizedBox(height: 16),
+                const fluent_ui.Divider(),
+                const SizedBox(height: 8),
+                const Text(
+                  '流体云专属',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.grey,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                fluent_ui.RadioButton(
+                  content: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: const [
+                      Text('动态背景'),
+                      Padding(
+                        padding: EdgeInsets.only(top: 4.0),
+                        child: Text(
+                          '基于封面提取3个颜色，生成流动的渐变动画',
+                          style: TextStyle(fontSize: 11, color: Colors.grey),
+                        ),
+                      ),
+                    ],
+                  ),
+                  checked: currentType == PlayerBackgroundType.dynamic,
+                  onChanged: (v) async {
+                    await backgroundService.setBackgroundType(PlayerBackgroundType.dynamic);
+                    setState(() {});
+                    widget.onChanged();
+                  },
+                ),
               ],
             ],
           ),
@@ -439,6 +477,33 @@ class _PlayerBackgroundDialogState extends State<PlayerBackgroundDialog> {
                     ),
                   ],
                 ),
+              ),
+            ],
+            
+            // 动态背景（仅在流体云样式下显示）
+            if (LyricStyleService().currentStyle == LyricStyle.fluidCloud) ...[
+              const SizedBox(height: 16),
+              const Divider(),
+              Padding(
+                padding: const EdgeInsets.only(left: 16, top: 8),
+                child: Text(
+                  '流体云专属',
+                  style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                    fontWeight: FontWeight.w600,
+                    color: Theme.of(context).colorScheme.primary,
+                  ),
+                ),
+              ),
+              RadioListTile<PlayerBackgroundType>(
+                title: const Text('动态背景'),
+                subtitle: const Text('基于封面提取3个颜色，生成流动的渐变动画'),
+                value: PlayerBackgroundType.dynamic,
+                groupValue: currentType,
+                onChanged: (value) async {
+                  await backgroundService.setBackgroundType(value!);
+                  setState(() {});
+                  widget.onChanged();
+                },
               ),
             ],
           ],

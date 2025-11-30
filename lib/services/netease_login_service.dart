@@ -99,6 +99,82 @@ class NeteaseLoginService extends ChangeNotifier {
     ).timeout(const Duration(seconds: 10));
     return r.statusCode == 200;
   }
+
+  /// 检查是否已绑定网易云账号
+  Future<bool> isNeteaseBound() async {
+    try {
+      final resp = await fetchBindings();
+      // 后端返回格式: { code: 200, data: { netease: { bound: true, nickname: ... } } }
+      final data = resp['data'] as Map<String, dynamic>?;
+      final netease = data?['netease'] as Map<String, dynamic>?;
+      return netease != null && netease['bound'] == true;
+    } catch (e) {
+      debugPrint('❌ [NeteaseLoginService] 检查绑定状态失败: $e');
+      return false;
+    }
+  }
+
+  /// 获取用户网易云歌单列表
+  Future<List<NeteasePlaylistInfo>> fetchUserPlaylists({int limit = 50, int offset = 0}) async {
+    final token = AuthService().token;
+    if (token == null) {
+      throw Exception('未登录');
+    }
+
+    final url = '${UrlService().neteaseUserPlaylistsUrl}?limit=$limit&offset=$offset';
+    final r = await http.get(
+      Uri.parse(url),
+      headers: { 'Authorization': 'Bearer $token' },
+    ).timeout(const Duration(seconds: 15));
+
+    final data = json.decode(utf8.decode(r.bodyBytes)) as Map<String, dynamic>;
+    
+    if (r.statusCode != 200 || data['code'] != 200) {
+      throw Exception(data['message'] ?? '获取歌单列表失败');
+    }
+
+    final playlistsData = data['data']?['playlists'] as List<dynamic>? ?? [];
+    return playlistsData.map((p) => NeteasePlaylistInfo.fromJson(p as Map<String, dynamic>)).toList();
+  }
+}
+
+/// 网易云歌单信息
+class NeteasePlaylistInfo {
+  final String id;
+  final String name;
+  final String coverImgUrl;
+  final int trackCount;
+  final int playCount;
+  final String creator;
+  final String creatorId;
+  final String? description;
+  final bool subscribed;  // 是否为收藏的歌单（非自己创建）
+
+  NeteasePlaylistInfo({
+    required this.id,
+    required this.name,
+    required this.coverImgUrl,
+    required this.trackCount,
+    required this.playCount,
+    required this.creator,
+    required this.creatorId,
+    this.description,
+    required this.subscribed,
+  });
+
+  factory NeteasePlaylistInfo.fromJson(Map<String, dynamic> json) {
+    return NeteasePlaylistInfo(
+      id: json['id']?.toString() ?? '',
+      name: json['name']?.toString() ?? '未命名歌单',
+      coverImgUrl: json['coverImgUrl']?.toString() ?? '',
+      trackCount: (json['trackCount'] is int) ? json['trackCount'] : int.tryParse(json['trackCount']?.toString() ?? '0') ?? 0,
+      playCount: (json['playCount'] is int) ? json['playCount'] : int.tryParse(json['playCount']?.toString() ?? '0') ?? 0,
+      creator: json['creator']?.toString() ?? '',
+      creatorId: json['creatorId']?.toString() ?? '',
+      description: json['description']?.toString(),
+      subscribed: json['subscribed'] == true,
+    );
+  }
 }
 
 

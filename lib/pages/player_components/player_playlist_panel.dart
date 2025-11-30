@@ -60,27 +60,20 @@ class PlayerPlaylistPanel extends StatelessWidget {
         bottomLeft: Radius.circular(16),
       ),
       child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 30, sigmaY: 30),
+        filter: ImageFilter.blur(sigmaX: 40, sigmaY: 40),
         child: Container(
           width: 400,
           height: double.infinity,
           decoration: BoxDecoration(
-            color: Colors.black.withOpacity(0.2),
+            color: Colors.white.withOpacity(0.1),
             borderRadius: const BorderRadius.only(
               topLeft: Radius.circular(16),
               bottomLeft: Radius.circular(16),
             ),
             border: Border.all(
-              color: Colors.white.withOpacity(0.1),
+              color: Colors.white.withOpacity(0.15),
               width: 1,
             ),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.5),
-                blurRadius: 20,
-                offset: const Offset(-5, 0),
-              ),
-            ],
           ),
           child: Column(
             children: [

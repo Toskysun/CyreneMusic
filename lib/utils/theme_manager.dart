@@ -338,12 +338,13 @@ class ThemeManager extends ChangeNotifier {
       final colorValue = prefs.getInt('seed_color') ?? Colors.deepPurple.value;
       _seedColor = Color(colorValue);
 
-      // 加载桌面主题框架
-      final frameworkIndex = prefs.getInt('theme_framework') ?? ThemeFramework.material.index;
-      if (frameworkIndex >= 0 && frameworkIndex < ThemeFramework.values.length) {
-        _themeFramework = ThemeFramework.values[frameworkIndex];
+      // 加载桌面主题框架（桌面端默认为 Fluent UI，移动端默认为 Material）
+      final savedFrameworkIndex = prefs.getInt('theme_framework');
+      if (savedFrameworkIndex != null && savedFrameworkIndex >= 0 && savedFrameworkIndex < ThemeFramework.values.length) {
+        _themeFramework = ThemeFramework.values[savedFrameworkIndex];
       } else {
-        _themeFramework = ThemeFramework.material;
+        // 用户未设置过，使用平台默认值
+        _themeFramework = Platform.isWindows ? ThemeFramework.fluent : ThemeFramework.material;
       }
 
       // 加载窗口材质（默认：Windows 11 设为 Mica，否则 Disabled）

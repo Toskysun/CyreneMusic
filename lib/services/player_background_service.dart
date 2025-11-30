@@ -8,6 +8,7 @@ enum PlayerBackgroundType {
   solidColor, // 纯色背景
   image,      // 图片背景
   video,      // 视频背景
+  dynamic,   // 动态背景（流体云专用，基于封面提取3个颜色的动态渐变）
 }
 
 /// 播放器背景设置服务
@@ -42,15 +43,23 @@ class PlayerBackgroundService extends ChangeNotifier {
   bool get isSolidColor => _backgroundType == PlayerBackgroundType.solidColor;
   bool get isImage => _backgroundType == PlayerBackgroundType.image;
   bool get isVideo => _backgroundType == PlayerBackgroundType.video;
+  bool get isDynamic => _backgroundType == PlayerBackgroundType.dynamic;
 
   /// 初始化服务
   Future<void> initialize() async {
     final prefs = await SharedPreferences.getInstance();
     
     // 读取背景类型
-    final typeIndex = prefs.getInt(_keyBackgroundType) ?? 0;
-    if (typeIndex < PlayerBackgroundType.values.length) {
-      _backgroundType = PlayerBackgroundType.values[typeIndex];
+    final savedTypeIndex = prefs.getInt(_keyBackgroundType);
+    if (savedTypeIndex != null && savedTypeIndex < PlayerBackgroundType.values.length) {
+      // 用户已设置过，使用用户设置
+      _backgroundType = PlayerBackgroundType.values[savedTypeIndex];
+    } else {
+      // 用户未设置过，使用平台默认值
+      // 桌面端默认使用动态背景，移动端默认使用自适应
+      _backgroundType = Platform.isWindows || Platform.isMacOS || Platform.isLinux
+          ? PlayerBackgroundType.dynamic
+          : PlayerBackgroundType.adaptive;
     }
     
     // 读取纯色
@@ -182,6 +191,8 @@ class PlayerBackgroundService extends ChangeNotifier {
         return '图片背景';
       case PlayerBackgroundType.video:
         return '视频背景';
+      case PlayerBackgroundType.dynamic:
+        return '动态背景';
     }
   }
 
@@ -208,6 +219,8 @@ class PlayerBackgroundService extends ChangeNotifier {
         return _mediaPath != null ? '自定义图片' : '未设置图片';
       case PlayerBackgroundType.video:
         return _mediaPath != null ? '自定义视频' : '未设置视频';
+      case PlayerBackgroundType.dynamic:
+        return '基于封面的动态渐变效果';
     }
   }
   
