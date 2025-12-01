@@ -47,8 +47,9 @@ class _PlayerBackgroundDialogState extends State<PlayerBackgroundDialog> {
                   widget.onChanged();
                 },
               ),
-              // 渐变开关（仅在自适应背景时显示）
-              if (currentType == PlayerBackgroundType.adaptive) ...[
+              // 渐变开关（仅在自适应背景时显示，流体云样式下隐藏）
+              if (currentType == PlayerBackgroundType.adaptive && 
+                  LyricStyleService().currentStyle != LyricStyle.fluidCloud) ...[
                 const SizedBox(height: 8),
                 Row(
                   children: [
@@ -277,8 +278,9 @@ class _PlayerBackgroundDialogState extends State<PlayerBackgroundDialog> {
               },
             ),
             
-            // 渐变开关（仅在自适应背景时显示）
-            if (currentType == PlayerBackgroundType.adaptive) ...[
+            // 渐变开关（仅在自适应背景时显示，流体云样式下隐藏）
+            if (currentType == PlayerBackgroundType.adaptive && 
+                LyricStyleService().currentStyle != LyricStyle.fluidCloud) ...[
               Padding(
                 padding: const EdgeInsets.only(left: 16, right: 16, bottom: 8),
                 child: SwitchListTile(

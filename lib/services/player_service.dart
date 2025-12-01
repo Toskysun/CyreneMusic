@@ -9,6 +9,7 @@ import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:palette_generator/palette_generator.dart';
+import 'color_extraction_service.dart';
 import '../models/song_detail.dart';
 import '../models/track.dart';
 import '../models/lyric_line.dart';
@@ -686,6 +687,7 @@ class PlayerService extends ChangeNotifier {
   }
 
   /// 后台提取主题色（为播放器页面预加载）
+  /// 使用 isolate 避免阻塞主线程
   Future<void> _extractThemeColorInBackground(String imageUrl) async {
     if (imageUrl.isEmpty) {
       // 如果没有图片URL，设置一个默认颜色（灰色更柔和）
@@ -714,12 +716,12 @@ class PlayerService extends ChangeNotifier {
       
       Color? themeColor;
       
-      // 移动端渐变模式：从封面底部区域提取颜色
+      // 移动端渐变模式：从封面底部区域提取颜色（仍使用 PaletteGenerator）
       if (isMobileGradientMode) {
         themeColor = await _extractColorFromBottomRegion(imageUrl);
       } else {
-        // 其他模式：从整张图片提取颜色
-        themeColor = await _extractColorFromFullImage(imageUrl);
+        // 其他模式：使用 isolate 提取颜色，不阻塞主线程
+        themeColor = await _extractColorFromFullImageAsync(imageUrl);
       }
 
       // 如果提取成功，更新主题色（会平滑过渡）
@@ -739,7 +741,23 @@ class PlayerService extends ChangeNotifier {
     }
   }
 
-  /// 从整张图片提取主题色
+  /// 从整张图片提取主题色（使用 isolate，不阻塞主线程）
+  Future<Color?> _extractColorFromFullImageAsync(String imageUrl) async {
+    try {
+      final result = await ColorExtractionService().extractColorsFromUrl(
+        imageUrl,
+        sampleSize: 64, // 主题色使用稍大的尺寸以获取更准确的颜色
+        timeout: const Duration(seconds: 3),
+      );
+      
+      return result?.themeColor;
+    } catch (e) {
+      print('⚠️ [PlayerService] 提取颜色异常: $e');
+      return null;
+    }
+  }
+
+  /// 从整张图片提取主题色（使用 PaletteGenerator，会阻塞主线程 - 仅作为备用）
   Future<Color?> _extractColorFromFullImage(String imageUrl) async {
     try {
       final imageProvider = CachedNetworkImageProvider(imageUrl);

@@ -43,10 +43,26 @@ android {
 
     signingConfigs {
         create("release") {
-            keystoreProperties["storeFile"]?.takeIf { it.toString().isNotBlank() }?.let { storeFile = rootProject.file(it) }
-            keystoreProperties["storePassword"]?.let { storePassword = it.toString() }
-            keystoreProperties["keyAlias"]?.let { keyAlias = it.toString() }
-            keystoreProperties["keyPassword"]?.let { keyPassword = it.toString() }
+            // 优先使用 key.properties 中的配置，如果不存在则使用默认的 cyrene-release.jks
+            val defaultKeystoreFile = rootProject.file("cyrene-release.jks")
+            val storeFileValue = keystoreProperties["storeFile"]?.takeIf { it.toString().isNotBlank() }
+                ?: if (defaultKeystoreFile.exists()) "cyrene-release.jks" else null
+            
+            if (storeFileValue != null) {
+                storeFile = rootProject.file(storeFileValue)
+            }
+            
+            // 从 key.properties 读取密码和别名信息
+            // 如果 key.properties 不存在，这些值将为空，构建会失败并提示需要配置签名信息
+            keystoreProperties["storePassword"]?.takeIf { it.toString().isNotBlank() }?.let { 
+                storePassword = it.toString() 
+            }
+            keystoreProperties["keyAlias"]?.takeIf { it.toString().isNotBlank() }?.let { 
+                keyAlias = it.toString() 
+            }
+            keystoreProperties["keyPassword"]?.takeIf { it.toString().isNotBlank() }?.let { 
+                keyPassword = it.toString() 
+            }
         }
     }
 

@@ -95,7 +95,10 @@ class _PlayerFluidCloudLyricsPanelState extends State<PlayerFluidCloudLyricsPane
   void _scrollToIndex(int index) {
     if (!_scrollController.hasClients || _viewportHeight <= 0) return;
     
-    final targetOffset = index * _itemHeight;
+    // 如果有译文，增加行高30%
+    final hasTranslation = _hasTranslation();
+    final effectiveItemHeight = hasTranslation ? _itemHeight * 1.3 : _itemHeight;
+    final targetOffset = index * effectiveItemHeight;
     
     // 使用弹性曲线滚动
     _scrollController.animateTo(
@@ -109,7 +112,10 @@ class _PlayerFluidCloudLyricsPanelState extends State<PlayerFluidCloudLyricsPane
   void _scrollToIndexImmediate(int index) {
     if (!_scrollController.hasClients || _viewportHeight <= 0) return;
     
-    final targetOffset = index * _itemHeight;
+    // 如果有译文，增加行高30%
+    final hasTranslation = _hasTranslation();
+    final effectiveItemHeight = hasTranslation ? _itemHeight * 1.3 : _itemHeight;
+    final targetOffset = index * effectiveItemHeight;
     _scrollController.jumpTo(targetOffset);
   }
 
@@ -213,8 +219,19 @@ class _PlayerFluidCloudLyricsPanelState extends State<PlayerFluidCloudLyricsPane
     );
   }
 
+  /// 检查歌词是否包含译文
+  bool _hasTranslation() {
+    if (!widget.showTranslation) return false;
+    return widget.lyrics.any((lyric) => 
+        lyric.translation != null && lyric.translation!.isNotEmpty);
+  }
+
   /// 构建歌词列表
   Widget _buildLyricList() {
+    // 如果有译文，增加行高30%
+    final hasTranslation = _hasTranslation();
+    final effectiveItemHeight = hasTranslation ? _itemHeight * 1.3 : _itemHeight;
+    
     return NotificationListener<ScrollNotification>(
       onNotification: (notification) {
         if (notification is ScrollStartNotification && 
@@ -224,7 +241,7 @@ class _PlayerFluidCloudLyricsPanelState extends State<PlayerFluidCloudLyricsPane
         } else if (notification is ScrollUpdateNotification && _isUserScrolling) {
           // 更新选中的歌词索引
           final centerOffset = _scrollController.offset + (_viewportHeight / 2);
-          final index = (centerOffset / _itemHeight).floor();
+          final index = (centerOffset / effectiveItemHeight).floor();
           if (index >= 0 && index < widget.lyrics.length && index != _selectedLyricIndex) {
             setState(() {
               _selectedLyricIndex = index;
@@ -240,12 +257,12 @@ class _PlayerFluidCloudLyricsPanelState extends State<PlayerFluidCloudLyricsPane
           return ListView.builder(
             controller: _scrollController,
             itemCount: widget.lyrics.length,
-            itemExtent: _itemHeight,
-            padding: EdgeInsets.symmetric(vertical: (_viewportHeight - _itemHeight) / 2),
+            itemExtent: effectiveItemHeight,
+            padding: EdgeInsets.symmetric(vertical: (_viewportHeight - effectiveItemHeight) / 2),
             physics: const BouncingScrollPhysics(),
             cacheExtent: _viewportHeight,
             itemBuilder: (context, index) {
-              return _buildLyricLine(index);
+              return _buildLyricLine(index, effectiveItemHeight);
             },
           );
         },
@@ -284,7 +301,7 @@ class _PlayerFluidCloudLyricsPanelState extends State<PlayerFluidCloudLyricsPane
   }
 
   /// 构建单行歌词 - Apple Music 风格
-  Widget _buildLyricLine(int index) {
+  Widget _buildLyricLine(int index, double effectiveItemHeight) {
     final lyric = widget.lyrics[index];
     final isActive = index == widget.currentLyricIndex;
     final isSelected = _isUserScrolling && _selectedLyricIndex == index;
@@ -324,10 +341,10 @@ class _PlayerFluidCloudLyricsPanelState extends State<PlayerFluidCloudLyricsPane
           // 弹性 Y 轴偏移
           offset: Offset(0, elasticOffset),
           child: SizedBox(
-            height: _itemHeight,
+            height: effectiveItemHeight,
             child: OverflowBox(
               alignment: Alignment.centerLeft,
-              maxHeight: _itemHeight * 1.5, // 允许内容超出50%高度
+              maxHeight: effectiveItemHeight * 1.5, // 允许内容超出50%高度
               child: Padding(
                 padding: EdgeInsets.only(left: 16, right: 16, bottom: bottomPadding),
                 child: AnimatedOpacity(

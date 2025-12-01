@@ -59,10 +59,12 @@
         </service>
         
         <!-- 媒体按钮接收器 -->
+        <!-- 添加 android:priority="1000" 确保优先接收蓝牙媒体按钮事件 -->
         <receiver
             android:name="com.ryanheise.audioservice.MediaButtonReceiver"
-            android:exported="true">
-            <intent-filter>
+            android:exported="true"
+            android:enabled="true">
+            <intent-filter android:priority="1000">
                 <action android:name="android.intent.action.MEDIA_BUTTON"/>
             </intent-filter>
         </receiver>

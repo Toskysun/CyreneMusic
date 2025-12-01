@@ -10,6 +10,11 @@ class CyreneAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler
   Timer? _updateTimer;  // 防抖定时器
   bool _updatePending = false;  // 是否有待处理的更新
   Timer? _lyricUpdateTimer;  // 悬浮歌词更新定时器（后台持续运行）
+  Timer? _positionUpdateTimer;  // 进度条更新定时器（播放时定期更新）
+  PlayerState? _lastLoggedState;  // 上次记录日志时的状态
+  DateTime? _lastLogTime;  // 上次记录日志的时间
+  Duration? _lastUpdatedPosition;  // 上次更新的位置（用于减少不必要的更新）
+  PlayerState? _lastUpdatedState;  // 上次更新的播放状态（用于减少不必要的更新）
   
   // 构造函数
   CyreneAudioHandler() {
@@ -26,6 +31,9 @@ class CyreneAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler
       _startLyricUpdateTimer();
     }
     
+    // 启动进度条更新定时器
+    _startPositionUpdateTimer();
+    
     print('✅ [AudioHandler] 初始化完成');
   }
   
@@ -39,12 +47,57 @@ class CyreneAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler
     });
     print('✅ [AudioHandler] 悬浮歌词后台更新定时器已启动');
   }
+
+  /// 启动进度条更新定时器（播放时定期更新进度）
+  void _startPositionUpdateTimer() {
+    // 🔧 性能优化：降低更新频率到 1 秒，减少系统通知更新次数
+    // 每1秒更新一次进度条（仅在播放时）
+    _positionUpdateTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      final player = PlayerService();
+      if (player.state == PlayerState.playing || player.state == PlayerState.paused) {
+        // 只更新进度位置，不触发完整的状态更新（避免与防抖冲突）
+        final currentState = playbackState.value;
+        final isPlaying = player.state == PlayerState.playing;
+        final currentPosition = player.position;
+        final currentDuration = player.duration;
+        
+        // 🔧 性能优化：只有当位置变化超过 0.5 秒或状态改变时才更新
+        // 这样可以大幅减少系统通知的更新频率
+        final positionChanged = _lastUpdatedPosition == null ||
+            (currentPosition.inSeconds - _lastUpdatedPosition!.inSeconds).abs() >= 0.5;
+        final stateChanged = _lastUpdatedState != player.state;
+        final playingStateChanged = currentState.playing != isPlaying;
+        final durationChanged = currentState.bufferedPosition != currentDuration;
+        
+        // 只有当位置、状态或时长有显著变化时才更新
+        if (positionChanged || stateChanged || playingStateChanged || durationChanged) {
+          // 更新播放状态和进度
+          playbackState.add(currentState.copyWith(
+            playing: isPlaying,
+            updatePosition: currentPosition,
+            bufferedPosition: currentDuration,
+            speed: isPlaying ? 1.0 : 0.0,
+          ));
+          
+          // 记录上次更新的值
+          _lastUpdatedPosition = currentPosition;
+          _lastUpdatedState = player.state;
+        }
+      } else {
+        // 不在播放状态时，清除缓存
+        _lastUpdatedPosition = null;
+        _lastUpdatedState = null;
+      }
+    });
+    print('✅ [AudioHandler] 进度条更新定时器已启动（1秒间隔，带位置变化阈值）');
+  }
   
   @override
   Future<void> onTaskRemoved() async {
     // 清理定时器
     _updateTimer?.cancel();
     _lyricUpdateTimer?.cancel();
+    _positionUpdateTimer?.cancel();
     await super.onTaskRemoved();
   }
 
@@ -88,6 +141,51 @@ class CyreneAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler
 
   /// 播放器状态变化回调（带防抖）
   void _onPlayerStateChanged() {
+    final player = PlayerService();
+    final currentState = player.state;
+    final previousState = playbackState.value;
+    final now = DateTime.now();
+    
+    // 🔧 性能优化：忽略仅位置变化的情况（位置更新由专门的定时器处理）
+    // 只有当播放状态、歌曲或时长真正改变时才需要更新
+    final isOnlyPositionChange = currentState == _lastUpdatedState &&
+        (currentState == PlayerState.playing || currentState == PlayerState.paused);
+    
+    if (isOnlyPositionChange) {
+      // 仅位置变化，由定时器处理，不需要触发完整的状态更新
+      return;
+    }
+    
+    // 🔧 关键修复：在播放开始时（loading 或 playing）立即更新，不等待防抖
+    // 这样可以确保初次播放时状态和进度立即显示
+    final shouldUpdateImmediately = currentState == PlayerState.loading || 
+        currentState == PlayerState.playing ||
+        (currentState == PlayerState.playing && !previousState.playing);
+    
+    if (shouldUpdateImmediately) {
+      // 立即更新，不等待防抖
+      _updateTimer?.cancel();
+      _updatePending = false;
+      _performUpdate();
+      
+      // 清除位置缓存，确保下次更新
+      _lastUpdatedPosition = null;
+      _lastUpdatedState = null;
+      
+      // 🔧 优化日志：只在状态真正改变时打印，且限制频率（最多每秒一次）
+      final stateChanged = _lastLoggedState != currentState;
+      final timeSinceLastLog = _lastLogTime == null || 
+          now.difference(_lastLogTime!).inSeconds >= 1;
+      
+      // 只在状态改变时打印，或者每秒最多打印一次（避免进度更新时频繁打印）
+      if (stateChanged && timeSinceLastLog) {
+        print('🔄 [AudioHandler] 播放状态变化: ${_lastLoggedState?.name ?? "null"} -> ${currentState.name}');
+        _lastLoggedState = currentState;
+        _lastLogTime = now;
+      }
+      return;
+    }
+    
     // 🔧 性能优化：使用防抖机制，避免过于频繁的更新（例如调整音量时）
     // 取消之前的定时器
     _updateTimer?.cancel();
@@ -95,11 +193,15 @@ class CyreneAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler
     // 标记有待处理的更新
     _updatePending = true;
     
-    // 设置新的定时器，延迟 100ms 执行更新
-    _updateTimer = Timer(const Duration(milliseconds: 100), () {
+    // 🔧 性能优化：增加防抖延迟到 200ms，减少更新频率
+    // 设置新的定时器，延迟 200ms 执行更新
+    _updateTimer = Timer(const Duration(milliseconds: 200), () {
       if (_updatePending) {
         _performUpdate();
         _updatePending = false;
+        // 清除位置缓存，确保下次更新
+        _lastUpdatedPosition = null;
+        _lastUpdatedState = null;
       }
     });
   }
@@ -150,26 +252,71 @@ class CyreneAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler
 
     final playing = playerState == PlayerState.playing;
     final processingState = _getProcessingState(playerState);
+    final currentState = playbackState.value;
 
-    playbackState.add(playbackState.value.copyWith(
-      controls: controls,
-      systemActions: const {
-        MediaAction.seek,
-        MediaAction.seekForward,
-        MediaAction.seekBackward,
-        MediaAction.play,           // 🎯 蓝牙耳机控制必需
-        MediaAction.pause,          // 🎯 蓝牙耳机控制必需
-        MediaAction.skipToNext,     // 🎯 蓝牙耳机控制必需
-        MediaAction.skipToPrevious, // 🎯 蓝牙耳机控制必需
-      },
-      androidCompactActionIndices: const [0, 1, 2], // 全部3个按钮都显示在紧凑视图
-      processingState: processingState,
-      playing: playing,
-      updatePosition: position,
-      bufferedPosition: duration,
-      speed: playing ? 1.0 : 0.0,
-      queueIndex: 0,
-    ));
+    // 🔧 性能优化：只有当状态真正改变时才更新，避免不必要的系统通知更新
+    final stateChanged = currentState.playing != playing ||
+        currentState.processingState != processingState ||
+        currentState.controls.length != controls.length ||
+        !_controlsEqual(currentState.controls, controls);
+    
+    if (stateChanged) {
+      playbackState.add(currentState.copyWith(
+        controls: controls,
+        systemActions: const {
+          MediaAction.seek,
+          MediaAction.seekForward,
+          MediaAction.seekBackward,
+          MediaAction.play,           // 🎯 蓝牙耳机控制必需
+          MediaAction.pause,          // 🎯 蓝牙耳机控制必需
+          MediaAction.skipToNext,     // 🎯 蓝牙耳机控制必需
+          MediaAction.skipToPrevious, // 🎯 蓝牙耳机控制必需
+        },
+        androidCompactActionIndices: const [0, 1, 2], // 全部3个按钮都显示在紧凑视图
+        processingState: processingState,
+        playing: playing,
+        updatePosition: position,
+        bufferedPosition: duration,
+        speed: playing ? 1.0 : 0.0,
+        queueIndex: 0,
+      ));
+    } else {
+      // 状态没变，只更新位置（如果位置有变化）
+      final positionChanged = currentState.updatePosition != position ||
+          currentState.bufferedPosition != duration;
+      if (positionChanged) {
+        playbackState.add(currentState.copyWith(
+          updatePosition: position,
+          bufferedPosition: duration,
+        ));
+      }
+    }
+  }
+  
+  /// 检查两个控件列表是否相等
+  bool _controlsEqual(List<MediaControl> a, List<MediaControl> b) {
+    if (a.length != b.length) return false;
+    for (int i = 0; i < a.length; i++) {
+      if (a[i].action != b[i].action) return false;
+    }
+    return true;
+  }
+
+  /// 强制立即更新播放状态（用于按钮点击时立即同步状态）
+  void _forceUpdatePlaybackState() {
+    // 取消防抖定时器，立即执行更新
+    _updateTimer?.cancel();
+    _updatePending = false;
+    
+    // 立即执行更新
+    final player = PlayerService();
+    final currentState = player.state;
+    final currentPosition = player.position;
+    final currentDuration = player.duration;
+    
+    _updatePlaybackState(currentState, currentPosition, currentDuration);
+    
+    print('🔄 [AudioHandler] 强制更新播放状态: ${currentState.name}, 位置: ${currentPosition.inSeconds}s/${currentDuration.inSeconds}s');
   }
 
   /// 转换播放状态
@@ -191,32 +338,49 @@ class CyreneAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler
 
   @override
   Future<void> play() async {
-    await PlayerService().resume();
+    print('🎮 [AudioHandler] 蓝牙/系统媒体控件: 播放');
+    final player = PlayerService();
+    await player.resume();
+    // 🔧 等待状态更新完成（audioplayers 的状态更新是异步的）
+    await Future.delayed(const Duration(milliseconds: 50));
+    // 🔧 立即更新状态，不等待防抖延迟，确保按钮状态同步
+    _forceUpdatePlaybackState();
   }
 
   @override
   Future<void> pause() async {
-    await PlayerService().pause();
+    print('🎮 [AudioHandler] 蓝牙/系统媒体控件: 暂停');
+    final player = PlayerService();
+    await player.pause();
+    // 🔧 等待状态更新完成（audioplayers 的状态更新是异步的）
+    await Future.delayed(const Duration(milliseconds: 50));
+    // 🔧 立即更新状态，不等待防抖延迟，确保按钮状态同步
+    _forceUpdatePlaybackState();
   }
 
   @override
   Future<void> stop() async {
+    print('🎮 [AudioHandler] 蓝牙/系统媒体控件: 停止');
     await PlayerService().stop();
     await super.stop();
   }
 
   @override
   Future<void> skipToNext() async {
+    print('🎮 [AudioHandler] 蓝牙/系统媒体控件: 下一首');
     // 🔧 修复：使用 PlayerService 的 playNext 方法
     // 这样可以正确处理播放队列和播放历史
     await PlayerService().playNext();
+    // 注意：playNext 会触发歌曲切换，状态会通过 _onPlayerStateChanged 自动更新
   }
 
   @override
   Future<void> skipToPrevious() async {
+    print('🎮 [AudioHandler] 蓝牙/系统媒体控件: 上一首');
     // 🔧 修复：使用 PlayerService 的 playPrevious 方法
     // 这样可以正确处理播放队列和播放历史
     await PlayerService().playPrevious();
+    // 注意：playPrevious 会触发歌曲切换，状态会通过 _onPlayerStateChanged 自动更新
   }
 
   @override

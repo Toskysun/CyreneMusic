@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:bitsdojo_window/bitsdojo_window.dart';
+import 'mobile_player_settings_sheet.dart';
 
 /// 移动端播放器顶部应用栏组件
 /// Windows 平台显示窗口控制按钮，移动平台显示返回按钮
@@ -96,7 +97,7 @@ class MobilePlayerAppBar extends StatelessWidget {
           IconButton(
             icon: const Icon(Icons.more_vert, color: Colors.white),
             onPressed: () {
-              // TODO: 显示更多选项
+              MobilePlayerSettingsSheet.show(context);
             },
           ),
         ],

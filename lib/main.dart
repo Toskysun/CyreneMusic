@@ -130,6 +130,15 @@ void main() async {
   
   // Android 平台特定初始化
   if (Platform.isAndroid) {
+    // 启用边到边模式（让内容延伸到状态栏和导航栏下方）
+    SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+    SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
+      statusBarColor: Colors.transparent,
+      systemNavigationBarColor: Colors.transparent,
+      systemNavigationBarDividerColor: Colors.transparent,
+    ));
+    DeveloperModeService().addLog('📱 已启用边到边模式');
+    
     // 请求通知权限（Android 13+）
     final hasPermission = await PermissionService().requestNotificationPermission();
     if (hasPermission) {

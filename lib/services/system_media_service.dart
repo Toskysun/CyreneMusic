@@ -84,6 +84,11 @@ class SystemMediaService {
       ) as CyreneAudioHandler;
       
       if (_audioHandler != null) {
+        // 🔧 关键修复：强制启用媒体按钮（包括蓝牙控制）
+        // 根据 audio_service 文档，这需要在初始化后调用
+        await AudioService.androidForceEnableMediaButtons();
+        print('✅ [SystemMediaService] 已强制启用媒体按钮（蓝牙控制）');
+        
         print('✅ [SystemMediaService] Android audio_service 初始化成功');
         print('   AudioHandler 类型: ${_audioHandler.runtimeType}');
         print('   通知渠道 ID: com.cyrene.music.channel.audio');

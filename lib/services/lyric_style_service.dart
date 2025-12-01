@@ -1,4 +1,3 @@
-import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -41,10 +40,8 @@ class LyricStyleService extends ChangeNotifier {
         _currentStyle = LyricStyle.values[savedStyleIndex];
       } else {
         // 用户未设置过，使用平台默认值
-        // 桌面端默认使用流体云样式，移动端默认使用默认样式
-        _currentStyle = Platform.isWindows || Platform.isMacOS || Platform.isLinux
-            ? LyricStyle.fluidCloud
-            : LyricStyle.defaultStyle;
+        // 所有平台默认使用流体云样式
+        _currentStyle = LyricStyle.fluidCloud;
       }
       
       notifyListeners();

@@ -1,11 +1,9 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:cached_network_image/cached_network_image.dart';
 import '../services/player_service.dart';
 import '../services/player_background_service.dart';
 import '../models/lyric_line.dart';
-import '../models/track.dart';
 import '../models/song_detail.dart';
 import '../utils/lyric_parser.dart';
 import 'mobile_lyric_page.dart';
@@ -15,7 +13,7 @@ import 'mobile_player_components/mobile_player_song_info.dart';
 import 'mobile_player_components/mobile_player_controls.dart';
 import 'mobile_player_components/mobile_player_control_center.dart';
 import 'mobile_player_components/mobile_player_karaoke_lyric.dart';
-import 'mobile_player_components/mobile_player_fluid_cloud_lyric.dart';
+import 'mobile_player_components/mobile_player_fluid_cloud_layout.dart';
 import 'mobile_player_components/mobile_player_dialogs.dart';
 import '../../services/lyric_style_service.dart';
 
@@ -305,215 +303,24 @@ class _MobilePlayerPageState extends State<MobilePlayerPage> with TickerProvider
     });
   }
 
-  /// 构建 Apple Music 风格布局（动态背景模式）
+  /// 构建流体云全屏布局（动态背景模式）
+  /// 使用新的 MobilePlayerFluidCloudLayout，不再需要二级歌词页面
   Widget _buildAppleMusicStyleLayout(BuildContext context, BoxConstraints constraints) {
-    final player = PlayerService();
-    final song = player.currentSong;
-    final track = player.currentTrack;
-    final screenWidth = MediaQuery.of(context).size.width;
-    final screenHeight = constraints.maxHeight;
-    
-    // 封面大小：屏幕宽度的 65%，最大 300
-    final coverSize = (screenWidth * 0.65).clamp(200.0, 300.0);
-    
-    return Column(
-      children: [
-        // 顶部栏（更紧凑）
-        MobilePlayerAppBar(
-          onBackPressed: () => Navigator.pop(context),
-        ),
-        
-        // 主内容区域
-        Expanded(
-          child: SingleChildScrollView(
-            physics: const BouncingScrollPhysics(),
-            child: Column(
-              children: [
-                // 上方间距
-                SizedBox(height: screenHeight * 0.02),
-                
-                // 专辑封面（居中，带阴影和圆角）
-                _buildAppleMusicCover(song, track, coverSize),
-                
-                SizedBox(height: screenHeight * 0.03),
-                
-                // 歌曲信息（歌名、艺术家）
-                _buildAppleMusicSongInfo(context, song, track, screenWidth),
-                
-                SizedBox(height: screenHeight * 0.02),
-                
-                // 流体云歌词区域（可点击进入全屏）
-                SizedBox(
-                  height: screenHeight * 0.25,
-                  child: GestureDetector(
-                    onTap: () => Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => const MobileLyricPage(),
-                      ),
-                    ),
-                    child: MobilePlayerFluidCloudLyric(
-                      lyrics: _lyrics,
-                      currentLyricIndex: _currentLyricIndex,
-                      showTranslation: _showTranslation && _shouldShowTranslationButton(),
-                    ),
-                  ),
-                ),
-              ],
-            ),
+    return MobilePlayerFluidCloudLayout(
+      lyrics: _lyrics,
+      currentLyricIndex: _currentLyricIndex,
+      showTranslation: _showTranslation && _shouldShowTranslationButton(),
+      onBackPressed: () => Navigator.pop(context),
+      onPlaylistPressed: () => MobilePlayerDialogs.showPlaylistBottomSheet(context),
+      onTranslationToggle: () {
+        setState(() => _showTranslation = !_showTranslation);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(_showTranslation ? '已显示译文' : '已隐藏译文'),
+            duration: const Duration(seconds: 1),
           ),
-        ),
-        
-        // 底部控制区域
-        Stack(
-          children: [
-            MobilePlayerControls(
-              onPlaylistPressed: () => MobilePlayerDialogs.showPlaylistBottomSheet(context),
-              onSleepTimerPressed: () => MobilePlayerDialogs.showSleepTimer(context),
-              onVolumeControlPressed: _toggleControlCenter,
-              onAddToPlaylistPressed: (track) => MobilePlayerDialogs.showAddToPlaylist(context, track),
-            ),
-            if (_shouldShowTranslationButton())
-              Positioned(
-                left: 12,
-                bottom: 12,
-                child: _buildTranslationButton(context),
-              ),
-          ],
-        ),
-      ],
-    );
-  }
-
-  /// 构建 Apple Music 风格的专辑封面
-  Widget _buildAppleMusicCover(dynamic song, dynamic track, double coverSize) {
-    final picUrl = song?.pic ?? track?.picUrl ?? '';
-    
-    return Hero(
-      tag: 'album_cover',
-      child: Container(
-        width: coverSize,
-        height: coverSize,
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(16),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.4),
-              blurRadius: 30,
-              spreadRadius: 5,
-              offset: const Offset(0, 10),
-            ),
-          ],
-        ),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(16),
-          child: picUrl.isNotEmpty
-              ? CachedNetworkImage(
-                  imageUrl: picUrl,
-                  fit: BoxFit.cover,
-                  placeholder: (context, url) => Container(
-                    color: Colors.grey[900],
-                    child: const Center(
-                      child: CircularProgressIndicator(color: Colors.white30),
-                    ),
-                  ),
-                  errorWidget: (context, url, error) => Container(
-                    color: Colors.grey[900],
-                    child: Icon(
-                      Icons.music_note,
-                      size: coverSize * 0.3,
-                      color: Colors.white30,
-                    ),
-                  ),
-                )
-              : Container(
-                  color: Colors.grey[900],
-                  child: Icon(
-                    Icons.music_note,
-                    size: coverSize * 0.3,
-                    color: Colors.white30,
-                  ),
-                ),
-        ),
-      ),
-    );
-  }
-
-  /// 构建 Apple Music 风格的歌曲信息
-  Widget _buildAppleMusicSongInfo(BuildContext context, dynamic song, dynamic track, double screenWidth) {
-    final name = song?.name ?? track?.name ?? '未知歌曲';
-    final artists = song?.arName ?? track?.artists ?? '未知艺术家';
-    
-    return Padding(
-      padding: EdgeInsets.symmetric(horizontal: screenWidth * 0.08),
-      child: Column(
-        children: [
-          // 歌曲名称
-          Text(
-            name,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 24,
-              fontWeight: FontWeight.bold,
-              fontFamily: 'Microsoft YaHei',
-            ),
-            textAlign: TextAlign.center,
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-          ),
-          const SizedBox(height: 8),
-          // 艺术家
-          Text(
-            artists,
-            style: TextStyle(
-              color: Colors.white.withOpacity(0.7),
-              fontSize: 18,
-              fontFamily: 'Microsoft YaHei',
-            ),
-            textAlign: TextAlign.center,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-          ),
-        ],
-      ),
-    );
-  }
-
-  /// 构建译文切换按钮
-  Widget _buildTranslationButton(BuildContext context) {
-    return Tooltip(
-      message: _showTranslation ? '隐藏译文' : '显示译文',
-      child: InkWell(
-        borderRadius: BorderRadius.circular(6),
-        onTap: () {
-          setState(() => _showTranslation = !_showTranslation);
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(_showTranslation ? '已显示译文' : '已隐藏译文'),
-              duration: const Duration(seconds: 1),
-            ),
-          );
-        },
-        child: Container(
-          width: 30,
-          height: 30,
-          decoration: BoxDecoration(
-            color: _showTranslation ? Colors.white.withOpacity(0.2) : Colors.transparent,
-            borderRadius: BorderRadius.circular(6),
-          ),
-          child: const Center(
-            child: Text(
-              '译',
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
-                fontFamily: 'Microsoft YaHei',
-              ),
-            ),
-          ),
-        ),
-      ),
+        );
+      },
     );
   }
 
@@ -523,11 +330,14 @@ class _MobilePlayerPageState extends State<MobilePlayerPage> with TickerProvider
     final song = player.currentSong;
     final track = player.currentTrack;
 
-    // 播放器页面始终使用深色背景，状态栏图标应为浅色
+    // 播放器页面始终使用深色背景，状态栏和导航栏透明，图标为浅色
     const playerOverlayStyle = SystemUiOverlayStyle(
       statusBarColor: Colors.transparent,
       statusBarIconBrightness: Brightness.light,
       statusBarBrightness: Brightness.dark,
+      systemNavigationBarColor: Colors.transparent,
+      systemNavigationBarIconBrightness: Brightness.light,
+      systemNavigationBarDividerColor: Colors.transparent,
     );
 
     if (song == null && track == null) {
@@ -552,7 +362,9 @@ class _MobilePlayerPageState extends State<MobilePlayerPage> with TickerProvider
 
     // 构建主要内容
     final backgroundService = PlayerBackgroundService();
-    final isDynamicMode = backgroundService.backgroundType == PlayerBackgroundType.dynamic;
+    final lyricStyleService = LyricStyleService();
+    // 流体云布局条件：全屏播放器样式设置为流体云（优先级最高）
+    final useFluidCloudLayout = lyricStyleService.currentStyle == LyricStyle.fluidCloud;
     
     final scaffoldWidget = AnnotatedRegion<SystemUiOverlayStyle>(
       value: playerOverlayStyle,
@@ -570,8 +382,8 @@ class _MobilePlayerPageState extends State<MobilePlayerPage> with TickerProvider
                         final showCover = !backgroundService.enableGradient || 
                                         backgroundService.backgroundType != PlayerBackgroundType.adaptive;
                         
-                        // Apple Music 风格布局（动态模式）
-                        if (isDynamicMode) {
+                        // 流体云布局（动态背景模式 或 歌词样式为流体云）
+                        if (useFluidCloudLayout) {
                           return _buildAppleMusicStyleLayout(context, constraints);
                         }
                         

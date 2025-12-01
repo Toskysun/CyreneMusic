@@ -1,36 +1,24 @@
 import 'dart:io';
 import 'dart:ui';
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart';
 import 'package:cached_network_image/cached_network_image.dart';
-import 'package:palette_generator/palette_generator.dart';
 import '../../services/player_background_service.dart';
 import '../../services/player_service.dart';
+import '../../services/color_extraction_service.dart';
 import '../../widgets/video_background_player.dart';
 import '../../widgets/mesh_gradient_background.dart';
 
 /// 动态背景颜色缓存管理器（全局单例）
-/// 避免每次进入播放器页面都重新提取颜色
+/// 现在使用 ColorExtractionService 的缓存，这里只保留接口兼容
 class _DynamicColorCache {
   static final _DynamicColorCache _instance = _DynamicColorCache._internal();
   factory _DynamicColorCache() => _instance;
   _DynamicColorCache._internal();
 
-  final Map<String, List<Color>> _cache = {};
-  String? _currentExtractingUrl;
-
-  List<Color>? getColors(String imageUrl) => _cache[imageUrl];
-  
-  void setColors(String imageUrl, List<Color> colors) {
-    _cache[imageUrl] = colors;
-    // 限制缓存大小
-    if (_cache.length > 20) {
-      _cache.remove(_cache.keys.first);
-    }
+  List<Color>? getColors(String imageUrl) {
+    final result = ColorExtractionService().getCachedColors(imageUrl);
+    return result?.dynamicColors;
   }
-
-  bool isExtracting(String imageUrl) => _currentExtractingUrl == imageUrl;
-  void setExtracting(String? imageUrl) => _currentExtractingUrl = imageUrl;
 }
 
 /// 流体云播放器专用背景组件
@@ -132,18 +120,16 @@ class _PlayerFluidCloudBackgroundState extends State<PlayerFluidCloudBackground>
     _pendingExtractionId++;
     final currentId = _pendingExtractionId;
 
-    // 延迟300ms后提取（减少延迟时间，但使用防抖避免重复）
-    Future.delayed(const Duration(milliseconds: 300), () {
+    // 延迟200ms后提取（使用 isolate 后可以更快触发）
+    Future.delayed(const Duration(milliseconds: 200), () {
       // 如果ID不匹配，说明有新的请求，取消当前请求
       if (currentId != _pendingExtractionId || !mounted) return;
       _extractColorsFromImage(imageUrl);
     });
   }
 
-  /// 从图片中提取颜色
+  /// 从图片中提取颜色（使用 isolate，不阻塞主线程）
   Future<void> _extractColorsFromImage(String imageUrl) async {
-    // 检查是否正在提取同一张图片
-    if (_DynamicColorCache().isExtracting(imageUrl)) return;
     // 再次检查缓存（可能在等待期间已经被其他地方提取）
     final cachedColors = _DynamicColorCache().getColors(imageUrl);
     if (cachedColors != null) {
@@ -154,42 +140,34 @@ class _PlayerFluidCloudBackgroundState extends State<PlayerFluidCloudBackground>
       return;
     }
     
-    _DynamicColorCache().setExtracting(imageUrl);
     _currentImageUrl = imageUrl;
 
     try {
-      final imageProvider = CachedNetworkImageProvider(imageUrl);
-      
-      // 使用较小的图片尺寸和较少的颜色数量来提高性能
-      final paletteGenerator = await PaletteGenerator.fromImageProvider(
-        imageProvider,
-        size: const Size(32, 32), // 更小的尺寸进一步提升性能
-        maximumColorCount: 6,     // 更少的颜色
-        timeout: const Duration(seconds: 1),
+      // 使用 ColorExtractionService 在 isolate 中提取颜色
+      final result = await ColorExtractionService().extractColorsFromUrl(
+        imageUrl,
+        sampleSize: 32, // 小尺寸以提升性能
+        timeout: const Duration(seconds: 3),
       );
 
-      final colors = DynamicBackgroundColorExtractor.extractColors(
-        vibrantColor: paletteGenerator.vibrantColor?.color,
-        mutedColor: paletteGenerator.mutedColor?.color,
-        dominantColor: paletteGenerator.dominantColor?.color,
-        lightVibrantColor: paletteGenerator.lightVibrantColor?.color,
-        darkVibrantColor: paletteGenerator.darkVibrantColor?.color,
-        lightMutedColor: paletteGenerator.lightMutedColor?.color,
-        darkMutedColor: paletteGenerator.darkMutedColor?.color,
-      );
-
-      // 缓存结果
-      _DynamicColorCache().setColors(imageUrl, colors);
-
-      if (mounted && _currentImageUrl == imageUrl) {
+      if (result != null && mounted && _currentImageUrl == imageUrl) {
+        final colors = DynamicBackgroundColorExtractor.extractColors(
+          vibrantColor: result.vibrantColor,
+          mutedColor: result.mutedColor,
+          dominantColor: result.dominantColor,
+          lightVibrantColor: result.lightVibrantColor,
+          darkVibrantColor: result.darkVibrantColor,
+          lightMutedColor: result.lightMutedColor,
+          darkMutedColor: result.darkMutedColor,
+        );
+        
         setState(() {
           _dynamicColors = colors;
         });
       }
     } catch (e) {
       // 静默失败，保持当前颜色
-    } finally {
-      _DynamicColorCache().setExtracting(null);
+      debugPrint('⚠️ [FluidCloudBackground] 颜色提取失败: $e');
     }
   }
 
