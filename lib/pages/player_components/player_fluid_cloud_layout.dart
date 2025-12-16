@@ -51,6 +51,8 @@ class PlayerFluidCloudLayout extends StatefulWidget {
 class _PlayerFluidCloudLayoutState extends State<PlayerFluidCloudLayout> {
   // 缓存当前歌曲的封面 URL，用于检测歌曲变化
   String? _currentImageUrl;
+
+  Future<void>? _pendingCoverPrecache;
   
   @override
   void initState() {
@@ -74,6 +76,15 @@ class _PlayerFluidCloudLayoutState extends State<PlayerFluidCloudLayout> {
       setState(() {
         _currentImageUrl = newImageUrl;
       });
+
+      if (newImageUrl.isNotEmpty) {
+        final provider = CachedNetworkImageProvider(newImageUrl);
+        _pendingCoverPrecache = precacheImage(
+          provider,
+          context,
+          size: const Size(512, 512),
+        );
+      }
     }
   }
   
@@ -135,10 +146,7 @@ class _PlayerFluidCloudLayoutState extends State<PlayerFluidCloudLayout> {
                         flex: 42,
                         child: Padding(
                           padding: const EdgeInsets.only(right: 60),
-                          child: AnimatedBuilder(
-                            animation: PlayerService(),
-                            builder: (context, _) => _buildLeftPanel(context),
-                          ),
+                          child: _buildLeftPanel(context),
                         ),
                       ),
                       
@@ -168,6 +176,48 @@ class _PlayerFluidCloudLayoutState extends State<PlayerFluidCloudLayout> {
     final track = player.currentTrack;
     final imageUrl = song?.pic ?? track?.picUrl ?? '';
 
+    final Widget cover = AspectRatio(
+      aspectRatio: 1.0,
+      child: Container(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(12),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.4),
+              blurRadius: 40,
+              offset: const Offset(0, 20),
+            ),
+          ],
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: imageUrl.isNotEmpty
+            ? RepaintBoundary(
+                child: CachedNetworkImage(
+                  key: ValueKey(imageUrl),
+                  imageUrl: imageUrl,
+                  fit: BoxFit.cover,
+                  memCacheWidth: 1024,
+                  memCacheHeight: 1024,
+                  filterQuality: FilterQuality.medium,
+                  placeholder: (context, url) => Container(
+                    color: Colors.grey[900],
+                  ),
+                  errorWidget: (context, url, error) => Container(
+                    color: Colors.grey[900],
+                  ),
+                ),
+              )
+            : Container(
+                color: Colors.grey[900],
+                child: const Icon(
+                  Icons.music_note,
+                  size: 80,
+                  color: Colors.white54,
+                ),
+              ),
+      ),
+    );
+
     // 缩放到 90%
     return Transform.scale(
       scale: 0.9,
@@ -176,34 +226,7 @@ class _PlayerFluidCloudLayoutState extends State<PlayerFluidCloudLayout> {
         crossAxisAlignment: CrossAxisAlignment.center, // 居中对齐
         children: [
           // 1. 专辑封面
-          AspectRatio(
-            aspectRatio: 1.0,
-            child: Container(
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(12),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.4),
-                    blurRadius: 40,
-                    offset: const Offset(0, 20),
-                  ),
-                ],
-              ),
-              clipBehavior: Clip.antiAlias,
-              child: imageUrl.isNotEmpty
-                  ? CachedNetworkImage(
-                      key: ValueKey(imageUrl), // 使用 imageUrl 作为 key，确保 URL 变化时重建
-                      imageUrl: imageUrl,
-                      fit: BoxFit.cover,
-                      placeholder: (context, url) => Container(color: Colors.grey[900]),
-                      errorWidget: (context, url, error) => Container(color: Colors.grey[900]),
-                    )
-                  : Container(
-                      color: Colors.grey[900],
-                      child: const Icon(Icons.music_note, size: 80, color: Colors.white54),
-                    ),
-            ),
-          ),
+          cover,
           
           const SizedBox(height: 40),
           

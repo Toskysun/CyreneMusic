@@ -268,6 +268,9 @@ class _PlayerFluidCloudBackgroundState extends State<PlayerFluidCloudBackground>
                             CachedNetworkImage(
                               imageUrl: imageUrl,
                               fit: BoxFit.cover,
+                              memCacheWidth: 1024,
+                              memCacheHeight: 1024,
+                              filterQuality: FilterQuality.medium,
                               placeholder: (context, url) => Container(
                                 color: greyColor,
                               ),
@@ -349,6 +352,9 @@ class _PlayerFluidCloudBackgroundState extends State<PlayerFluidCloudBackground>
             fit: BoxFit.cover, // 100% 填充，保持长宽比，居中裁剪
             width: double.infinity,
             height: double.infinity,
+            memCacheWidth: 1920,
+            memCacheHeight: 1080,
+            filterQuality: FilterQuality.medium,
             placeholder: (context, url) => _buildDefaultBackground(greyColor),
             errorWidget: (context, url, error) => _buildDefaultBackground(greyColor),
           ),

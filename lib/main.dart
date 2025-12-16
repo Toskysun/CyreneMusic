@@ -1,4 +1,6 @@
+import 'dart:async';
 import 'dart:io';
+import 'dart:ui';
 import 'package:fluent_ui/fluent_ui.dart' as fluent;
 import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart';
@@ -28,207 +30,290 @@ import 'package:cyrene_music/services/version_service.dart';
 import 'package:cyrene_music/services/mini_player_window_service.dart';
 import 'package:cyrene_music/pages/mini_player_window_page.dart';
 import 'package:cyrene_music/utils/theme_manager.dart';
+import 'package:cyrene_music/services/startup_logger.dart';
 import 'package:flutter_acrylic/flutter_acrylic.dart';
 import 'package:media_kit/media_kit.dart';
 
 // 条件导入 flutter_displaymode（仅 Android）
 import 'package:flutter_displaymode/flutter_displaymode.dart' if (dart.library.html) '';
 
-void main() async {
-  // 初始化播放器服务
-  WidgetsFlutterBinding.ensureInitialized();
-  
-  // iOS 平台：设置首选竖屏方向（解决初次启动横屏问题）
-  if (Platform.isIOS) {
-    await SystemChrome.setPreferredOrientations([
-      DeviceOrientation.portraitUp,
-      DeviceOrientation.portraitDown,
-      DeviceOrientation.landscapeLeft,
-      DeviceOrientation.landscapeRight,
-    ]);
+Future<void> main() async {
+  final startupLogger = StartupLogger.bootstrapSync(appName: 'CyreneMusic');
+  startupLogger.log('main() entered');
+  if (startupLogger.filePath != null) {
+    print(' [StartupLogger] ${startupLogger.filePath}');
   }
-  
-  // 初始化 media_kit（仅在桌面平台，用于视频背景）
-  if (Platform.isWindows || Platform.isMacOS || Platform.isLinux) {
-    MediaKit.ensureInitialized();
-  }
-  
-  // 添加应用启动日志
-  DeveloperModeService().addLog('🚀 应用启动');
-  DeveloperModeService().addLog('📱 平台: ${Platform.operatingSystem}');
-  
-  // 🔧 初始化持久化存储服务（必须最先初始化，其他服务依赖它）
-  await PersistentStorageService().initialize();
-  DeveloperModeService().addLog('💾 持久化存储服务已初始化');
-  
-  // 显示备份统计信息（用于调试）
-  final storageStats = PersistentStorageService().getBackupStats();
-  DeveloperModeService().addLog('📊 存储统计: ${storageStats['sharedPreferences_keys']} 个键');
-  DeveloperModeService().addLog('📂 备份路径: ${storageStats['backup_file_path']}');
-  
-  // 初始化 window_manager（必须在 runApp 之前）
-  if (Platform.isWindows || Platform.isMacOS || Platform.isLinux) {
-    await windowManager.ensureInitialized();
-    // 初始化窗口材质库（Windows）
-    if (Platform.isWindows) {
+
+  await runZonedGuarded(() async {
+    FlutterError.onError = (details) {
+      StartupLogger().log('FlutterError: ${details.exceptionAsString()}\n${details.stack ?? ''}');
+      FlutterError.presentError(details);
+    };
+
+    PlatformDispatcher.instance.onError = (error, stack) {
+      StartupLogger().log('PlatformDispatcher.onError: $error\n$stack');
+      return true;
+    };
+
+    void log(String message) {
+      StartupLogger().log(message);
+      DeveloperModeService().addLog(message);
+    }
+
+    Future<T> timed<T>(String name, FutureOr<T> Function() fn) async {
+      final sw = Stopwatch()..start();
+      log(' $name');
       try {
-        await Window.initialize();
-      } catch (_) {}
-    }
-
-    final WindowOptions windowOptions = WindowOptions(
-      size: const Size(1320, 880),
-      minimumSize: const Size(320, 120),
-      center: true,
-      // 透明背景 + 自绘标题栏仅适用于 Windows
-      backgroundColor: Platform.isWindows ? Colors.transparent : Colors.white,
-      skipTaskbar: false,
-      titleBarStyle:
-          Platform.isWindows ? TitleBarStyle.hidden : TitleBarStyle.normal,
-      windowButtonVisibility: !Platform.isWindows,
-    );
-    
-    windowManager.waitUntilReadyToShow(windowOptions, () async {
-      await windowManager.setTitle('Cyrene Music');
-      
-      // 设置窗口图标（任务栏图标）
-      if (Platform.isWindows) {
-        await windowManager.setIcon('assets/icons/tray_icon.ico');
-      } else if (Platform.isMacOS || Platform.isLinux) {
-        await windowManager.setIcon('assets/icons/tray_icon.png');
+        final result = await fn();
+        log(' $name (${sw.elapsedMilliseconds}ms)');
+        return result;
+      } catch (e, st) {
+        log(' $name: $e');
+        StartupLogger().log(' $name stack: $st');
+        rethrow;
       }
-      
-      await windowManager.show();
-      await windowManager.focus();
-      // 设置关闭窗口时不退出应用（会触发 onWindowClose 回调）
-      await windowManager.setPreventClose(true);
-      print('✅ [Main] 窗口已显示，关闭按钮将最小化到托盘');
-    });
-  }
-  
-  // 🔧 初始化 URL 服务（必须在其他网络服务之前）
-  await UrlService().initialize();
-  DeveloperModeService().addLog('🌐 URL 服务已初始化');
-  
-  // 初始化版本检查服务
-  await VersionService().initialize();
-  DeveloperModeService().addLog('📱 版本服务已初始化');
+    }
 
-  // 初始化自动更新服务
-  await AutoUpdateService().initialize();
-  DeveloperModeService().addLog('🔄 自动更新服务已初始化');
-  
-  // 初始化缓存服务
-  await CacheService().initialize();
-  DeveloperModeService().addLog('💾 缓存服务已初始化');
-  
-  // 初始化播放器背景服务
-  await PlayerBackgroundService().initialize();
-  DeveloperModeService().addLog('🎨 播放器背景服务已初始化');
-  
-  await PlayerService().initialize();
-  DeveloperModeService().addLog('🎵 播放器服务已初始化');
-  
-  // 初始化歌词样式服务
-  await LyricStyleService().initialize();
-  DeveloperModeService().addLog('🎤 歌词样式服务已初始化');
-  
-  // 初始化歌词字体服务
-  await LyricFontService().initialize();
-  DeveloperModeService().addLog('🔤 歌词字体服务已初始化');
-  
-  // Android 平台特定初始化
-  if (Platform.isAndroid) {
-    // 启用边到边模式（让内容延伸到状态栏和导航栏下方）
-    SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
-    SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
-      statusBarColor: Colors.transparent,
-      systemNavigationBarColor: Colors.transparent,
-      systemNavigationBarDividerColor: Colors.transparent,
-    ));
-    DeveloperModeService().addLog('📱 已启用边到边模式');
-    
-    // 请求通知权限（Android 13+）
-    final hasPermission = await PermissionService().requestNotificationPermission();
-    if (hasPermission) {
-      DeveloperModeService().addLog('✅ 通知权限已授予');
-    } else {
-      DeveloperModeService().addLog('⚠️ 通知权限未授予，媒体通知可能无法显示');
-    }
-    
-    // 启用高刷新率（如果设备支持）
-    try {
-      await FlutterDisplayMode.setHighRefreshRate();
-      final activeMode = await FlutterDisplayMode.active;
-      DeveloperModeService().addLog('🎨 显示模式: ${activeMode.width}x${activeMode.height} @${activeMode.refreshRate.toStringAsFixed(0)}Hz');
-      print('🎨 [DisplayMode] 已启用高刷新率: ${activeMode.refreshRate.toStringAsFixed(0)}Hz');
-    } catch (e) {
-      DeveloperModeService().addLog('⚠️ 高刷新率设置失败: $e');
-      print('⚠️ [DisplayMode] 设置高刷新率失败: $e');
-    }
-  }
-  
-  // 初始化系统媒体控件
-  await SystemMediaService().initialize();
-  DeveloperModeService().addLog('🎛️ 系统媒体服务已初始化');
-  
-  // 初始化系统托盘
-  await TrayService().initialize();
-  DeveloperModeService().addLog('📌 系统托盘已初始化');
-  
-  // 初始化听歌统计服务
-  ListeningStatsService().initialize();
-  DeveloperModeService().addLog('📊 听歌统计服务已初始化');
-  
-  // 初始化通知服务
-  await NotificationService().initialize();
-  
-  // 初始化桌面歌词服务（仅Windows）
-  if (Platform.isWindows) {
-    await DesktopLyricService().initialize();
-    DeveloperModeService().addLog('🎤 桌面歌词服务已初始化');
-  }
-  
-  // 初始化Android悬浮歌词服务（仅Android）
-  if (Platform.isAndroid) {
-    await AndroidFloatingLyricService().initialize();
-    DeveloperModeService().addLog('📱 Android悬浮歌词服务已初始化');
-  }
-  
-  // 检查并显示恢复播放通知（延迟2秒，等待UI完全加载）
-  print('⏰ [Main] 将在2秒后检查播放恢复状态...');
-  DeveloperModeService().addLog('⏰ 将在2秒后检查播放恢复状态...');
-  
-  Future.delayed(const Duration(seconds: 2), () {
-    print('🔄 [Main] 开始检查播放恢复状态...');
-    DeveloperModeService().addLog('🔄 开始检查播放恢复状态...');
-    
-    PlaybackResumeService().checkAndShowResumeNotification().then((_) {
-      print('✅ [Main] 播放恢复检查完成');
-      DeveloperModeService().addLog('✅ 播放恢复检查完成');
-    }).catchError((e) {
-      print('❌ [Main] 播放恢复检查失败: $e');
-      DeveloperModeService().addLog('❌ 播放恢复检查失败: $e');
+    await timed('WidgetsFlutterBinding.ensureInitialized', () {
+      WidgetsFlutterBinding.ensureInitialized();
     });
+  
+    await timed('Platform check & initial logs', () {
+      log(' 应用启动');
+      log(' 平台: ${Platform.operatingSystem}');
+    });
+  
+    if (Platform.isIOS) {
+      await timed('SystemChrome.setPreferredOrientations(iOS)', () async {
+        await SystemChrome.setPreferredOrientations([
+          DeviceOrientation.portraitUp,
+          DeviceOrientation.portraitDown,
+          DeviceOrientation.landscapeLeft,
+          DeviceOrientation.landscapeRight,
+        ]);
+      });
+    }
+  
+    if (Platform.isWindows || Platform.isMacOS || Platform.isLinux) {
+      await timed('MediaKit.ensureInitialized', () {
+        MediaKit.ensureInitialized();
+      });
+    }
+  
+    await timed('PersistentStorageService.initialize', () async {
+      await PersistentStorageService().initialize();
+    });
+    log(' 持久化存储服务已初始化');
+  
+    await timed('PersistentStorageService.getBackupStats', () {
+      final storageStats = PersistentStorageService().getBackupStats();
+      log(' 存储统计: ${storageStats['sharedPreferences_keys']} 个键');
+      log(' 备份路径: ${storageStats['backup_file_path']}');
+    });
+  
+    if (Platform.isWindows || Platform.isMacOS || Platform.isLinux) {
+      await timed('windowManager.ensureInitialized', () async {
+        await windowManager.ensureInitialized();
+      });
+
+      if (Platform.isWindows) {
+        await timed('Window.initialize(Windows)', () async {
+          try {
+            await Window.initialize();
+          } catch (_) {}
+        });
+      }
+
+      final WindowOptions windowOptions = WindowOptions(
+        size: const Size(1320, 880),
+        minimumSize: const Size(320, 120),
+        center: true,
+        backgroundColor: Platform.isWindows ? Colors.transparent : Colors.white,
+        skipTaskbar: false,
+        titleBarStyle:
+            Platform.isWindows ? TitleBarStyle.hidden : TitleBarStyle.normal,
+        windowButtonVisibility: !Platform.isWindows,
+      );
+
+      await timed('windowManager.waitUntilReadyToShow', () async {
+        windowManager.waitUntilReadyToShow(windowOptions, () async {
+          log(' windowManager.waitUntilReadyToShow callback entered');
+          await timed('windowManager.setTitle', () async {
+            await windowManager.setTitle('Cyrene Music');
+          });
+
+          await timed('windowManager.setIcon', () async {
+            if (Platform.isWindows) {
+              await windowManager.setIcon('assets/icons/tray_icon.ico');
+            } else if (Platform.isMacOS || Platform.isLinux) {
+              await windowManager.setIcon('assets/icons/tray_icon.png');
+            }
+          });
+
+          await timed('windowManager.show', () async {
+            await windowManager.show();
+          });
+
+          await timed('windowManager.focus', () async {
+            await windowManager.focus();
+          });
+
+          await timed('windowManager.setPreventClose(true)', () async {
+            await windowManager.setPreventClose(true);
+          });
+
+          log(' [Main] 窗口已显示，关闭按钮将最小化到托盘');
+        });
+      });
+    }
+  
+    await timed('UrlService.initialize', () async {
+      await UrlService().initialize();
+    });
+    log(' URL 服务已初始化');
+  
+    await timed('VersionService.initialize', () async {
+      await VersionService().initialize();
+    });
+    log(' 版本服务已初始化');
+
+    await timed('AutoUpdateService.initialize', () async {
+      await AutoUpdateService().initialize();
+    });
+    log(' 自动更新服务已初始化');
+  
+    await timed('CacheService.initialize', () async {
+      await CacheService().initialize();
+    });
+    log(' 缓存服务已初始化');
+  
+    await timed('PlayerBackgroundService.initialize', () async {
+      await PlayerBackgroundService().initialize();
+    });
+    log(' 播放器背景服务已初始化');
+  
+    await timed('PlayerService.initialize', () async {
+      await PlayerService().initialize();
+    });
+    log(' 播放器服务已初始化');
+  
+    await timed('LyricStyleService.initialize', () async {
+      await LyricStyleService().initialize();
+    });
+    log(' 歌词样式服务已初始化');
+  
+    await timed('LyricFontService.initialize', () async {
+      await LyricFontService().initialize();
+    });
+    log(' 歌词字体服务已初始化');
+  
+    if (Platform.isAndroid) {
+      await timed('Android edgeToEdge + overlays', () {
+        SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+        SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
+          statusBarColor: Colors.transparent,
+          systemNavigationBarColor: Colors.transparent,
+          systemNavigationBarDividerColor: Colors.transparent,
+        ));
+        log(' 已启用边到边模式');
+      });
+
+      await timed('PermissionService.requestNotificationPermission', () async {
+        final hasPermission = await PermissionService().requestNotificationPermission();
+        if (hasPermission) {
+          log(' 通知权限已授予');
+        } else {
+          log(' 通知权限未授予，媒体通知可能无法显示');
+        }
+      });
+
+      await timed('FlutterDisplayMode.setHighRefreshRate', () async {
+        try {
+          await FlutterDisplayMode.setHighRefreshRate();
+          final activeMode = await FlutterDisplayMode.active;
+          log(
+              ' 显示模式: ${activeMode.width}x${activeMode.height} @${activeMode.refreshRate.toStringAsFixed(0)}Hz');
+          print(
+              ' [DisplayMode] 已启用高刷新率: ${activeMode.refreshRate.toStringAsFixed(0)}Hz');
+        } catch (e) {
+          log(' 高刷新率设置失败: $e');
+          print(' [DisplayMode] 设置高刷新率失败: $e');
+        }
+      });
+    }
+  
+    await timed('SystemMediaService.initialize', () async {
+      await SystemMediaService().initialize();
+    });
+    log(' 系统媒体服务已初始化');
+  
+    await timed('TrayService.initialize', () async {
+      await TrayService().initialize();
+    });
+    log(' 系统托盘已初始化');
+  
+    await timed('ListeningStatsService.initialize', () {
+      ListeningStatsService().initialize();
+    });
+    log(' 听歌统计服务已初始化');
+  
+    await timed('NotificationService.initialize', () async {
+      await NotificationService().initialize();
+    });
+  
+    if (Platform.isWindows) {
+      await timed('DesktopLyricService.initialize(Windows)', () async {
+        await DesktopLyricService().initialize();
+      });
+      log(' 桌面歌词服务已初始化');
+    }
+  
+    if (Platform.isAndroid) {
+      await timed('AndroidFloatingLyricService.initialize(Android)', () async {
+        await AndroidFloatingLyricService().initialize();
+      });
+      log(' Android悬浮歌词服务已初始化');
+    }
+  
+    print(' [Main] 将在2秒后检查播放恢复状态...');
+    log(' 将在2秒后检查播放恢复状态...');
+
+    Future.delayed(const Duration(seconds: 2), () {
+      print(' [Main] 开始检查播放恢复状态...');
+      log(' 开始检查播放恢复状态...');
+
+      PlaybackResumeService().checkAndShowResumeNotification().then((_) {
+        print(' [Main] 播放恢复检查完成');
+        log(' 播放恢复检查完成');
+      }).catchError((e, st) {
+        print(' [Main] 播放恢复检查失败: $e');
+        log(' 播放恢复检查失败: $e');
+        StartupLogger().log(' 播放恢复检查失败 stack: $st');
+      });
+    });
+
+    await timed('runApp(MyApp)', () {
+      runApp(const MyApp());
+    });
+  
+    if (Platform.isWindows) {
+      await timed('doWhenWindowReady(Windows)', () {
+        doWhenWindowReady(() {
+          const initialSize = Size(1320, 880);
+          const minSize = Size(160, 60);
+
+          appWindow.minSize = minSize;
+          appWindow.size = initialSize;
+          appWindow.alignment = Alignment.center;
+          appWindow.title = 'Cyrene Music';
+          appWindow.show();
+        });
+      });
+    }
+  }, (error, stack) {
+    StartupLogger().log('runZonedGuarded: $error\n$stack');
   });
-  
-  runApp(const MyApp());
-  
-  // Windows 平台初始化 bitsdojo_window 设置（与 window_manager 配合使用）
-  if (Platform.isWindows) {
-    doWhenWindowReady(() {
-      const initialSize = Size(1320, 880);
-      const minSize = Size(160, 60);
-      
-      appWindow.minSize = minSize;
-      appWindow.size = initialSize;
-      appWindow.alignment = Alignment.center;
-      appWindow.title = 'Cyrene Music';
-      // 备用保障：确保窗口在就绪后可见（与 window_manager 协同）
-      appWindow.show();
-    });
-  }
-}
+ }
 
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
