@@ -111,6 +111,9 @@ dependencies:
   media_kit_video: ^1.2.5
   media_kit_libs_video: ^1.0.7
   mobile_scanner: ^7.1.4
+  
+  # Audio metadata reader for local music files
+  audio_metadata_reader: ^1.4.2
 
 # 依赖覆盖：解决 screen_brightness_android 的网络问题
 dependency_overrides:

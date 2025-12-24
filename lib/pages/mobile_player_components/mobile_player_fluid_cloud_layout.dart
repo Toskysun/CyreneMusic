@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../../services/player_service.dart';
@@ -94,15 +95,7 @@ class _MobilePlayerFluidCloudLayoutState extends State<MobilePlayerFluidCloudLay
             ),
             clipBehavior: Clip.antiAlias,
             child: imageUrl.isNotEmpty
-                ? CachedNetworkImage(
-                    imageUrl: imageUrl,
-                    fit: BoxFit.cover,
-                    placeholder: (context, url) => Container(color: Colors.grey[900]),
-                    errorWidget: (context, url, error) => Container(
-                      color: Colors.grey[900],
-                      child: const Icon(Icons.music_note, color: Colors.white54),
-                    ),
-                  )
+                ? _buildCoverImage(imageUrl)
                 : Container(
                     color: Colors.grey[900],
                     child: const Icon(Icons.music_note, color: Colors.white54),
@@ -421,6 +414,34 @@ class _MobilePlayerFluidCloudLayoutState extends State<MobilePlayerFluidCloudLay
     final minutes = duration.inMinutes;
     final seconds = duration.inSeconds % 60;
     return '${minutes.toString().padLeft(1, '0')}:${seconds.toString().padLeft(2, '0')}';
+  }
+
+  /// 构建封面图片（支持网络 URL 和本地文件路径）
+  Widget _buildCoverImage(String imageUrl) {
+    // 判断是网络 URL 还是本地文件路径
+    final isNetwork = imageUrl.startsWith('http://') || imageUrl.startsWith('https://');
+    
+    if (isNetwork) {
+      return CachedNetworkImage(
+        imageUrl: imageUrl,
+        fit: BoxFit.cover,
+        placeholder: (context, url) => Container(color: Colors.grey[900]),
+        errorWidget: (context, url, error) => Container(
+          color: Colors.grey[900],
+          child: const Icon(Icons.music_note, color: Colors.white54),
+        ),
+      );
+    } else {
+      // 本地文件
+      return Image.file(
+        File(imageUrl),
+        fit: BoxFit.cover,
+        errorBuilder: (context, error, stackTrace) => Container(
+          color: Colors.grey[900],
+          child: const Icon(Icons.music_note, color: Colors.white54),
+        ),
+      );
+    }
   }
 }
 

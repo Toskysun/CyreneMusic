@@ -391,17 +391,8 @@ class _MobilePlayerBackgroundState extends State<MobilePlayerBackground> {
                         aspectRatio: 1.0,
                         child: Stack(
                           children: [
-                            // 封面图片
-                            CachedNetworkImage(
-                              imageUrl: imageUrl,
-                              fit: BoxFit.cover,
-                              placeholder: (context, url) => Container(
-                                color: Colors.grey[900],
-                              ),
-                              errorWidget: (context, url, error) => Container(
-                                color: Colors.grey[900],
-                              ),
-                            ),
+                            // 封面图片（支持网络 URL 和本地文件）
+                            _buildCoverImage(imageUrl),
                             // 封面底部渐变遮罩
                             Positioned.fill(
                               child: AnimatedContainer(
@@ -492,17 +483,8 @@ class _MobilePlayerBackgroundState extends State<MobilePlayerBackground> {
                    aspectRatio: 1.0, // 保持正方形比例
                    child: Stack(
                      children: [
-                       // 封面图片
-                       CachedNetworkImage(
-                         imageUrl: imageUrl,
-                         fit: BoxFit.cover,
-                         placeholder: (context, url) => Container(
-                           color: Colors.grey[900],
-                         ),
-                         errorWidget: (context, url, error) => Container(
-                           color: Colors.grey[900],
-                         ),
-                       ),
+                       // 封面图片（支持网络 URL 和本地文件）
+                       _buildCoverImage(imageUrl),
                        // 封面底部渐变遮罩 - 提前开始渐变，避免突兀过渡
                        Positioned.fill(
                          child: AnimatedContainer(
@@ -562,6 +544,34 @@ class _MobilePlayerBackgroundState extends State<MobilePlayerBackground> {
         );
       },
     );
+  }
+
+  /// 构建封面图片（支持网络 URL 和本地文件路径）
+  Widget _buildCoverImage(String imageUrl) {
+    // 判断是网络 URL 还是本地文件路径
+    final isNetwork = imageUrl.startsWith('http://') || imageUrl.startsWith('https://');
+    
+    if (isNetwork) {
+      return CachedNetworkImage(
+        imageUrl: imageUrl,
+        fit: BoxFit.cover,
+        placeholder: (context, url) => Container(
+          color: Colors.grey[900],
+        ),
+        errorWidget: (context, url, error) => Container(
+          color: Colors.grey[900],
+        ),
+      );
+    } else {
+      // 本地文件
+      return Image.file(
+        File(imageUrl),
+        fit: BoxFit.cover,
+        errorBuilder: (context, error, stackTrace) => Container(
+          color: Colors.grey[900],
+        ),
+      );
+    }
   }
 
   /// 构建纯色背景

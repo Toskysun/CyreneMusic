@@ -794,11 +794,33 @@ class _MobileKaraokeTextState extends State<_MobileKaraokeText> with SingleTicke
 }
 
 /// 移动端单个字的填充组件
+/// 使用 ShaderMask 实现带渐变边缘的从左到右填充效果
+/// 同时支持双曲线上浮动画系统：
+/// - 上升阶段：使用 cubic-bezier(0.55, 0.05, 0.85, 0.25) - 慢速起步，中间加速
+/// - 悬停阶段：使用 cubic-bezier(0.0, 0.6, 0.2, 1.0) - 深度缓出，"无限趋近"感
+/// 
+/// 完全参考 LyricSphere 的实现：
+/// - 渐变淡入区域 (fadeRatio = 0.3)
+/// - 上浮距离基于字体大小的 8%（移动端略小）
+/// - 双阶段曲线系统
+/// - 超长悬停保持
 class _MobileWordFillWidget extends StatelessWidget {
   final String text;
   final double progress;
   final TextStyle style;
   final bool isSelected;
+  
+  // ===== 动画参数（完全参考 LyricSphere，移动端微调）=====
+  static const double fadeRatio = 0.3;           // 渐变淡入区域比例
+  
+  // 上浮距离比例（相对于字体大小，移动端略小）
+  static const double floatDistanceRatio = 0.08;  // 字体高度的 8%
+  
+  // 上升阶段占总进度的比例
+  static const double ascendPhaseRatio = 0.65;
+  
+  // 悬停阶段占总进度的比例
+  static const double settlePhaseRatio = 0.35;
 
   const _MobileWordFillWidget({
     required this.text,
@@ -806,32 +828,138 @@ class _MobileWordFillWidget extends StatelessWidget {
     required this.style,
     required this.isSelected,
   });
+  
+  /// LyricSphere 上升阶段曲线：cubic-bezier(0.55, 0.05, 0.85, 0.25)
+  /// 特点：慢速起步，中间加速，末尾略减速
+  double _ascendCurve(double t) {
+    if (t <= 0) return 0;
+    if (t >= 1) return 1;
+    
+    final t2 = t * t;
+    final t3 = t2 * t;
+    
+    // 近似 cubic-bezier(0.55, 0.05, 0.85, 0.25)
+    return 3 * (1 - t) * (1 - t) * t * 0.05 + 
+           3 * (1 - t) * t2 * 0.25 + 
+           t3;
+  }
+  
+  /// LyricSphere 悬停阶段曲线：cubic-bezier(0.0, 0.6, 0.2, 1.0)
+  /// 特点：快速起步，极度缓出，产生"无限趋近"的感觉
+  double _settleCurve(double t) {
+    if (t <= 0) return 0;
+    if (t >= 1) return 1;
+    
+    final t2 = t * t;
+    final t3 = t2 * t;
+    
+    // 近似 cubic-bezier(0.0, 0.6, 0.2, 1.0)
+    return 3 * (1 - t) * (1 - t) * t * 0.6 + 
+           3 * (1 - t) * t2 * 1.0 + 
+           t3;
+  }
+  
+  /// 计算双曲线上浮偏移量
+  double _calculateVerticalOffset(double progressValue, double fontSize) {
+    // 上浮距离 = 字体大小 * 8%（移动端略小）
+    final maxFloatDistance = fontSize * floatDistanceRatio;
+    
+    if (progressValue <= 0) return 0;
+    if (progressValue >= 1) return -maxFloatDistance;
+    
+    // 上升阶段：占 65% 的进度
+    if (progressValue < ascendPhaseRatio) {
+      final ascendProgress = progressValue / ascendPhaseRatio;
+      final curvedProgress = _ascendCurve(ascendProgress);
+      return -maxFloatDistance * curvedProgress;
+    }
+    
+    // 悬停阶段：占 35% 的进度
+    final settleProgress = (progressValue - ascendPhaseRatio) / settlePhaseRatio;
+    final curvedSettleProgress = _settleCurve(settleProgress);
+    
+    // 悬停阶段只允许极微小的回落，产生"无限趋近"感
+    return -maxFloatDistance + (0.05 * curvedSettleProgress);
+  }
 
   @override
   Widget build(BuildContext context) {
-    final dimStyle = style.copyWith(color: Colors.white.withOpacity(0.45));
-    final brightStyle = style.copyWith(
-      color: isSelected ? Colors.orange : Colors.white,
-    );
+    // 获取字体大小用于计算上浮距离
+    final fontSize = style.fontSize ?? 26.0;
+    final verticalOffset = _calculateVerticalOffset(progress, fontSize);
+    
+    // 选中状态使用橙色，否则使用白色
+    final fillColor = isSelected ? Colors.orange : Colors.white;
+    final dimColor = isSelected 
+        ? Colors.orange.withOpacity(0.60)
+        : Colors.white.withOpacity(0.60);
+    
+    // 边界检查：当进度接近完成时，直接显示纯填充色，避免白边问题
+    if (progress >= 0.95) {
+      return RepaintBoundary(
+        child: Transform.translate(
+          offset: Offset(0, verticalOffset),
+          child: Text(
+            text, 
+            style: style.copyWith(color: fillColor),
+          ),
+        ),
+      );
+    }
+    
+    // 边界检查：当进度接近 0 时，直接显示暗色，避免计算误差
+    if (progress <= 0.05) {
+      return RepaintBoundary(
+        child: Transform.translate(
+          offset: Offset(0, verticalOffset),
+          child: Text(
+            text, 
+            style: style.copyWith(color: dimColor),
+          ),
+        ),
+      );
+    }
+    
+    // 计算渐变停止点（修正后的逻辑）
+    // fadeStop: 渐变开始的位置（完全填充区域的末端）
+    // fillStop: 渐变结束的位置（未填充区域的开始）
+    final fadeStop = progress.clamp(0.0, 1.0);
+    final fillStop = (progress + fadeRatio).clamp(0.0, 1.0);
     
     return RepaintBoundary(
-      child: Stack(
-        children: [
-          // 底层暗色文字
-          Text(text, style: dimStyle),
-          
-          // 上层亮色文字（通过 ClipRect 裁剪）
-          ClipRect(
-            clipper: _MobileWordClipper(progress),
-            child: Text(text, style: brightStyle),
+      child: Transform.translate(
+        offset: Offset(0, verticalOffset),
+        child: ShaderMask(
+          shaderCallback: (bounds) {
+            return LinearGradient(
+              begin: Alignment.centerLeft,
+              end: Alignment.centerRight,
+              colors: [
+                fillColor,              // 完全填充
+                fillColor,              // 完全填充（渐变开始前）
+                dimColor,               // 渐变过渡（渐变结束后）
+                dimColor,               // 未填充
+              ],
+              stops: [
+                0.0,
+                fadeStop,
+                fillStop,
+                1.0,
+              ],
+            ).createShader(bounds);
+          },
+          blendMode: BlendMode.srcIn,
+          child: Text(
+            text, 
+            style: style.copyWith(color: Colors.white),
           ),
-        ],
+        ),
       ),
     );
   }
 }
 
-/// 移动端单个字的裁剪器
+/// 移动端单个字的裁剪器（保留用于回退模式）
 class _MobileWordClipper extends CustomClipper<Rect> {
   final double progress;
 
@@ -847,5 +975,4 @@ class _MobileWordClipper extends CustomClipper<Rect> {
     return oldClipper.progress != progress;
   }
 }
-
 

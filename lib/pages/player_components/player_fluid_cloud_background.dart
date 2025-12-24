@@ -264,20 +264,8 @@ class _PlayerFluidCloudBackgroundState extends State<PlayerFluidCloudBackground>
                         aspectRatio: 1.1, // 横向宽度增加10%（1.0 -> 1.1）
                         child: Stack(
                           children: [
-                            // 封面图片
-                            CachedNetworkImage(
-                              imageUrl: imageUrl,
-                              fit: BoxFit.cover,
-                              memCacheWidth: 1024,
-                              memCacheHeight: 1024,
-                              filterQuality: FilterQuality.medium,
-                              placeholder: (context, url) => Container(
-                                color: greyColor,
-                              ),
-                              errorWidget: (context, url, error) => Container(
-                                color: greyColor,
-                              ),
-                            ),
+                            // 封面图片（支持网络 URL 和本地文件）
+                            _buildCoverImage(imageUrl, greyColor),
                             // 封面右侧渐变遮罩 - 让封面边缘自然融入背景
                             Positioned.fill(
                               child: AnimatedContainer(
@@ -347,17 +335,7 @@ class _PlayerFluidCloudBackgroundState extends State<PlayerFluidCloudBackground>
         }
         
         return RepaintBoundary(
-          child: CachedNetworkImage(
-            imageUrl: imageUrl,
-            fit: BoxFit.cover, // 100% 填充，保持长宽比，居中裁剪
-            width: double.infinity,
-            height: double.infinity,
-            memCacheWidth: 1920,
-            memCacheHeight: 1080,
-            filterQuality: FilterQuality.medium,
-            placeholder: (context, url) => _buildDefaultBackground(greyColor),
-            errorWidget: (context, url, error) => _buildDefaultBackground(greyColor),
-          ),
+          child: _buildCoverImage(imageUrl, greyColor, fullCover: true),
         );
       },
     );
@@ -381,6 +359,44 @@ class _PlayerFluidCloudBackgroundState extends State<PlayerFluidCloudBackground>
         ),
       ),
     );
+  }
+
+  /// 构建封面图片（支持网络 URL 和本地文件路径）
+  Widget _buildCoverImage(String imageUrl, Color greyColor, {bool fullCover = false}) {
+    // 判断是网络 URL 还是本地文件路径
+    final isNetwork = imageUrl.startsWith('http://') || imageUrl.startsWith('https://');
+    
+    if (isNetwork) {
+      return CachedNetworkImage(
+        imageUrl: imageUrl,
+        fit: BoxFit.cover,
+        width: fullCover ? double.infinity : null,
+        height: fullCover ? double.infinity : null,
+        memCacheWidth: fullCover ? 1920 : 1024,
+        memCacheHeight: fullCover ? 1080 : 1024,
+        filterQuality: FilterQuality.medium,
+        placeholder: (context, url) => fullCover 
+            ? _buildDefaultBackground(greyColor) 
+            : Container(color: greyColor),
+        errorWidget: (context, url, error) => fullCover 
+            ? _buildDefaultBackground(greyColor) 
+            : Container(color: greyColor),
+      );
+    } else {
+      // 本地文件
+      return Image.file(
+        File(imageUrl),
+        fit: BoxFit.cover,
+        width: fullCover ? double.infinity : null,
+        height: fullCover ? double.infinity : null,
+        cacheWidth: fullCover ? 1920 : 1024,
+        cacheHeight: fullCover ? 1080 : 1024,
+        filterQuality: FilterQuality.medium,
+        errorBuilder: (context, error, stackTrace) => fullCover 
+            ? _buildDefaultBackground(greyColor) 
+            : Container(color: greyColor),
+      );
+    }
   }
 
   /// 构建纯色背景

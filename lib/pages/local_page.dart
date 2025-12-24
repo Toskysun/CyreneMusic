@@ -64,7 +64,7 @@ extension on _LocalPageState {
       child: fluent.ListTile(
         leading: _buildFluentCover(theme, track),
         title: Text(track.name, maxLines: 1, overflow: TextOverflow.ellipsis),
-        subtitle: Text('本地 • ${_extOf(track.id)}', maxLines: 1, overflow: TextOverflow.ellipsis),
+        subtitle: Text(_buildSubtitle(track), maxLines: 1, overflow: TextOverflow.ellipsis),
         trailing: fluent.IconButton(
           icon: const Icon(fluent.FluentIcons.play),
           onPressed: () async {
@@ -80,21 +80,27 @@ extension on _LocalPageState {
     );
   }
 
+  /// 构建 subtitle 显示（艺术家 • 格式）
+  String _buildSubtitle(Track track) {
+    final parts = <String>[];
+    if (track.artists.isNotEmpty && track.artists != '本地文件') {
+      parts.add(track.artists);
+    }
+    parts.add(_extOf(track.id));
+    return parts.join(' • ');
+  }
+
   Widget _buildFluentCover(fluent.FluentThemeData theme, Track track) {
     if (track.picUrl.isNotEmpty) {
+      // 本地文件使用 Image.file
       return ClipRRect(
         borderRadius: BorderRadius.circular(6),
-        child: CachedNetworkImage(
-          imageUrl: track.picUrl,
+        child: Image.file(
+          File(track.picUrl),
           width: 48,
           height: 48,
           fit: BoxFit.cover,
-          placeholder: (context, url) => Container(
-            width: 48,
-            height: 48,
-            color: theme.resources.controlAltFillColorSecondary,
-          ),
-          errorWidget: (context, url, error) => Container(
+          errorBuilder: (context, error, stackTrace) => Container(
             width: 48,
             height: 48,
             color: theme.resources.controlAltFillColorSecondary,
@@ -146,6 +152,7 @@ class _LocalPageState extends State<LocalPage> {
   }
 
   bool get _isCupertino => _themeManager.isCupertinoFramework;
+  bool get _isAndroid => Theme.of(context).platform == TargetPlatform.android;
 
   @override
   Widget build(BuildContext context) {
@@ -181,8 +188,8 @@ class _LocalPageState extends State<LocalPage> {
                 },
               ),
               IconButton(
-                icon: const Icon(Icons.folder_open),
-                tooltip: '选择文件夹并扫描',
+                icon: Icon(_isAndroid ? Icons.library_music : Icons.folder_open),
+                tooltip: _isAndroid ? '批量选择音频文件' : '选择文件夹并扫描',
                 onPressed: () async {
                   await _local.pickAndScanFolder();
                 },
@@ -282,6 +289,7 @@ class _LocalPageState extends State<LocalPage> {
 
   Widget _buildEmpty() {
     final cs = Theme.of(context).colorScheme;
+    final isAndroid = Theme.of(context).platform == TargetPlatform.android;
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
@@ -290,10 +298,15 @@ class _LocalPageState extends State<LocalPage> {
           const SizedBox(height: 12),
           Text('未选择本地音乐', style: Theme.of(context).textTheme.titleMedium),
           const SizedBox(height: 8),
-          Text(
-            '可选择单首歌曲或扫描整个文件夹（支持 mp3/wav/flac 等）',
-            style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: cs.onSurfaceVariant),
-            textAlign: TextAlign.center,
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 32),
+            child: Text(
+              isAndroid 
+                ? '点击右上方按钮选择单首或批量选择多首音乐文件\n（支持 mp3/wav/flac 等格式）'
+                : '可选择单首歌曲或扫描整个文件夹（支持 mp3/wav/flac 等）',
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: cs.onSurfaceVariant),
+              textAlign: TextAlign.center,
+            ),
           ),
         ],
       ),
@@ -324,7 +337,7 @@ class _LocalPageState extends State<LocalPage> {
               ),
               CupertinoButton(
                 padding: EdgeInsets.zero,
-                child: const Icon(CupertinoIcons.folder, size: 22),
+                child: const Icon(CupertinoIcons.music_albums, size: 22),
                 onPressed: () async {
                   await _local.pickAndScanFolder();
                 },
@@ -384,7 +397,7 @@ class _LocalPageState extends State<LocalPage> {
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 40),
             child: Text(
-              '可选择单首歌曲或扫描整个文件夹（支持 mp3/wav/flac 等）',
+              '点击右上方按钮选择单首或批量选择多首音乐文件\n（支持 mp3/wav/flac 等格式）',
               style: TextStyle(
                 fontSize: 14,
                 color: CupertinoColors.systemGrey,
@@ -431,7 +444,7 @@ class _LocalPageState extends State<LocalPage> {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      '本地 • ${_extOf(track.id)}',
+                      _buildSubtitle(track),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
@@ -460,20 +473,15 @@ class _LocalPageState extends State<LocalPage> {
 
   Widget _buildCupertinoCover(Track track, bool isDark) {
     if (track.picUrl.isNotEmpty) {
+      // 本地文件使用 Image.file
       return ClipRRect(
         borderRadius: BorderRadius.circular(6),
-        child: CachedNetworkImage(
-          imageUrl: track.picUrl,
+        child: Image.file(
+          File(track.picUrl),
           width: 48,
           height: 48,
           fit: BoxFit.cover,
-          placeholder: (context, url) => Container(
-            width: 48,
-            height: 48,
-            color: isDark ? const Color(0xFF2C2C2E) : CupertinoColors.systemGrey5,
-            child: const CupertinoActivityIndicator(radius: 10),
-          ),
-          errorWidget: (context, url, error) => Container(
+          errorBuilder: (context, error, stackTrace) => Container(
             width: 48,
             height: 48,
             color: isDark ? const Color(0xFF2C2C2E) : CupertinoColors.systemGrey5,
@@ -506,7 +514,7 @@ class _LocalTrackTile extends StatelessWidget {
       child: ListTile(
         leading: _buildCover(cs),
         title: Text(track.name, maxLines: 1, overflow: TextOverflow.ellipsis),
-        subtitle: Text('本地 • ${_extOf(track.id)}', maxLines: 1, overflow: TextOverflow.ellipsis),
+        subtitle: Text(_buildSubtitle(track), maxLines: 1, overflow: TextOverflow.ellipsis),
         trailing: IconButton(
           icon: const Icon(Icons.play_arrow),
           onPressed: () async {
@@ -521,15 +529,32 @@ class _LocalTrackTile extends StatelessWidget {
     );
   }
 
+  /// 构建 subtitle 显示（艺术家 • 格式）
+  String _buildSubtitle(Track track) {
+    final parts = <String>[];
+    if (track.artists.isNotEmpty && track.artists != '本地文件') {
+      parts.add(track.artists);
+    }
+    parts.add(_extOf(track.id));
+    return parts.join(' • ');
+  }
+
   Widget _buildCover(ColorScheme cs) {
     if (track.picUrl.isNotEmpty) {
+      // 本地文件使用 Image.file
       return ClipRRect(
         borderRadius: BorderRadius.circular(6),
-        child: CachedNetworkImage(
-          imageUrl: track.picUrl,
+        child: Image.file(
+          File(track.picUrl),
           width: 48,
           height: 48,
           fit: BoxFit.cover,
+          errorBuilder: (context, error, stackTrace) => Container(
+            width: 48,
+            height: 48,
+            color: cs.surfaceContainerHighest,
+            child: Icon(Icons.music_note, color: cs.onSurfaceVariant),
+          ),
         ),
       );
     }

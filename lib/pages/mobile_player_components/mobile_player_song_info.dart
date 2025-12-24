@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../../services/player_service.dart';
@@ -139,6 +140,26 @@ class MobilePlayerSongInfo extends StatelessWidget {
         fit: BoxFit.cover,
       );
     }
+
+    // 检查是否为网络图片
+    final isNetwork = imageUrl.startsWith('http') || imageUrl.startsWith('https');
+
+    if (!isNetwork) {
+      // 本地文件
+      return Image.file(
+        File(imageUrl),
+        fit: BoxFit.cover,
+        errorBuilder: (context, error, stackTrace) => Container(
+          color: Colors.grey[900],
+          child: Icon(
+            Icons.music_note,
+            size: coverSize * 0.3,
+            color: Colors.white30,
+          ),
+        ),
+      );
+    }
+
     // 回退到 CachedNetworkImage（首次加载或 Provider 不可用时）
     return CachedNetworkImage(
       imageUrl: imageUrl,

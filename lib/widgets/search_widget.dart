@@ -13,6 +13,7 @@ import '../services/player_service.dart';
 import '../services/auth_service.dart';
 import '../pages/auth/auth_page.dart';
 import '../utils/theme_manager.dart';
+import 'track_action_menu.dart';
 
 /// 搜索组件（内嵌版本）
 class SearchWidget extends StatefulWidget {
@@ -1227,6 +1228,12 @@ class _SearchWidgetState extends State<SearchWidget> {
                 ],
               ),
             ),
+            // 更多按钮
+            TrackMoreButton(
+              track: track,
+              onPlay: () => _playSingleTrack(track),
+              size: 36,
+            ),
           ],
         ),
       ),
@@ -1235,6 +1242,8 @@ class _SearchWidgetState extends State<SearchWidget> {
 
   /// iOS 风格合并歌曲项
   Widget _buildCupertinoMergedTrackTile(MergedTrack mergedTrack, bool isDark) {
+    final bestTrack = mergedTrack.getBestTrack();
+    
     return GestureDetector(
       onLongPress: () => _showCupertinoPlatformSelector(mergedTrack),
       child: CupertinoButton(
@@ -1301,6 +1310,12 @@ class _SearchWidgetState extends State<SearchWidget> {
                     ),
                   ],
                 ),
+              ),
+              // 更多按钮
+              TrackMoreButton(
+                track: bestTrack,
+                onPlay: () => _playMergedTrack(mergedTrack),
+                size: 36,
               ),
             ],
           ),
@@ -2229,6 +2244,10 @@ class _SearchWidgetState extends State<SearchWidget> {
         overflow: TextOverflow.ellipsis,
         style: Theme.of(context).textTheme.bodySmall,
       ),
+      trailing: TrackMoreButton(
+        track: track,
+        onPlay: () => _playSingleTrack(track),
+      ),
       onPressed: () => _playSingleTrack(track),
     );
 
@@ -2495,6 +2514,9 @@ class _SearchWidgetState extends State<SearchWidget> {
       ),
     );
 
+    // 获取最佳歌曲用于更多菜单
+    final bestTrack = mergedTrack.getBestTrack();
+    
     final tile = _buildAdaptiveListTile(
       leading: leading,
       title: Text(
@@ -2507,6 +2529,10 @@ class _SearchWidgetState extends State<SearchWidget> {
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
         style: Theme.of(context).textTheme.bodySmall,
+      ),
+      trailing: TrackMoreButton(
+        track: bestTrack,
+        onPlay: () => _playMergedTrack(mergedTrack),
       ),
       onPressed: () => _playMergedTrack(mergedTrack),
       onLongPress: () => _showPlatformSelector(mergedTrack),

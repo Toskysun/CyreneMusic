@@ -213,12 +213,12 @@ class _MoreMenuButtonState extends State<_MoreMenuButton> {
     
     _overlayEntry = OverlayEntry(
       builder: (context) => Positioned(
-        width: 200,
+        width: 260,  // 增加宽度
         child: CompositedTransformFollower(
           link: _layerLink,
           targetAnchor: Alignment.bottomLeft,
           followerAnchor: Alignment.topLeft,
-          offset: const Offset(0, 4),
+          offset: const Offset(0, 8),  // 增加间距
           child: MouseRegion(
             onEnter: (_) {
               _isMenuHovering = true;
@@ -227,22 +227,52 @@ class _MoreMenuButtonState extends State<_MoreMenuButton> {
               _isMenuHovering = false;
               _hideMenuDelayed();
             },
-            child: Material(
-              color: Colors.transparent,
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(12),
-                child: BackdropFilter(
-                  filter: ImageFilter.blur(sigmaX: 30, sigmaY: 30),
-                  child: Container(
-                    decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(
-                        color: Colors.white.withOpacity(0.15),
-                        width: 1,
-                      ),
+            child: TweenAnimationBuilder<double>(
+              tween: Tween(begin: 0.0, end: 1.0),
+              duration: const Duration(milliseconds: 200),
+              curve: Curves.easeOutCubic,
+              builder: (context, value, child) {
+                return Transform.scale(
+                  scale: 0.95 + (0.05 * value),
+                  alignment: Alignment.topLeft,
+                  child: Opacity(
+                    opacity: value,
+                    child: child,
+                  ),
+                );
+              },
+              child: Material(
+                color: Colors.transparent,
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(16),  // 更圆润的边角
+                  child: BackdropFilter(
+                    filter: ImageFilter.blur(sigmaX: 40, sigmaY: 40),
+                    child: Builder(
+                      builder: (context) {
+                        // 自适应主题颜色
+                        final isDark = Theme.of(context).brightness == Brightness.dark;
+                        final baseColor = isDark ? Colors.white : Colors.black;
+                        
+                        return Container(
+                          decoration: BoxDecoration(
+                            gradient: LinearGradient(
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
+                              colors: [
+                                baseColor.withOpacity(isDark ? 0.15 : 0.08),
+                                baseColor.withOpacity(isDark ? 0.08 : 0.04),
+                              ],
+                            ),
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(
+                              color: baseColor.withOpacity(isDark ? 0.2 : 0.15),
+                              width: 1,
+                            ),
+                          ),
+                          child: _buildMenuContent(),
+                        );
+                      },
                     ),
-                    child: _buildMenuContent(),
                   ),
                 ),
               ),
@@ -264,114 +294,264 @@ class _MoreMenuButtonState extends State<_MoreMenuButton> {
         final lyricStyle = LyricStyleService();
         final lyricFont = LyricFontService();
         
-        return Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            // 播放列表
-            if (widget.onPlaylistPressed != null)
+        return Padding(
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // ======= 播放列表 =======
+              if (widget.onPlaylistPressed != null) ...[
+                _buildMenuItem(
+                  icon: Icons.queue_music_rounded,
+                  label: '播放列表',
+                  iconColor: Colors.blue[300],
+                  onTap: () {
+                    _hideMenu();
+                    widget.onPlaylistPressed!();
+                  },
+                ),
+                _buildSectionDivider(),
+              ],
+              
+              // ======= 外观设置分组 =======
+              _buildSectionTitle('外观'),
+              
+              // 播放器主题
               _buildMenuItem(
-                icon: Icons.queue_music_rounded,
-                label: '播放列表',
+                icon: lyricStyle.currentStyle == LyricStyle.fluidCloud 
+                    ? Icons.water_drop_rounded 
+                    : Icons.music_note_rounded,
+                label: lyricStyle.currentStyle == LyricStyle.fluidCloud 
+                    ? '流体云主题' 
+                    : '经典主题',
+                subtitle: '切换播放器风格',
+                iconColor: lyricStyle.currentStyle == LyricStyle.fluidCloud 
+                    ? Colors.cyan[300] 
+                    : Colors.purple[300],
+                trailing: _buildSwitchIndicator(lyricStyle.currentStyle == LyricStyle.fluidCloud),
                 onTap: () {
-                  _hideMenu();
-                  widget.onPlaylistPressed!();
+                  final newStyle = lyricStyle.currentStyle == LyricStyle.fluidCloud 
+                      ? LyricStyle.defaultStyle 
+                      : LyricStyle.fluidCloud;
+                  lyricStyle.setStyle(newStyle);
+                  _overlayEntry?.markNeedsBuild();
                 },
               ),
-            
-            // 分隔线
-            if (widget.onPlaylistPressed != null)
-              Divider(
-                height: 1,
-                color: Colors.white.withOpacity(0.1),
+              
+              // 播放器背景
+              _buildMenuItem(
+                icon: Icons.photo_rounded,
+                label: '播放器背景',
+                subtitle: PlayerBackgroundService().getBackgroundTypeName(),
+                iconColor: Colors.orange[300],
+                trailing: const Icon(
+                  Icons.chevron_right_rounded,
+                  color: Colors.white38,
+                  size: 20,
+                ),
+                onTap: () {
+                  _hideMenu();
+                  _showBackgroundDialog(context);
+                },
               ),
-            
-            // 播放器主题
-            _buildMenuItem(
-              icon: lyricStyle.currentStyle == LyricStyle.fluidCloud 
-                  ? Icons.water_drop_rounded 
-                  : Icons.music_note_rounded,
-              label: lyricStyle.currentStyle == LyricStyle.fluidCloud 
-                  ? '播放器主题: 流体云' 
-                  : '播放器主题: 经典',
-              trailing: const Icon(
-                Icons.chevron_right,
-                color: Colors.white54,
-                size: 18,
+              
+              // 歌词字体
+              _buildMenuItem(
+                icon: Icons.text_fields_rounded,
+                label: '歌词字体',
+                subtitle: lyricFont.currentFontName,
+                iconColor: Colors.pink[300],
+                trailing: const Icon(
+                  Icons.chevron_right_rounded,
+                  color: Colors.white38,
+                  size: 20,
+                ),
+                onTap: () {
+                  _hideMenu();
+                  _showFontPicker(context);
+                },
               ),
-              onTap: () {
-                // 切换播放器主题
-                final newStyle = lyricStyle.currentStyle == LyricStyle.fluidCloud 
-                    ? LyricStyle.defaultStyle 
-                    : LyricStyle.fluidCloud;
-                lyricStyle.setStyle(newStyle);
-                _overlayEntry?.markNeedsBuild();
-              },
-            ),
-            
-            // 播放器背景
-            _buildMenuItem(
-              icon: Icons.wallpaper_rounded,
-              label: '播放器背景: ${PlayerBackgroundService().getBackgroundTypeName()}',
-              onTap: () {
-                _hideMenu();
-                _showBackgroundDialog(context);
-              },
-            ),
-            
-            // 歌词字体
-            _buildMenuItem(
-              icon: Icons.font_download_rounded,
-              label: '歌词字体: ${lyricFont.currentFontName}',
-              trailing: const Icon(
-                Icons.chevron_right,
-                color: Colors.white54,
-                size: 18,
+              
+              _buildSectionDivider(),
+              
+              // ======= 播放控制分组 =======
+              _buildSectionTitle('播放'),
+              
+              // 播放模式
+              _buildMenuItem(
+                icon: _getPlaybackModeIcon(playbackMode.currentMode),
+                label: '播放模式',
+                subtitle: playbackMode.getModeName(),
+                iconColor: Colors.green[300],
+                trailing: _buildModeIndicator(playbackMode.currentMode),
+                onTap: () {
+                  playbackMode.toggleMode();
+                  _overlayEntry?.markNeedsBuild();
+                },
               ),
-              onTap: () {
-                _hideMenu();
-                _showFontPicker(context);
-              },
-            ),
-            
-            // 分隔线
-            Divider(
-              height: 1,
-              color: Colors.white.withOpacity(0.1),
-            ),
-            
-            // 播放模式
-            _buildMenuItem(
-              icon: _getPlaybackModeIcon(playbackMode.currentMode),
-              label: playbackMode.getModeName(),
-              trailing: const Icon(
-                Icons.chevron_right,
-                color: Colors.white54,
-                size: 18,
+              
+              // 睡眠定时器
+              _buildMenuItem(
+                icon: sleepTimer.isActive ? Icons.bedtime_rounded : Icons.bedtime_outlined,
+                label: '睡眠定时器',
+                subtitle: sleepTimer.isActive 
+                    ? '剩余 ${sleepTimer.remainingTimeString}' 
+                    : '设置定时关闭',
+                iconColor: sleepTimer.isActive ? Colors.amber[300] : Colors.grey[400],
+                trailing: sleepTimer.isActive 
+                    ? Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: Colors.amber.withOpacity(0.2),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Text(
+                          '运行中',
+                          style: TextStyle(
+                            color: Colors.amber[300],
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                            fontFamily: 'Microsoft YaHei',
+                          ),
+                        ),
+                      )
+                    : null,
+                onTap: () {
+                  _hideMenu();
+                  if (widget.onSleepTimerPressed != null) {
+                    widget.onSleepTimerPressed!();
+                  }
+                },
               ),
-              onTap: () {
-                playbackMode.toggleMode();
-                // 更新菜单显示
-                _overlayEntry?.markNeedsBuild();
-              },
-            ),
-            
-            // 睡眠定时器
-            _buildMenuItem(
-              icon: sleepTimer.isActive ? Icons.schedule : Icons.schedule_outlined,
-              label: sleepTimer.isActive 
-                  ? '定时停止: ${sleepTimer.remainingTimeString}' 
-                  : '睡眠定时器',
-              iconColor: sleepTimer.isActive ? Colors.amber : null,
-              onTap: () {
-                _hideMenu();
-                if (widget.onSleepTimerPressed != null) {
-                  widget.onSleepTimerPressed!();
-                }
-              },
-            ),
-          ],
+            ],
+          ),
         );
       },
+    );
+  }
+  
+  /// 构建分组标题
+  Widget _buildSectionTitle(String title) {
+    return Builder(
+      builder: (context) {
+        final isDark = Theme.of(context).brightness == Brightness.dark;
+        final textColor = isDark ? Colors.white : Colors.black;
+        
+        return Padding(
+          padding: const EdgeInsets.only(left: 16, right: 16, top: 4, bottom: 6),
+          child: Text(
+            title,
+            style: TextStyle(
+              color: textColor.withOpacity(0.4),
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+              letterSpacing: 0.5,
+              fontFamily: 'Microsoft YaHei',
+            ),
+          ),
+        );
+      },
+    );
+  }
+  
+  /// 构建分隔线
+  Widget _buildSectionDivider() {
+    return Builder(
+      builder: (context) {
+        final isDark = Theme.of(context).brightness == Brightness.dark;
+        final lineColor = isDark ? Colors.white : Colors.black;
+        
+        return Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+          child: Container(
+            height: 1,
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [
+                  Colors.transparent,
+                  lineColor.withOpacity(isDark ? 0.15 : 0.1),
+                  lineColor.withOpacity(isDark ? 0.15 : 0.1),
+                  Colors.transparent,
+                ],
+                stops: const [0.0, 0.2, 0.8, 1.0],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+  
+  /// 构建切换指示器
+  Widget _buildSwitchIndicator(bool isOn) {
+    return Builder(
+      builder: (context) {
+        final isDark = Theme.of(context).brightness == Brightness.dark;
+        final baseColor = isDark ? Colors.white : Colors.black;
+        
+        return Container(
+          width: 40,
+          height: 22,
+          decoration: BoxDecoration(
+            color: isOn ? Colors.cyan.withOpacity(0.3) : baseColor.withOpacity(0.1),
+            borderRadius: BorderRadius.circular(11),
+            border: Border.all(
+              color: isOn ? Colors.cyan.withOpacity(0.5) : baseColor.withOpacity(0.2),
+              width: 1,
+            ),
+          ),
+          child: AnimatedAlign(
+            alignment: isOn ? Alignment.centerRight : Alignment.centerLeft,
+            duration: const Duration(milliseconds: 200),
+            curve: Curves.easeInOut,
+            child: Container(
+              width: 16,
+              height: 16,
+              margin: const EdgeInsets.symmetric(horizontal: 2),
+              decoration: BoxDecoration(
+                color: isOn ? Colors.cyan[300] : baseColor.withOpacity(0.6),
+                shape: BoxShape.circle,
+                boxShadow: isOn ? [
+                  BoxShadow(
+                    color: Colors.cyan.withOpacity(0.4),
+                    blurRadius: 4,
+                  ),
+                ] : null,
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+  
+  /// 构建播放模式指示器
+  Widget _buildModeIndicator(PlaybackMode mode) {
+    final labels = {
+      PlaybackMode.sequential: '顺序',
+      PlaybackMode.repeatOne: '单曲',
+      PlaybackMode.shuffle: '随机',
+    };
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: Colors.green.withOpacity(0.15),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(
+          color: Colors.green.withOpacity(0.3),
+          width: 1,
+        ),
+      ),
+      child: Text(
+        labels[mode] ?? '',
+        style: TextStyle(
+          color: Colors.green[300],
+          fontSize: 11,
+          fontWeight: FontWeight.w600,
+          fontFamily: 'Microsoft YaHei',
+        ),
+      ),
     );
   }
   
@@ -421,37 +601,87 @@ class _MoreMenuButtonState extends State<_MoreMenuButton> {
     required IconData icon,
     required String label,
     required VoidCallback onTap,
+    String? subtitle,
     Widget? trailing,
     Color? iconColor,
   }) {
-    return InkWell(
-      onTap: onTap,
-      hoverColor: Colors.white.withOpacity(0.1),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        child: Row(
-          children: [
-            Icon(
-              icon,
-              color: iconColor ?? Colors.white.withOpacity(0.9),
-              size: 20,
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Text(
-                label,
-                style: TextStyle(
-                  color: Colors.white.withOpacity(0.9),
-                  fontSize: 14,
-                  fontWeight: FontWeight.w500,
-                ),
-                overflow: TextOverflow.ellipsis,
+    return Builder(
+      builder: (context) {
+        final isDark = Theme.of(context).brightness == Brightness.dark;
+        final textColor = isDark ? Colors.white : Colors.black;
+        final hoverColor = textColor.withOpacity(0.08);
+        final splashColor = textColor.withOpacity(0.05);
+        
+        return Material(
+          color: Colors.transparent,
+          child: InkWell(
+            onTap: onTap,
+            hoverColor: hoverColor,
+            splashColor: splashColor,
+            borderRadius: BorderRadius.circular(8),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              margin: const EdgeInsets.symmetric(horizontal: 4),
+              child: Row(
+                children: [
+                  // 图标容器（带圆角背景）
+                  Container(
+                    width: 32,
+                    height: 32,
+                    decoration: BoxDecoration(
+                      color: (iconColor ?? textColor).withOpacity(0.12),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Icon(
+                      icon,
+                      color: iconColor ?? textColor.withOpacity(0.85),
+                      size: 18,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  // 标题和副标题
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          label,
+                          style: TextStyle(
+                            color: textColor,
+                            fontSize: 13,
+                            fontWeight: FontWeight.w500,
+                            letterSpacing: -0.2,
+                            fontFamily: 'Microsoft YaHei',
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        if (subtitle != null) ...[
+                          const SizedBox(height: 2),
+                          Text(
+                            subtitle,
+                            style: TextStyle(
+                              color: textColor.withOpacity(0.45),
+                              fontSize: 11,
+                              fontWeight: FontWeight.w400,
+                              fontFamily: 'Microsoft YaHei',
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                  if (trailing != null) ...[
+                    const SizedBox(width: 8),
+                    trailing,
+                  ],
+                ],
               ),
             ),
-            if (trailing != null) trailing,
-          ],
-        ),
-      ),
+          ),
+        );
+      },
     );
   }
 

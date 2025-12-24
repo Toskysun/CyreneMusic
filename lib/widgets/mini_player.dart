@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:fluent_ui/fluent_ui.dart' as fluent;
@@ -905,6 +906,28 @@ class _MiniPlayerState extends State<MiniPlayer> with SingleTickerProviderStateM
         fit: BoxFit.cover,
       );
     }
+    // 检查是否为网络图片
+    final isNetwork = imageUrl.startsWith('http') || imageUrl.startsWith('https');
+
+    if (!isNetwork) {
+      // 本地文件
+      return Image.file(
+        File(imageUrl),
+        width: size,
+        height: size,
+        fit: BoxFit.cover,
+        errorBuilder: (context, error, stackTrace) => Container(
+          width: size,
+          height: size,
+          color: colorScheme.surfaceContainerHighest,
+          child: Icon(
+            Icons.music_note,
+            color: colorScheme.onSurfaceVariant,
+          ),
+        ),
+      );
+    }
+
     return CachedNetworkImage(
       imageUrl: imageUrl,
       width: size,
@@ -1387,20 +1410,33 @@ class _MiniPlayerState extends State<MiniPlayer> with SingleTickerProviderStateM
                             subtitle: Text(t.artists, maxLines: 1, overflow: TextOverflow.ellipsis),
                             leading: ClipRRect(
                               borderRadius: BorderRadius.circular(4),
-                              child: CachedNetworkImage(
-                                imageUrl: t.picUrl,
-                                imageBuilder: (context, imageProvider) {
-                                  PlaylistQueueService().updateCoverProvider(t, imageProvider);
-                                  return Image(image: imageProvider, width: 44, height: 44, fit: BoxFit.cover);
-                                },
-                                placeholder: (context, url) => Container(width: 44, height: 44, color: fluent.Colors.grey[20]),
-                                errorWidget: (context, url, error) => Container(
-                                  width: 44,
-                                  height: 44,
-                                  color: fluent.Colors.grey[20],
-                                  child: const Icon(Icons.music_note),
-                                ),
-                              ),
+                              child: (t.picUrl.startsWith('http') || t.picUrl.startsWith('https'))
+                                  ? CachedNetworkImage(
+                                      imageUrl: t.picUrl,
+                                      imageBuilder: (context, imageProvider) {
+                                        PlaylistQueueService().updateCoverProvider(t, imageProvider);
+                                        return Image(image: imageProvider, width: 44, height: 44, fit: BoxFit.cover);
+                                      },
+                                      placeholder: (context, url) => Container(width: 44, height: 44, color: fluent.Colors.grey[20]),
+                                      errorWidget: (context, url, error) => Container(
+                                        width: 44,
+                                        height: 44,
+                                        color: fluent.Colors.grey[20],
+                                        child: const Icon(Icons.music_note),
+                                      ),
+                                    )
+                                  : Image.file(
+                                      File(t.picUrl),
+                                      width: 44,
+                                      height: 44,
+                                      fit: BoxFit.cover,
+                                      errorBuilder: (context, error, stackTrace) => Container(
+                                        width: 44,
+                                        height: 44,
+                                        color: fluent.Colors.grey[20],
+                                        child: const Icon(Icons.music_note),
+                                      ),
+                                    ),
                             ),
                             tileColor: isCurrent
                                 ? WidgetStateProperty.all(
@@ -1501,25 +1537,38 @@ class _MiniPlayerState extends State<MiniPlayer> with SingleTickerProviderStateM
                                       children: [
                                         ClipRRect(
                                           borderRadius: BorderRadius.circular(6),
-                                          child: CachedNetworkImage(
-                                            imageUrl: t.picUrl,
-                                            imageBuilder: (context, imageProvider) {
-                                              PlaylistQueueService().updateCoverProvider(t, imageProvider);
-                                              return Image(image: imageProvider, width: 44, height: 44, fit: BoxFit.cover);
-                                            },
-                                            placeholder: (context, url) => Container(
-                                              width: 44,
-                                              height: 44,
-                                              color: isDark ? const Color(0xFF2C2C2E) : CupertinoColors.systemGrey5,
-                                              child: const CupertinoActivityIndicator(radius: 10),
-                                            ),
-                                            errorWidget: (context, url, error) => Container(
-                                              width: 44,
-                                              height: 44,
-                                              color: isDark ? const Color(0xFF2C2C2E) : CupertinoColors.systemGrey5,
-                                              child: Icon(CupertinoIcons.music_note, color: CupertinoColors.systemGrey),
-                                            ),
-                                          ),
+                                          child: (t.picUrl.startsWith('http') || t.picUrl.startsWith('https'))
+                                              ? CachedNetworkImage(
+                                                  imageUrl: t.picUrl,
+                                                  imageBuilder: (context, imageProvider) {
+                                                    PlaylistQueueService().updateCoverProvider(t, imageProvider);
+                                                    return Image(image: imageProvider, width: 44, height: 44, fit: BoxFit.cover);
+                                                  },
+                                                  placeholder: (context, url) => Container(
+                                                    width: 44,
+                                                    height: 44,
+                                                    color: isDark ? const Color(0xFF2C2C2E) : CupertinoColors.systemGrey5,
+                                                    child: const CupertinoActivityIndicator(radius: 10),
+                                                  ),
+                                                  errorWidget: (context, url, error) => Container(
+                                                    width: 44,
+                                                    height: 44,
+                                                    color: isDark ? const Color(0xFF2C2C2E) : CupertinoColors.systemGrey5,
+                                                    child: Icon(CupertinoIcons.music_note, color: CupertinoColors.systemGrey),
+                                                  ),
+                                                )
+                                              : Image.file(
+                                                  File(t.picUrl),
+                                                  width: 44,
+                                                  height: 44,
+                                                  fit: BoxFit.cover,
+                                                  errorBuilder: (context, error, stackTrace) => Container(
+                                                    width: 44,
+                                                    height: 44,
+                                                    color: isDark ? const Color(0xFF2C2C2E) : CupertinoColors.systemGrey5,
+                                                    child: Icon(CupertinoIcons.music_note, color: CupertinoColors.systemGrey),
+                                                  ),
+                                                ),
                                         ),
                                         const SizedBox(width: 12),
                                         Expanded(
@@ -1598,25 +1647,38 @@ class _MiniPlayerState extends State<MiniPlayer> with SingleTickerProviderStateM
                       tileColor: isCurrent ? Theme.of(context).colorScheme.surfaceContainerHigh : null,
                       leading: ClipRRect(
                         borderRadius: BorderRadius.circular(4),
-                        child: CachedNetworkImage(
-                          imageUrl: t.picUrl,
-                          imageBuilder: (context, imageProvider) {
-                            PlaylistQueueService().updateCoverProvider(t, imageProvider);
-                            return Image(
-                              image: imageProvider,
+                        child: (t.picUrl.startsWith('http') || t.picUrl.startsWith('https'))
+                          ? CachedNetworkImage(
+                              imageUrl: t.picUrl,
+                              imageBuilder: (context, imageProvider) {
+                                PlaylistQueueService().updateCoverProvider(t, imageProvider);
+                                return Image(
+                                  image: imageProvider,
+                                  width: 44,
+                                  height: 44,
+                                  fit: BoxFit.cover,
+                                );
+                              },
+                              placeholder: (context, url) => Container(width: 44, height: 44, color: Colors.black12),
+                              errorWidget: (context, url, error) => Container(
+                                width: 44,
+                                height: 44,
+                                color: Colors.black12,
+                                child: Icon(Icons.music_note, color: Theme.of(context).colorScheme.onSurfaceVariant),
+                              ),
+                            )
+                          : Image.file(
+                              File(t.picUrl),
                               width: 44,
                               height: 44,
                               fit: BoxFit.cover,
-                            );
-                          },
-                          placeholder: (context, url) => Container(width: 44, height: 44, color: Colors.black12),
-                          errorWidget: (context, url, error) => Container(
-                            width: 44,
-                            height: 44,
-                            color: Colors.black12,
-                            child: Icon(Icons.music_note, color: Theme.of(context).colorScheme.onSurfaceVariant),
-                          ),
-                        ),
+                              errorBuilder: (context, error, stackTrace) => Container(
+                                width: 44,
+                                height: 44,
+                                color: Colors.black12,
+                                child: Icon(Icons.music_note, color: Theme.of(context).colorScheme.onSurfaceVariant),
+                              ),
+                            ),
                       ),
                       title: Text(t.name, maxLines: 1, overflow: TextOverflow.ellipsis),
                       subtitle: Text(t.artists, maxLines: 1, overflow: TextOverflow.ellipsis),

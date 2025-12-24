@@ -947,6 +947,7 @@ class PlayerService extends ChangeNotifier {
   }
 
   /// 更新封面 Provider，统一管理封面缓存与刷新
+  /// 支持网络 URL 和本地文件路径
   Future<void> _updateCoverImage(String? imageUrl, {bool notify = true}) async {
     print('🖼️ [PlayerService] _updateCoverImage 调用, imageUrl: ${imageUrl ?? "null"}');
     
@@ -963,7 +964,24 @@ class PlayerService extends ChangeNotifier {
     }
 
     try {
-      final provider = CachedNetworkImageProvider(imageUrl);
+      // 判断是网络 URL 还是本地文件路径
+      final isNetwork = imageUrl.startsWith('http://') || imageUrl.startsWith('https://');
+      
+      ImageProvider provider;
+      if (isNetwork) {
+        // 网络图片：使用 CachedNetworkImageProvider
+        provider = CachedNetworkImageProvider(imageUrl);
+      } else {
+        // 本地文件：使用 FileImage
+        final file = File(imageUrl);
+        if (!await file.exists()) {
+          print('⚠️ [PlayerService] 本地封面文件不存在: $imageUrl');
+          setCurrentCoverImageProvider(null, shouldNotify: notify);
+          return;
+        }
+        provider = FileImage(file);
+      }
+      
       // 预热缓存，避免迷你播放器和全屏播放器重复请求
       provider.resolve(const ImageConfiguration());
       setCurrentCoverImageProvider(
@@ -1049,9 +1067,23 @@ class PlayerService extends ChangeNotifier {
   }
 
   /// 从整张图片提取主题色（使用 PaletteGenerator，会阻塞主线程 - 仅作为备用）
+  /// 支持网络 URL 和本地文件路径
   Future<Color?> _extractColorFromFullImage(String imageUrl) async {
     try {
-      final imageProvider = CachedNetworkImageProvider(imageUrl);
+      // 判断是网络 URL 还是本地文件路径
+      final isNetwork = imageUrl.startsWith('http://') || imageUrl.startsWith('https://');
+      final ImageProvider imageProvider;
+      
+      if (isNetwork) {
+        imageProvider = CachedNetworkImageProvider(imageUrl);
+      } else {
+        final file = File(imageUrl);
+        if (!await file.exists()) {
+          print('⚠️ [PlayerService] 本地封面文件不存在: $imageUrl');
+          return null;
+        }
+        imageProvider = FileImage(file);
+      }
       
       final paletteGenerator = await PaletteGenerator.fromImageProvider(
         imageProvider,
@@ -1073,9 +1105,23 @@ class PlayerService extends ChangeNotifier {
   }
 
   /// 从图片底部区域提取主题色（用于移动端渐变模式）
+  /// 支持网络 URL 和本地文件路径
   Future<Color?> _extractColorFromBottomRegion(String imageUrl) async {
     try {
-      final imageProvider = CachedNetworkImageProvider(imageUrl);
+      // 判断是网络 URL 还是本地文件路径
+      final isNetwork = imageUrl.startsWith('http://') || imageUrl.startsWith('https://');
+      final ImageProvider imageProvider;
+      
+      if (isNetwork) {
+        imageProvider = CachedNetworkImageProvider(imageUrl);
+      } else {
+        final file = File(imageUrl);
+        if (!await file.exists()) {
+          print('⚠️ [PlayerService] 本地封面文件不存在: $imageUrl');
+          return null;
+        }
+        imageProvider = FileImage(file);
+      }
       
       // ✅ 优化：使用缩略图加载，减少处理时间
       final imageStream = imageProvider.resolve(

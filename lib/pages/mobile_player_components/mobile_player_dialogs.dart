@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../../services/sleep_timer_service.dart';
@@ -307,27 +308,7 @@ class MobilePlayerDialogs {
               // 封面
               ClipRRect(
                 borderRadius: BorderRadius.circular(4),
-                child: CachedNetworkImage(
-                  imageUrl: track.picUrl,
-                  width: 48,
-                  height: 48,
-                  fit: BoxFit.cover,
-                  placeholder: (context, url) => Container(
-                    width: 48,
-                    height: 48,
-                    color: Colors.white12,
-                  ),
-                  errorWidget: (context, url, error) => Container(
-                    width: 48,
-                    height: 48,
-                    color: Colors.white12,
-                    child: const Icon(
-                      Icons.music_note,
-                      color: Colors.white38,
-                      size: 24,
-                    ),
-                  ),
-                ),
+                child: _buildCoverImage(track.picUrl),
               ),
 
               const SizedBox(width: 12),
@@ -365,6 +346,56 @@ class MobilePlayerDialogs {
         ),
       ),
     );
+  }
+
+  /// 构建封面图片（支持网络 URL 和本地文件路径）
+  static Widget _buildCoverImage(String imageUrl) {
+    // 判断是网络 URL 还是本地文件路径
+    final isNetwork = imageUrl.startsWith('http://') || imageUrl.startsWith('https://');
+    
+    if (isNetwork) {
+      return CachedNetworkImage(
+        imageUrl: imageUrl,
+        width: 48,
+        height: 48,
+        fit: BoxFit.cover,
+        placeholder: (context, url) => Container(
+          width: 48,
+          height: 48,
+          color: Colors.white12,
+        ),
+        errorWidget: (context, url, error) => Container(
+          width: 48,
+          height: 48,
+          color: Colors.white12,
+          child: const Icon(
+            Icons.music_note,
+            color: Colors.white38,
+            size: 24,
+          ),
+        ),
+      );
+    } else {
+      // 本地文件
+      return SizedBox(
+        width: 48,
+        height: 48,
+        child: Image.file(
+          File(imageUrl),
+          fit: BoxFit.cover,
+          errorBuilder: (context, error, stackTrace) => Container(
+            width: 48,
+            height: 48,
+            color: Colors.white12,
+            child: const Icon(
+              Icons.music_note,
+              color: Colors.white38,
+              size: 24,
+            ),
+          ),
+        ),
+      );
+    }
   }
 }
 

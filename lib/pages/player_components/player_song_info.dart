@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:fluent_ui/fluent_ui.dart' as fluent;
@@ -94,6 +95,21 @@ class PlayerSongInfo extends StatelessWidget {
         fit: BoxFit.cover,
       );
     }
+    // 检查是否为网络图片
+    final isNetwork = imageUrl.startsWith('http') || imageUrl.startsWith('https');
+
+    if (!isNetwork) {
+      // 本地文件
+      return Image.file(
+        File(imageUrl),
+        fit: BoxFit.cover,
+        errorBuilder: (context, error, stackTrace) => Container(
+          color: Colors.grey[800],
+          child: const Icon(Icons.music_note, size: 100, color: Colors.white54),
+        ),
+      );
+    }
+
     return CachedNetworkImage(
       imageUrl: imageUrl,
       fit: BoxFit.cover,

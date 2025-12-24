@@ -29,6 +29,7 @@ import 'package:cyrene_music/services/tray_service.dart';
 import 'package:cyrene_music/services/url_service.dart';
 import 'package:cyrene_music/services/version_service.dart';
 import 'package:cyrene_music/services/mini_player_window_service.dart';
+import 'package:cyrene_music/services/local_library_service.dart';
 import 'package:cyrene_music/pages/mini_player_window_page.dart';
 import 'package:cyrene_music/utils/theme_manager.dart';
 import 'package:cyrene_music/services/startup_logger.dart';
@@ -207,6 +208,11 @@ Future<void> main() async {
       await PlayerService().initialize();
     });
     log(' 播放器服务已初始化');
+
+    await timed('LocalLibraryService.init', () async {
+      await LocalLibraryService().init();
+    });
+    log(' 本地音乐库服务已初始化');
   
     await timed('LyricStyleService.initialize', () async {
       await LyricStyleService().initialize();

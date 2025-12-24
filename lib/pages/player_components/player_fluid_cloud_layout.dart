@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'dart:ui';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
@@ -78,7 +79,14 @@ class _PlayerFluidCloudLayoutState extends State<PlayerFluidCloudLayout> {
       });
 
       if (newImageUrl.isNotEmpty) {
-        final provider = CachedNetworkImageProvider(newImageUrl);
+        // 判断是网络 URL 还是本地文件路径
+        final isNetwork = newImageUrl.startsWith('http://') || newImageUrl.startsWith('https://');
+        final ImageProvider provider;
+        if (isNetwork) {
+          provider = CachedNetworkImageProvider(newImageUrl);
+        } else {
+          provider = FileImage(File(newImageUrl));
+        }
         _pendingCoverPrecache = precacheImage(
           provider,
           context,
@@ -192,20 +200,7 @@ class _PlayerFluidCloudLayoutState extends State<PlayerFluidCloudLayout> {
         clipBehavior: Clip.antiAlias,
         child: imageUrl.isNotEmpty
             ? RepaintBoundary(
-                child: CachedNetworkImage(
-                  key: ValueKey(imageUrl),
-                  imageUrl: imageUrl,
-                  fit: BoxFit.cover,
-                  memCacheWidth: 1024,
-                  memCacheHeight: 1024,
-                  filterQuality: FilterQuality.medium,
-                  placeholder: (context, url) => Container(
-                    color: Colors.grey[900],
-                  ),
-                  errorWidget: (context, url, error) => Container(
-                    color: Colors.grey[900],
-                  ),
-                ),
+                child: _buildCoverImage(imageUrl),
               )
             : Container(
                 color: Colors.grey[900],
@@ -446,6 +441,45 @@ class _PlayerFluidCloudLayoutState extends State<PlayerFluidCloudLayout> {
         showTranslation: widget.showTranslation,
       ),
     );
+  }
+
+  /// 构建封面图片（支持网络 URL 和本地文件路径）
+  Widget _buildCoverImage(String imageUrl) {
+    // 判断是网络 URL 还是本地文件路径
+    final isNetwork = imageUrl.startsWith('http://') || imageUrl.startsWith('https://');
+    
+    if (isNetwork) {
+      return CachedNetworkImage(
+        key: ValueKey(imageUrl),
+        imageUrl: imageUrl,
+        fit: BoxFit.cover,
+        memCacheWidth: 1024,
+        memCacheHeight: 1024,
+        filterQuality: FilterQuality.medium,
+        placeholder: (context, url) => Container(
+          color: Colors.grey[900],
+        ),
+        errorWidget: (context, url, error) => Container(
+          color: Colors.grey[900],
+        ),
+      );
+    } else {
+      // 本地文件
+      return Image.file(
+        File(imageUrl),
+        key: ValueKey(imageUrl),
+        fit: BoxFit.cover,
+        filterQuality: FilterQuality.medium,
+        errorBuilder: (context, error, stackTrace) => Container(
+          color: Colors.grey[900],
+          child: const Icon(
+            Icons.music_note,
+            size: 80,
+            color: Colors.white54,
+          ),
+        ),
+      );
+    }
   }
 
   String _formatDuration(Duration duration) {

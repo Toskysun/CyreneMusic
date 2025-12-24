@@ -20,6 +20,13 @@
     <!-- 写入外部存储（Android 10 以下） -->
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"
         android:maxSdkVersion="29" />
+    <!-- 读取外部存储（Android 10 以下） -->
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"
+        android:maxSdkVersion="32" />
+    <!-- Android 13+ 媒体文件权限 -->
+    <uses-permission android:name="android.permission.READ_MEDIA_AUDIO" />
+    <!-- 管理所有文件权限（用于访问任意目录） -->
+    <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE" />
     
     <application
         android:label="Cyrene Music"

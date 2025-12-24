@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
@@ -64,7 +65,7 @@ class ColorExtractionService {
   // 缓存大小限制
   static const int _maxCacheSize = 50;
 
-  /// 从网络图片 URL 提取颜色（异步，不阻塞主线程）
+  /// 从网络图片 URL 或本地文件路径提取颜色（异步，不阻塞主线程）
   Future<ColorExtractionResult?> extractColorsFromUrl(
     String imageUrl, {
     int sampleSize = 32,
@@ -95,14 +96,28 @@ class ColorExtractionService {
     _extractingUrls.add(imageUrl);
 
     try {
-      // 1. 下载图片数据（在主线程，但使用 http 异步）
-      final response = await http.get(Uri.parse(imageUrl)).timeout(timeout);
-      if (response.statusCode != 200) {
-        debugPrint('⚠️ [ColorExtraction] 图片下载失败: ${response.statusCode}');
-        return null;
+      Uint8List imageBytes;
+      
+      // 判断是网络 URL 还是本地文件路径
+      final isNetwork = imageUrl.startsWith('http://') || imageUrl.startsWith('https://');
+      
+      if (isNetwork) {
+        // 1. 下载网络图片数据（在主线程，但使用 http 异步）
+        final response = await http.get(Uri.parse(imageUrl)).timeout(timeout);
+        if (response.statusCode != 200) {
+          debugPrint('⚠️ [ColorExtraction] 图片下载失败: ${response.statusCode}');
+          return null;
+        }
+        imageBytes = response.bodyBytes;
+      } else {
+        // 本地文件：直接读取文件字节
+        final file = File(imageUrl);
+        if (!await file.exists()) {
+          debugPrint('⚠️ [ColorExtraction] 本地文件不存在: $imageUrl');
+          return null;
+        }
+        imageBytes = await file.readAsBytes();
       }
-
-      final imageBytes = response.bodyBytes;
 
       // 2. 在 isolate 中解码图片并提取颜色（使用纯 Dart 的 image 包）
       final result = await compute(
