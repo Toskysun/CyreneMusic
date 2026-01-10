@@ -10,6 +10,8 @@ import '../../services/auto_update_service.dart';
 import '../../services/url_service.dart';
 import '../../services/version_service.dart';
 import '../../utils/theme_manager.dart';
+import '../../widgets/material/material_settings_widgets.dart';
+
 
 /// 关于设置组件
 class AboutSettings extends StatefulWidget {
@@ -126,138 +128,132 @@ class _AboutSettingsState extends State<AboutSettings> {
       return _buildCupertinoUI(context, hasUpdate, latestVersion, autoSupported, showStatus);
     }
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+    return MD3SettingsSection(
       children: [
-        _buildSectionTitle(context, '关于'),
-        Card(
-          child: Column(
-            children: [
-              ListTile(
-                leading: const Icon(Icons.info_outline),
-                title: const Text('版本信息'),
-                subtitle: Text('v${_versionService.currentVersion}'),
-                trailing: const Icon(Icons.chevron_right),
-                onTap: () => _showAboutDialog(context),
+        MD3SettingsTile(
+          leading: const Icon(Icons.info_outline),
+          title: '版本信息',
+          subtitle: 'v${_versionService.currentVersion}',
+          trailing: const Icon(Icons.chevron_right),
+          onTap: () => _showAboutDialog(context),
+        ),
+        MD3SettingsTile(
+          leading: const Icon(Icons.system_update_outlined),
+          title: '检查更新',
+          subtitle: '查看是否有新版本',
+          trailing: const Icon(Icons.chevron_right),
+          onTap: () => _checkForUpdate(context),
+        ),
+        MD3SwitchTile(
+          leading: const Icon(Icons.autorenew_outlined),
+          title: '自动更新',
+          subtitle: autoSupported
+              ? '开启后检测到新版本将自动下载并安装'
+              : '当前平台暂不支持自动更新（仅 Windows 和 Android）',
+          value: autoSupported && _autoUpdateService.isEnabled,
+          enabled: autoSupported,
+          onChanged: (value) => _toggleAutoUpdate(context, value),
+        ),
+        if (autoSupported)
+          MD3SettingsTile(
+            leading: const Icon(Icons.flash_on_outlined),
+            title: '一键更新',
+            subtitle: hasUpdate && latestVersion != null
+                ? '发现新版本 ${latestVersion.version}，点击立即更新'
+                : '需先检查更新，若有新版本可快速安装',
+            trailing: FilledButton.icon(
+              onPressed: () => _triggerQuickUpdate(context),
+              icon: const Icon(Icons.system_update_alt, size: 18),
+              label: const Text('开始更新'),
+            ),
+            onTap: () => _triggerQuickUpdate(context),
+          ),
+        if (showStatus)
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+            child: Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: _autoUpdateService.lastError != null
+                    ? Theme.of(context).colorScheme.errorContainer.withOpacity(0.5)
+                    : Theme.of(context).colorScheme.surfaceContainerHighest.withOpacity(0.5),
+                borderRadius: BorderRadius.circular(16),
               ),
-              const Divider(height: 1),
-              ListTile(
-                leading: const Icon(Icons.system_update),
-                title: const Text('检查更新'),
-                subtitle: const Text('查看是否有新版本'),
-                trailing: const Icon(Icons.chevron_right),
-                onTap: () => _checkForUpdate(context),
-              ),
-              const Divider(height: 1),
-              SwitchListTile.adaptive(
-                secondary: const Icon(Icons.autorenew),
-                value: autoSupported && _autoUpdateService.isEnabled,
-                title: const Text('自动更新'),
-                subtitle: Text(
-                  autoSupported
-                      ? '开启后检测到新版本将自动下载并安装'
-                      : '当前平台暂不支持自动更新（仅 Windows 和 Android）',
-                ),
-                onChanged: autoSupported
-                    ? (value) => _toggleAutoUpdate(context, value)
-                    : null,
-              ),
-              if (autoSupported) const Divider(height: 1),
-              if (autoSupported)
-                ListTile(
-                  leading: const Icon(Icons.flash_on_outlined),
-                  title: const Text('一键更新'),
-                  subtitle: Text(
-                    hasUpdate && latestVersion != null
-                        ? '发现新版本 ${latestVersion.version}，点击立即更新'
-                        : '需先检查更新，若有新版本可快速安装',
-                  ),
-                  trailing: FilledButton.icon(
-                    onPressed: () => _triggerQuickUpdate(context),
-                    icon: const Icon(Icons.system_update_alt),
-                    label: const Text('开始更新'),
-                  ),
-                  onTap: () => _triggerQuickUpdate(context),
-                ),
-              if (showStatus)
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-                  child: Column(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Icon(
-                            _autoUpdateService.lastError != null
-                                ? Icons.error_outline
-                                : _autoUpdateService.requiresRestart
-                                    ? Icons.restart_alt
-                                    : Icons.info_outline,
+                      Icon(
+                        _autoUpdateService.lastError != null
+                            ? Icons.error_outline
+                            : _autoUpdateService.requiresRestart
+                                ? Icons.restart_alt
+                                : Icons.info_outlined,
+                        size: 20,
+                        color: _autoUpdateService.lastError != null
+                            ? Theme.of(context).colorScheme.error
+                            : Theme.of(context).colorScheme.primary,
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Text(
+                          _autoUpdateService.statusMessage,
+                          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                             color: _autoUpdateService.lastError != null
                                 ? Theme.of(context).colorScheme.error
-                                : Theme.of(context).colorScheme.primary,
+                                : null,
                           ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Text(
-                              _autoUpdateService.statusMessage,
-                              style: Theme.of(context)
-                                  .textTheme
-                                  .bodyMedium
-                                  ?.copyWith(
-                                    color: _autoUpdateService.lastError != null
-                                        ? Theme.of(context)
-                                            .colorScheme
-                                            .error
-                                        : null,
-                                  ),
-                            ),
-                          ),
-                        ],
+                        ),
                       ),
-                      if (_autoUpdateService.isUpdating) ...[
-                        const SizedBox(height: 12),
-                        LinearProgressIndicator(
-                          value: _autoUpdateService.progress > 0 &&
-                                  _autoUpdateService.progress < 1
-                              ? _autoUpdateService.progress
-                              : null,
-                        ),
-                      ],
-                      if (_autoUpdateService.requiresRestart) ...[
-                        const SizedBox(height: 12),
-                        Text(
-                          '更新已完成，请退出并重新启动应用以应用最新版本。',
-                          style: Theme.of(context)
-                              .textTheme
-                              .bodySmall
-                              ?.copyWith(fontWeight: FontWeight.bold),
-                        ),
-                      ],
-                      if (_autoUpdateService.lastSuccessAt != null) ...[
-                        const SizedBox(height: 8),
-                        Text(
-                          '最后更新: ${_formatDateTime(_autoUpdateService.lastSuccessAt!)}',
-                          style: Theme.of(context).textTheme.bodySmall,
-                        ),
-                      ],
-                      if (_autoUpdateService.lastError != null) ...[
-                        const SizedBox(height: 8),
-                        Text(
-                          '错误详情: ${_autoUpdateService.lastError}',
-                          style: Theme.of(context)
-                              .textTheme
-                              .bodySmall
-                              ?.copyWith(color: Theme.of(context).colorScheme.error),
-                        ),
-                      ],
                     ],
                   ),
-                ),
-            ],
+                  if (_autoUpdateService.isUpdating) ...[
+                    const SizedBox(height: 12),
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(8),
+                      child: LinearProgressIndicator(
+                        value: _autoUpdateService.progress > 0 &&
+                                _autoUpdateService.progress < 1
+                            ? _autoUpdateService.progress
+                            : null,
+                        minHeight: 6,
+                      ),
+                    ),
+                  ],
+                  if (_autoUpdateService.requiresRestart) ...[
+                    const SizedBox(height: 12),
+                    Text(
+                      '更新已完成，请退出并重新启动应用以应用最新版本。',
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        fontWeight: FontWeight.bold,
+                        color: Theme.of(context).colorScheme.primary,
+                      ),
+                    ),
+                  ],
+                  if (_autoUpdateService.lastSuccessAt != null) ...[
+                    const SizedBox(height: 8),
+                    Text(
+                      '最后更新: ${_formatDateTime(_autoUpdateService.lastSuccessAt!)}',
+                      style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
+                  if (_autoUpdateService.lastError != null) ...[
+                    const SizedBox(height: 8),
+                    Text(
+                      '错误详情: ${_autoUpdateService.lastError}',
+                      style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                        color: Theme.of(context).colorScheme.error,
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
           ),
-        ),
       ],
     );
   }

@@ -1159,13 +1159,18 @@ class _UserCardState extends State<UserCard> {
     return _buildUserInfoCard(context, user);
   }
 
-  /// 构建登录卡片（未登录状态）
   Widget _buildLoginCard(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
+    final theme = Theme.of(context);
     
-    return Card(
-      child: Padding(
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16.0),
+      child: Container(
         padding: const EdgeInsets.all(24.0),
+        decoration: BoxDecoration(
+          color: colorScheme.surfaceContainerLow,
+          borderRadius: BorderRadius.circular(24),
+        ),
         child: Row(
           children: [
             Container(
@@ -1188,14 +1193,14 @@ class _UserCardState extends State<UserCard> {
                 children: [
                   Text(
                     '未登录',
-                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    style: theme.textTheme.titleMedium?.copyWith(
                       fontWeight: FontWeight.bold,
                     ),
                   ),
                   const SizedBox(height: 4),
                   Text(
                     '登录后可享受更多功能',
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    style: theme.textTheme.bodySmall?.copyWith(
                       color: colorScheme.onSurfaceVariant,
                     ),
                   ),
@@ -1226,10 +1231,16 @@ class _UserCardState extends State<UserCard> {
       builder: (context, child) {
         final location = LocationService().currentLocation;
         final isLoadingLocation = LocationService().isLoading;
-        
-        return Card(
-          child: Padding(
+        final theme = Theme.of(context);
+      
+        return Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16.0),
+          child: Container(
             padding: const EdgeInsets.all(24.0),
+            decoration: BoxDecoration(
+              color: colorScheme.surfaceContainerLow,
+              borderRadius: BorderRadius.circular(24),
+            ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -1274,7 +1285,7 @@ class _UserCardState extends State<UserCard> {
                             children: [
                               Text(
                                 user.username,
-                                style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                                style: theme.textTheme.titleMedium?.copyWith(
                                   fontWeight: FontWeight.bold,
                                 ),
                               ),
@@ -1312,7 +1323,7 @@ class _UserCardState extends State<UserCard> {
                                       const SizedBox(width: 4),
                                       Text(
                                         _getSponsorBadgeText(),
-                                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                        style: theme.textTheme.bodySmall?.copyWith(
                                           color: Colors.white,
                                           fontWeight: FontWeight.bold,
                                           fontSize: 11,
@@ -1337,7 +1348,7 @@ class _UserCardState extends State<UserCard> {
                               Expanded(
                                 child: Text(
                                   user.email,
-                                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                  style: theme.textTheme.bodySmall?.copyWith(
                                     color: colorScheme.onSurfaceVariant,
                                   ),
                                   overflow: TextOverflow.ellipsis,
@@ -1370,7 +1381,7 @@ class _UserCardState extends State<UserCard> {
                                     const SizedBox(width: 4),
                                     Text(
                                       '获取中...',
-                                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                      style: theme.textTheme.bodySmall?.copyWith(
                                         color: colorScheme.onSurfaceVariant,
                                       ),
                                     ),
@@ -1380,7 +1391,7 @@ class _UserCardState extends State<UserCard> {
                                 Expanded(
                                   child: Text(
                                     location.shortDescription,
-                                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                    style: theme.textTheme.bodySmall?.copyWith(
                                       color: colorScheme.onSurfaceVariant,
                                     ),
                                     overflow: TextOverflow.ellipsis,
@@ -1392,7 +1403,7 @@ class _UserCardState extends State<UserCard> {
                                     children: [
                                       Text(
                                         '获取失败',
-                                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                        style: theme.textTheme.bodySmall?.copyWith(
                                           color: colorScheme.error,
                                         ),
                                       ),
@@ -1416,9 +1427,11 @@ class _UserCardState extends State<UserCard> {
                         ],
                       ),
                     ),
+                    const SizedBox(width: 12),
+                    // 退出按钮
                     IconButton(
-                      onPressed: () => _handleLogout(context),
-                      icon: const Icon(Icons.logout),
+                      onPressed: () => AuthService().logout(),
+                      icon: Icon(Icons.logout_rounded, color: colorScheme.error),
                       tooltip: '退出登录',
                     ),
                   ],

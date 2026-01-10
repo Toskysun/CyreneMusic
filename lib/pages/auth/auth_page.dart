@@ -151,7 +151,10 @@ class _AuthPageState extends State<AuthPage> with SingleTickerProviderStateMixin
                           if (AuthOverlayService().isVisible) {
                             AuthOverlayService().hide(false);
                           } else {
-                            Navigator.of(context).maybePop();
+                            final nav = Navigator.of(context);
+                            if (nav.canPop()) {
+                              nav.pop(true);
+                            }
                           }
                         },
                         icon: const Icon(Icons.check),
@@ -439,11 +442,14 @@ class _LoginViewState extends State<_LoginView> {
           print('❌ [AuthPage] IP归属地更新异常: $error');
         });
         
-        // 覆盖层模式下关闭覆盖层，否则关闭路由
+        // 覆盖层模式下关闭覆盖层，否则安全关闭路由
         if (AuthOverlayService().isVisible) {
           AuthOverlayService().hide(true);
         } else {
-          Navigator.pop(context, true);
+          final nav = Navigator.of(context);
+          if (nav.canPop()) {
+            nav.pop(true);
+          }
         }
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -565,7 +571,11 @@ class _LoginViewState extends State<_LoginView> {
                           await Future.delayed(const Duration(milliseconds: 500));
                           if (!mounted) return;
                           setState(() => _isLinuxDoLoading = false);
-                          Navigator.pop(context, true);
+                          
+                          final nav = Navigator.of(context);
+                          if (nav.canPop()) {
+                            nav.pop(true);
+                          }
                         }
                       }
                     } else {
@@ -611,7 +621,10 @@ class _LoginViewState extends State<_LoginView> {
                         if (AuthOverlayService().isVisible) {
                           AuthOverlayService().hide(true);
                         } else {
-                          Navigator.pop(context, true);
+                          final nav = Navigator.of(context);
+                          if (nav.canPop()) {
+                            nav.pop(true);
+                          }
                         }
                       }
                     },
@@ -810,7 +823,12 @@ class _RegisterViewState extends State<_RegisterView> {
         if (AuthOverlayService().isVisible) {
           AuthOverlayService().hide(true);
         } else {
-          Navigator.pop(context, true);
+        if (mounted) {
+          final nav = Navigator.of(context);
+          if (nav.canPop()) {
+            nav.pop(true);
+          }
+        }
         }
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -1187,7 +1205,12 @@ class _ForgotPasswordViewState extends State<_ForgotPasswordView> {
         if (AuthOverlayService().isVisible) {
           AuthOverlayService().hide(true);
         } else {
-          Navigator.pop(context, true);
+        if (mounted) {
+          final nav = Navigator.of(context);
+          if (nav.canPop()) {
+            nav.pop(true);
+          }
+        }
         }
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -1578,7 +1601,12 @@ class _CupertinoLoginViewState extends State<_CupertinoLoginView> {
         if (AuthOverlayService().isVisible) {
           AuthOverlayService().hide(true);
         } else {
-          Navigator.pop(context, true);
+        if (mounted) {
+          final nav = Navigator.of(context);
+          if (nav.canPop()) {
+            nav.pop(true);
+          }
+        }
         }
       } else {
         _showCupertinoAlert(result['message']);
@@ -1595,7 +1623,12 @@ class _CupertinoLoginViewState extends State<_CupertinoLoginView> {
         actions: [
           CupertinoDialogAction(
             child: const Text('确定'),
-            onPressed: () => Navigator.pop(context),
+          onPressed: () {
+            final nav = Navigator.of(context);
+            if (nav.canPop()) {
+              nav.pop();
+            }
+          },
           ),
         ],
       ),
@@ -1694,7 +1727,12 @@ class _CupertinoLoginViewState extends State<_CupertinoLoginView> {
                         await Future.delayed(const Duration(milliseconds: 500));
                         if (!mounted) return;
                         setState(() => _isLinuxDoLoading = false);
-                        Navigator.pop(context, true);
+                      if (mounted) {
+          final nav = Navigator.of(context);
+          if (nav.canPop()) {
+            nav.pop(true);
+          }
+        }
                       }
                     }
                   } else {
@@ -1867,7 +1905,12 @@ class _CupertinoRegisterViewState extends State<_CupertinoRegisterView> {
         if (AuthOverlayService().isVisible) {
           AuthOverlayService().hide(true);
         } else {
-          Navigator.pop(context, true);
+        if (mounted) {
+          final nav = Navigator.of(context);
+          if (nav.canPop()) {
+            nav.pop(true);
+          }
+        }
         }
       } else {
         _showCupertinoAlert(result['message']);
@@ -1884,7 +1927,12 @@ class _CupertinoRegisterViewState extends State<_CupertinoRegisterView> {
         actions: [
           CupertinoDialogAction(
             child: const Text('确定'),
-            onPressed: () => Navigator.pop(context),
+          onPressed: () {
+            final nav = Navigator.of(context);
+            if (nav.canPop()) {
+              nav.pop();
+            }
+          },
           ),
         ],
       ),
@@ -2178,7 +2226,12 @@ class _CupertinoForgotPasswordViewState extends State<_CupertinoForgotPasswordVi
         if (AuthOverlayService().isVisible) {
           AuthOverlayService().hide(true);
         } else {
-          Navigator.pop(context, true);
+        if (mounted) {
+          final nav = Navigator.of(context);
+          if (nav.canPop()) {
+            nav.pop(true);
+          }
+        }
         }
       } else {
         _showCupertinoAlert(result['message']);
@@ -2195,7 +2248,12 @@ class _CupertinoForgotPasswordViewState extends State<_CupertinoForgotPasswordVi
         actions: [
           CupertinoDialogAction(
             child: const Text('确定'),
-            onPressed: () => Navigator.pop(context),
+          onPressed: () {
+            final nav = Navigator.of(context);
+            if (nav.canPop()) {
+              nav.pop();
+            }
+          },
           ),
         ],
       ),

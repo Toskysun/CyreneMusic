@@ -5,6 +5,8 @@ import 'package:fluent_ui/fluent_ui.dart' as fluent_ui;
 import '../../utils/theme_manager.dart';
 import '../../services/player_background_service.dart';
 import '../../widgets/fluent_settings_card.dart';
+import '../../widgets/material/material_settings_widgets.dart';
+
 
 /// 外观设置入口组件（显示在主设置页面）
 class AppearanceSettings extends StatelessWidget {
@@ -97,27 +99,14 @@ class AppearanceSettings extends StatelessWidget {
 
   /// 构建 Material UI 版本 - 入口卡片
   Widget _buildMaterialUI(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+    return MD3SettingsSection(
       children: [
-        Padding(
-          padding: const EdgeInsets.only(bottom: 12.0, left: 4.0),
-          child: Text(
-            '外观',
-            style: Theme.of(context).textTheme.titleMedium?.copyWith(
-              fontWeight: FontWeight.bold,
-              color: Theme.of(context).colorScheme.primary,
-            ),
-          ),
-        ),
-        Card(
-          child: ListTile(
-            leading: const Icon(Icons.palette_outlined),
-            title: const Text('外观设置'),
-            subtitle: Text(_getSubtitle()),
-            trailing: const Icon(Icons.chevron_right),
-            onTap: onTap,
-          ),
+        MD3SettingsTile(
+          leading: const Icon(Icons.palette_outlined),
+          title: '外观设置',
+          subtitle: _getSubtitle(),
+          trailing: const Icon(Icons.chevron_right),
+          onTap: onTap,
         ),
       ],
     );

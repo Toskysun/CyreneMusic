@@ -3,7 +3,9 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:fluent_ui/fluent_ui.dart' as fluent_ui;
 import '../../utils/theme_manager.dart';
+import '../../widgets/material/material_settings_widgets.dart';
 import '../../widgets/desktop_lyric_settings.dart';
+
 import '../../widgets/android_floating_lyric_settings.dart';
 
 /// 歌词设置详情内容（二级页面内容，嵌入在设置页面中）
@@ -74,24 +76,17 @@ class _LyricSettingsContentState extends State<LyricSettingsContent> {
     return _buildMaterialUI(context);
   }
 
-  /// 构建 Material UI 版本
   Widget _buildMaterialUI(BuildContext context) {
     return ListView(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.symmetric(vertical: 8),
       children: [
         // 平台特定的歌词设置
         if (Platform.isWindows) ...[
-          _buildMaterialSection(
-            context,
-            title: '桌面歌词',
+          MD3SettingsSection(
             children: const [DesktopLyricSettings()],
           ),
         ] else if (Platform.isAndroid) ...[
-          _buildMaterialSection(
-            context,
-            title: '悬浮歌词',
-            children: const [AndroidFloatingLyricSettings()],
-          ),
+          const AndroidFloatingLyricSettings(),
         ],
       ],
     );

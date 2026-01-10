@@ -140,7 +140,12 @@ class _RegisterPageState extends State<RegisterPage> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text(result['message'])),
         );
-        Navigator.pop(context); // 返回登录页面
+        if (mounted) {
+          final nav = Navigator.of(context);
+          if (nav.canPop()) {
+            nav.pop();
+          }
+        }
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(

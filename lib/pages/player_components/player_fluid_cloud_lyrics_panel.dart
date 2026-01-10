@@ -30,9 +30,10 @@ class PlayerFluidCloudLyricsPanel extends StatefulWidget {
 class _PlayerFluidCloudLyricsPanelState extends State<PlayerFluidCloudLyricsPanel>
     with TickerProviderStateMixin {
   
-  // 核心变量 - 对应 CSS var(--line-height)
+  // 核心变量
+  final double _lineHeight = 100.0;
+  static const double _maxActiveScale = 1.15; // 最大活跃缩放比例
   // HTML 中是 80px，这里我们也用 80 逻辑像素
-  final double _lineHeight = 80.0; 
   
   // 滚动/拖拽相关
   double _dragOffset = 0.0;
@@ -112,7 +113,10 @@ class _PlayerFluidCloudLyricsPanelState extends State<PlayerFluidCloudLyricsPane
             // [New] 动态高度计算
             // 1. 计算每个可见 Item 的高度
             final Map<int, double> heights = {};
-            final textMaxWidth = viewportWidth - 80; // horizontal padding 40 * 2
+            // 🔥 关键重构：为了应对活跃行 1.15x 的放大，基础布局宽度需要收缩
+            // 使得 基础宽度 * 1.15 = 视口宽度。这样放大后文字刚好贴边不溢出。
+            final layoutWidth = viewportWidth / _maxActiveScale;
+            final textMaxWidth = layoutWidth - 80; // horizontal padding 40 * 2
             
             for (int i = minIndex; i <= maxIndex; i++) {
               heights[i] = _measureLyricItemHeight(i, textMaxWidth);
@@ -122,31 +126,38 @@ class _PlayerFluidCloudLyricsPanelState extends State<PlayerFluidCloudLyricsPane
             final Map<int, double> offsets = {};
             offsets[widget.currentLyricIndex] = 0;
 
-            // 向下累加 (active + 1, active + 2 ...)
+            // 🔥 关键重构：完全自适应偏移量计算
+            // 每一行在垂直布局中占用的空间 = 其原始高度 * 对应的缩放比例
+            
             double currentOffset = 0;
-            double prevHalfHeight = (heights[widget.currentLyricIndex] ?? _lineHeight) / 2;
+            // 活跃行的半高度（已缩放）
+            double prevHalfHeight = ((heights[widget.currentLyricIndex] ?? _lineHeight) * 1.15) / 2;
             
             for (int i = widget.currentLyricIndex + 1; i <= maxIndex; i++) {
               final h = heights[i] ?? _lineHeight;
-              currentOffset += prevHalfHeight + (h / 2); 
+              final s = _getScaleSync(i - widget.currentLyricIndex); // 获取目标行的最终缩放比例
+              final scaledHalfHeight = (h * s) / 2;
+              currentOffset += prevHalfHeight + scaledHalfHeight; 
               offsets[i] = currentOffset;
-              prevHalfHeight = h / 2;
+              prevHalfHeight = scaledHalfHeight;
             }
 
             // 向上累加 (active - 1, active - 2 ...)
             currentOffset = 0;
-            double nextHalfHeight = (heights[widget.currentLyricIndex] ?? _lineHeight) / 2;
+            double nextHalfHeight = ((heights[widget.currentLyricIndex] ?? _lineHeight) * 1.15) / 2;
             
             for (int i = widget.currentLyricIndex - 1; i >= minIndex; i--) {
               final h = heights[i] ?? _lineHeight;
-              currentOffset -= (nextHalfHeight + h / 2);
+              final s = _getScaleSync(i - widget.currentLyricIndex);
+              final scaledHalfHeight = (h * s) / 2;
+              currentOffset -= (nextHalfHeight + scaledHalfHeight);
               offsets[i] = currentOffset;
-              nextHalfHeight = h / 2;
+              nextHalfHeight = scaledHalfHeight;
             }
 
             List<Widget> children = [];
             for (int i = minIndex; i <= maxIndex; i++) {
-              children.add(_buildLyricItem(i, centerY, offsets[i] ?? 0.0, heights[i] ?? _lineHeight));
+              children.add(_buildLyricItem(i, centerY, offsets[i] ?? 0.0, heights[i] ?? _lineHeight, layoutWidth));
             }
 
             return GestureDetector(
@@ -190,14 +201,18 @@ class _PlayerFluidCloudLyricsPanelState extends State<PlayerFluidCloudLyricsPane
           fontFamily: fontFamily,
           fontSize: fontSize,
           fontWeight: FontWeight.w800,
-          height: 1.1,
+          height: 1.15,
         ),
       ),
       textDirection: TextDirection.ltr,
       // 移除 maxLines 限制，实现自适应宽度换行后的真实高度测量
     );
     textPainter.layout(maxWidth: maxWidth);
-    double h = textPainter.height * 1.3 / 1.1; // 增加行高比例
+    
+    // 计算行数以补偿 _WordFillWidget 内部的 Padding (上下共 12.0)
+    int numLines = (textPainter.height / (fontSize * 1.15)).round();
+    if (numLines <= 0) numLines = 1;
+    double h = textPainter.height + (numLines * 12.0); 
 
     // 测量翻译高度
     if (widget.showTranslation && lyric.translation != null && lyric.translation!.isNotEmpty) {
@@ -208,19 +223,18 @@ class _PlayerFluidCloudLyricsPanelState extends State<PlayerFluidCloudLyricsPane
             fontFamily: fontFamily,
             fontSize: 18, // 与 _buildInnerContent 保持一致
             fontWeight: FontWeight.w600,
-            height: 1.0,
+            height: 1.4, // 保持与渲染一致的 height
           ),
         ),
         textDirection: TextDirection.ltr,
-        // 翻译也支持换行测量
       );
       transPainter.layout(maxWidth: maxWidth);
-      h += 8.0; // 增加原文与译文之间的间距
-      h += transPainter.height * 1.4; // 增加译文自身的行高
+      h += 4.0; // 降低原文与译文之间的间距 (原 8.0)
+      h += transPainter.height; // 使用真实高度
     }
     
-    // 增加一点基础 Padding 上下余量，避免太拥挤
-    h += 24.0; 
+    // 增加最后的一点安全余量 (底部额外留白)
+    h += 8.0; 
     
     // 保证最小高度，避免空行太窄
     final result = max(h, _lineHeight);
@@ -234,7 +248,14 @@ class _PlayerFluidCloudLyricsPanelState extends State<PlayerFluidCloudLyricsPane
     return result;
   }
 
-  Widget _buildLyricItem(int index, double centerYOffset, double relativeOffset, double itemHeight) {
+  /// 内部辅助方法：计算同步缩放值（用于偏移量预计算）
+  double _getScaleSync(int diff) {
+    if (diff == 0) return _maxActiveScale;
+    if (diff.abs() < 3) return 1.0 - diff.abs() * 0.1;
+    return 0.7;
+  }
+
+  Widget _buildLyricItem(int index, double centerYOffset, double relativeOffset, double itemHeight, double layoutWidth) {
     final activeIndex = widget.currentLyricIndex;
     final diff = index - activeIndex;
     
@@ -245,30 +266,22 @@ class _PlayerFluidCloudLyricsPanelState extends State<PlayerFluidCloudLyricsPane
     // Math.sin(diff * 0.8) * 20
     final double sineOffset = sin(diff * 0.8) * 20.0;
     
-    // 3. 最终Y坐标
+    // 4. 缩放逻辑
+    double targetScale = _getScaleSync(diff);
+
+    // 5. 最终Y坐标
     // centerYOffset 是屏幕中心
     // baseTranslation 是该 Item 中心相对于屏幕中心的偏移
     // sineOffset 是动画偏移
-    // 最后要减去 itemHeight / 2 因为 Positioned top 是左上角
-    double targetY = centerYOffset + baseTranslation + sineOffset - (itemHeight / 2);
+    // 最后要减去 (itemHeight * targetScale) / 2 因为 Positioned top 是左上角
+    double targetY = centerYOffset + baseTranslation + sineOffset - (itemHeight * targetScale / 2);
 
     // 叠加拖拽偏移
     if (_isDragging) {
        targetY += _dragOffset;
     }
     
-    // 4. 缩放逻辑
-    // const scale = i === index ? 1.15 : (Math.abs(diff) < 3 ? 1 - Math.abs(diff) * 0.1 : 0.7);
-    double targetScale;
-    if (diff == 0) {
-      targetScale = 1.15;
-    } else if (diff.abs() < 3) {
-      targetScale = 1.0 - diff.abs() * 0.1;
-    } else {
-      targetScale = 0.7;
-    }
-
-    // 5. 透明度逻辑
+    // 6. 透明度逻辑
     // const opacity = Math.abs(diff) > 4 ? 0 : 1 - Math.abs(diff) * 0.2;
     double targetOpacity;
     if (diff.abs() > 4) {
@@ -298,6 +311,7 @@ class _PlayerFluidCloudLyricsPanelState extends State<PlayerFluidCloudLyricsPane
       lyrics: widget.lyrics,     
       index: index,             
       lineHeight: _lineHeight,
+      viewportWidth: layoutWidth, // [Refactor] 这里传递其实是缩减后的基础布局宽度
       targetY: targetY,
       targetScale: targetScale,
       targetOpacity: targetOpacity,
@@ -328,6 +342,7 @@ class _ElasticLyricLine extends StatefulWidget {
   final List<LyricLine> lyrics;
   final int index;
   final double lineHeight;
+  final double viewportWidth;
   
   final double targetY;
   final double targetScale;
@@ -346,6 +361,7 @@ class _ElasticLyricLine extends StatefulWidget {
     required this.lyrics,
     required this.index,
     required this.lineHeight,
+    required this.viewportWidth,
     required this.targetY,
     required this.targetScale,
     required this.targetOpacity,
@@ -479,8 +495,8 @@ class _ElasticLyricLineState extends State<_ElasticLyricLine> with TickerProvide
     return Positioned(
       top: _y,
       left: 0,
-      right: 0,
-      // height: widget.lineHeight, // Remove strict height constraint to allow natural wrapping without overflow
+      width: widget.viewportWidth, // [Refactor] 显式设置宽度为缩减后的 layoutWidth
+      // height: widget.lineHeight, // Remove strict height constraint
       child: Transform.scale(
         scale: _scale,
         alignment: Alignment.centerLeft, // HTML: transform-origin: left center
@@ -489,6 +505,8 @@ class _ElasticLyricLineState extends State<_ElasticLyricLine> with TickerProvide
           child: _OptionalBlur(
             blur: _blur,
             child: Container(
+              // 关键约束：限制渲染宽度与测量宽度一致
+              constraints: BoxConstraints(maxWidth: widget.viewportWidth),
               padding: const EdgeInsets.symmetric(horizontal: 40), // HTML: padding: 0 40px
               alignment: Alignment.centerLeft, // HTML: display: flex; align-items: center
               child: _buildInnerContent(),
@@ -539,7 +557,7 @@ class _ElasticLyricLineState extends State<_ElasticLyricLine> with TickerProvide
              fontSize: textFontSize, 
              fontWeight: FontWeight.w800,
              color: Colors.white,
-             height: 1.3, // 增加行高以减小间距感到拥挤
+             height: 1.15, // 缩小行高以修复间距过大问题
         ),
       );
     } else {
@@ -550,7 +568,7 @@ class _ElasticLyricLineState extends State<_ElasticLyricLine> with TickerProvide
           fontSize: textFontSize, 
           fontWeight: FontWeight.w800,
           color: textColor,
-          height: 1.3, // 增加行高以减小间距感到拥挤
+          height: 1.15, // 缩小行高以修复间距过大问题
         ),
       );
     }
@@ -564,7 +582,7 @@ class _ElasticLyricLineState extends State<_ElasticLyricLine> with TickerProvide
         children: [
           textWidget,
           Padding(
-            padding: const EdgeInsets.only(top: 8.0),
+            padding: const EdgeInsets.only(top: 4.0), // 缩小译文间距 (原 8.0)
             child: Text(
               widget.translation!,
               style: TextStyle(
@@ -750,7 +768,7 @@ class _KaraokeTextState extends State<_KaraokeText> with SingleTickerProviderSta
     return Wrap(
       alignment: WrapAlignment.start,
       crossAxisAlignment: WrapCrossAlignment.center,
-      runSpacing: 8.0, // 增加卡拉OK换行间距
+      runSpacing: 0.0, // 将间距归零，以抵消组件内部 Padding 增加带来的空隙
       children: List.generate(words.length, (index) {
         final word = words[index];
         return _WordFillWidget(
@@ -1046,9 +1064,9 @@ class _WordFillWidgetState extends State<_WordFillWidget> with TickerProviderSta
         stops: gradientStops,
       ).createShader(bounds),
       blendMode: BlendMode.srcIn,
-      // Padding 扩展边界：适当增加高度以容纳 descenders (g, y, q) 防止 ShaderMask 剪裁产生白边
+      // Padding 扩展边界：底部增加到 10px 以容纳 g, y, q 等下沉字符防止 ShaderMask 裁切产生白边
       child: Padding(
-        padding: const EdgeInsets.only(top: 6.0, bottom: 6.0),
+        padding: const EdgeInsets.only(top: 2.0, bottom: 10.0),
         child: Text(widget.text, style: widget.style.copyWith(color: Colors.white)),
       ),
     );
@@ -1131,9 +1149,9 @@ class _WordFillWidgetState extends State<_WordFillWidget> with TickerProviderSta
               stops: lStops,
             ).createShader(bounds),
             blendMode: BlendMode.srcIn,
-            // Padding 扩展边界：防止 ShaderMask 剪裁产生的边界伪影
+            // Padding 扩展边界：底部增加到 10px 以容纳 g, y, q 等下沉字符防止 ShaderMask 裁切产生白边
             child: Padding(
-              padding: const EdgeInsets.only(top: 8.0, bottom: 8.0),
+              padding: const EdgeInsets.only(top: 2.0, bottom: 10.0),
               child: Text(letter, style: widget.style.copyWith(color: Colors.white)),
             ),
           ),

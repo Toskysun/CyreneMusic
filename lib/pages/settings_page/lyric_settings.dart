@@ -7,6 +7,8 @@ import '../../services/desktop_lyric_service.dart';
 import '../../services/android_floating_lyric_service.dart';
 import '../../widgets/fluent_settings_card.dart';
 import '../../widgets/cupertino/cupertino_settings_widgets.dart';
+import '../../widgets/material/material_settings_widgets.dart';
+
 
 /// 歌词设置入口组件（显示在主设置页面）
 class LyricSettings extends StatelessWidget {
@@ -36,27 +38,14 @@ class LyricSettings extends StatelessWidget {
 
   /// 构建 Material UI 版本 - 入口卡片
   Widget _buildMaterialUI(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+    return MD3SettingsSection(
       children: [
-        Padding(
-          padding: const EdgeInsets.only(bottom: 12.0, left: 4.0),
-          child: Text(
-            '歌词',
-            style: Theme.of(context).textTheme.titleMedium?.copyWith(
-              fontWeight: FontWeight.bold,
-              color: Theme.of(context).colorScheme.primary,
-            ),
-          ),
-        ),
-        Card(
-          child: ListTile(
-            leading: const Icon(Icons.lyrics_outlined),
-            title: Text(_getTitle()),
-            subtitle: Text(_getSubtitle()),
-            trailing: const Icon(Icons.chevron_right),
-            onTap: onTap,
-          ),
+        MD3SettingsTile(
+          leading: const Icon(Icons.lyrics_outlined),
+          title: _getTitle(),
+          subtitle: _getSubtitle(),
+          trailing: const Icon(Icons.chevron_right),
+          onTap: onTap,
         ),
       ],
     );

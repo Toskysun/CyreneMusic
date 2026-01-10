@@ -82,12 +82,14 @@ class _MobilePlayerPageState extends State<MobilePlayerPage> with TickerProvider
   /// 设置监听器
   void _setupListeners() {
     PlayerService().addListener(_onPlayerStateChanged);
+    PlayerService().positionNotifier.addListener(_onPositionChanged);
     LyricStyleService().addListener(_onLyricStyleChanged);
   }
 
   /// 移除监听器
   void _removeListeners() {
     PlayerService().removeListener(_onPlayerStateChanged);
+    PlayerService().positionNotifier.removeListener(_onPositionChanged);
     LyricStyleService().removeListener(_onLyricStyleChanged);
   }
 
@@ -132,9 +134,15 @@ class _MobilePlayerPageState extends State<MobilePlayerPage> with TickerProvider
           _loadLyrics();
       setState(() {}); // 触发重建以更新UI
     } else {
-      // 只更新歌词行索引，不触发整页重建
-      _updateCurrentLyric();
+      // 这里的全局通知不再包含进度变化，主要是为了捕获除了切歌以外的状态变更（如暂停/恢复）
+      if (mounted) setState(() {}); 
     }
+  }
+
+  /// 进度变化回调（高频，仅由 positionNotifier 触发）
+  void _onPositionChanged() {
+    if (!mounted) return;
+    _updateCurrentLyric();
   }
 
   /// 加载歌词（异步执行，不阻塞 UI）

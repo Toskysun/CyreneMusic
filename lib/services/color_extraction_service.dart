@@ -1,9 +1,11 @@
 import 'dart:async';
+import 'dart:ui' as ui;
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:image/image.dart' as img;
+import 'package:cached_network_image/cached_network_image.dart';
 
 /// 颜色提取结果
 class ColorExtractionResult {
@@ -168,6 +170,102 @@ class ColorExtractionService {
   /// 清除缓存
   void clearCache() {
     _cache.clear();
+  }
+
+  /// 从已缓存的网络图片提取颜色（利用 CachedNetworkImageProvider 的缓存机制）
+  /// 这避免了重复下载图片，特别适合预加载场景
+  Future<ColorExtractionResult?> extractColorsFromCachedImage(
+    String imageUrl, {
+    int sampleSize = 32,
+    Duration timeout = const Duration(seconds: 3),
+  }) async {
+    if (imageUrl.isEmpty) return null;
+
+    // 1. 检查颜色缓存
+    if (_cache.containsKey(imageUrl)) {
+      return _cache[imageUrl];
+    }
+
+    // 判断是否是网络 URL
+    final isNetwork = imageUrl.startsWith('http://') || imageUrl.startsWith('https://');
+    if (!isNetwork) {
+      // 本地文件直接使用原方法
+      return extractColorsFromUrl(imageUrl, sampleSize: sampleSize, timeout: timeout);
+    }
+
+    try {
+      // 2. 使用 CachedNetworkImageProvider 获取图片（会自动使用缓存）
+      final provider = CachedNetworkImageProvider(imageUrl);
+      final imageInfo = await _loadImageFromProvider(provider, timeout);
+      
+      if (imageInfo != null) {
+        // 将图片转换为字节数据
+        final byteData = await imageInfo.image.toByteData(format: ui.ImageByteFormat.png);
+        if (byteData == null) {
+          debugPrint('⚠️ [ColorExtraction] 无法转换图片为字节数据');
+          return null;
+        }
+        
+        final imageBytes = byteData.buffer.asUint8List();
+        debugPrint('🎨 [ColorExtraction] 从 ImageProvider 提取颜色 (${imageBytes.length} bytes)');
+        
+        final result = await compute(
+          _extractColorsInIsolate,
+          _ColorExtractionParams(
+            imageBytes: imageBytes,
+            sampleSize: sampleSize,
+          ),
+        );
+
+        if (result != null) {
+          _cacheResult(imageUrl, result);
+        }
+        return result;
+      } else {
+        debugPrint('⚠️ [ColorExtraction] 无法加载图片: $imageUrl');
+        return null;
+      }
+    } on TimeoutException {
+      debugPrint('⏱️ [ColorExtraction] 加载图片超时: $imageUrl');
+      return null;
+    } catch (e) {
+      debugPrint('⚠️ [ColorExtraction] 从 ImageProvider 提取颜色失败: $e');
+      return null;
+    }
+  }
+
+  /// 从 ImageProvider 加载图片
+  Future<ImageInfo?> _loadImageFromProvider(ImageProvider provider, Duration timeout) async {
+    final completer = Completer<ImageInfo?>();
+    
+    final stream = provider.resolve(const ImageConfiguration());
+    late ImageStreamListener listener;
+    
+    listener = ImageStreamListener(
+      (image, synchronousCall) {
+        if (!completer.isCompleted) {
+          completer.complete(image);
+        }
+        stream.removeListener(listener);
+      },
+      onError: (exception, stackTrace) {
+        if (!completer.isCompleted) {
+          completer.complete(null);
+        }
+        stream.removeListener(listener);
+      },
+    );
+    
+    stream.addListener(listener);
+    
+    // 添加超时
+    return completer.future.timeout(
+      timeout,
+      onTimeout: () {
+        stream.removeListener(listener);
+        return null;
+      },
+    );
   }
 }
 

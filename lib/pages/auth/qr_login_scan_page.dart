@@ -152,7 +152,12 @@ class _QrLoginScanPageState extends State<QrLoginScanPage> {
       if (!mounted) return;
 
       if (ok == true) {
-        Navigator.of(context).pop(true);
+        if (mounted) {
+          final nav = Navigator.of(context);
+          if (nav.canPop()) {
+            nav.pop(true);
+          }
+        }
       } else {
         _handled = false;
         await _controller.start();

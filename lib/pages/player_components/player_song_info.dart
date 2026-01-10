@@ -26,7 +26,7 @@ class PlayerSongInfo extends StatelessWidget {
         final player = PlayerService();
         final song = player.currentSong;
         final track = player.currentTrack;
-        final imageUrl = song?.pic ?? track?.picUrl ?? '';
+        final imageUrl = player.currentCoverUrl ?? '';
         final backgroundService = PlayerBackgroundService();
         
         return RepaintBoundary(

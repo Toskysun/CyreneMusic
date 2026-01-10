@@ -8,6 +8,8 @@ import '../../services/auth_service.dart';
 import '../../services/netease_login_service.dart';
 import '../../services/kugou_login_service.dart';
 import '../../utils/theme_manager.dart';
+import '../../widgets/material/material_settings_widgets.dart';
+
 
 /// 第三方账号管理入口组件（显示在主设置页面）
 class ThirdPartyAccounts extends StatefulWidget {
@@ -122,27 +124,14 @@ class _ThirdPartyAccountsState extends State<ThirdPartyAccounts> {
 
   /// 构建 Material UI 版本 - 入口卡片
   Widget _buildMaterialUI(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+    return MD3SettingsSection(
       children: [
-        Padding(
-          padding: const EdgeInsets.only(bottom: 12.0, left: 4.0),
-          child: Text(
-            '第三方账号',
-            style: Theme.of(context).textTheme.titleMedium?.copyWith(
-              fontWeight: FontWeight.bold,
-              color: Theme.of(context).colorScheme.primary,
-            ),
-          ),
-        ),
-        Card(
-          child: ListTile(
-            leading: const Icon(Icons.link),
-            title: const Text('第三方账号管理'),
-            subtitle: Text(_getSubtitle()),
-            trailing: const Icon(Icons.chevron_right),
-            onTap: widget.onTap,
-          ),
+        MD3SettingsTile(
+          leading: const Icon(Icons.link),
+          title: '第三方账号管理',
+          subtitle: _getSubtitle(),
+          trailing: const Icon(Icons.chevron_right),
+          onTap: widget.onTap,
         ),
       ],
     );

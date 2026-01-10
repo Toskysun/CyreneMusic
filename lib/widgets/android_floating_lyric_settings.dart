@@ -5,6 +5,7 @@ import 'package:flutter_colorpicker/flutter_colorpicker.dart';
 import '../services/android_floating_lyric_service.dart';
 import '../utils/theme_manager.dart';
 import 'cupertino/cupertino_settings_widgets.dart';
+import '../widgets/material/material_settings_widgets.dart';
 
 /// Android 悬浮歌词设置组件
 class AndroidFloatingLyricSettings extends StatefulWidget {
@@ -44,123 +45,170 @@ class _AndroidFloatingLyricSettingsState extends State<AndroidFloatingLyricSetti
       return _buildCupertinoSettings(context);
     }
 
-    return _buildSettingCard([
-      _buildPermissionStatusTile(),
-      const Divider(height: 1),
-      _buildSwitchTile(
-        title: '启用悬浮歌词',
-        subtitle: _lyricService.isVisible
-            ? '悬浮歌词窗口已显示'
-            : '悬浮歌词窗口已隐藏',
-        icon: Icons.subtitles,
-        value: _lyricService.isVisible,
-        onChanged: (value) async {
-          if (value) {
-            // 使用新的权限管理流程
-            final granted = await _lyricService.requestPermissionWithDialog(context);
-            
-            if (granted) {
-              await _lyricService.show();
-              await _checkPermission(); // 更新权限状态
-              if (mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('✅ 悬浮歌词已启用'),
-                    duration: Duration(seconds: 2),
-                  ),
-                );
-              }
-            } else {
-              if (mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('❌ 需要悬浮窗权限才能启用悬浮歌词'),
-                    duration: Duration(seconds: 3),
-                  ),
-                );
-              }
-            }
-          } else {
-            await _lyricService.hide();
-            if (mounted) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('悬浮歌词已关闭'),
-                  duration: Duration(seconds: 2),
+    return Column(
+      children: [
+        // 权限状态卡片
+        MD3SettingsSection(
+          title: '权限管理',
+          children: [
+            MD3SettingsTile(
+              title: '悬浮窗权限',
+              subtitle: _hasPermission ? '✅ 已获得授权' : '❌ 未获得授权',
+              leading: Icon(
+                _hasPermission ? Icons.verified_user : Icons.gpp_maybe,
+                color: _hasPermission ? Colors.green : Colors.orange,
+              ),
+              trailing: _hasPermission 
+                  ? null 
+                  : TextButton(
+                      onPressed: () async {
+                        final granted = await _lyricService.requestPermissionWithDialog(context);
+                        if (granted) {
+                          await _checkPermission();
+                          if (mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text('✅ 权限已授予'),
+                                duration: Duration(seconds: 2),
+                              ),
+                            );
+                          }
+                        }
+                      },
+                      child: const Text('去授权'),
+                    ),
+            ),
+          ],
+        ),
+
+        // 常规设置卡片
+        MD3SettingsSection(
+          title: '基础设置',
+          children: [
+            MD3SwitchTile(
+              title: '启用悬浮歌词',
+              subtitle: _lyricService.isVisible
+                  ? '悬浮歌词窗口已显示'
+                  : '悬浮歌词窗口已隐藏',
+              leading: const Icon(Icons.subtitles),
+              value: _lyricService.isVisible,
+              onChanged: (value) async {
+                if (value) {
+                  final granted = await _lyricService.requestPermissionWithDialog(context);
+                  if (granted) {
+                    await _lyricService.show();
+                    await _checkPermission();
+                    if (mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('✅ 悬浮歌词已启用'),
+                          duration: Duration(seconds: 2),
+                        ),
+                      );
+                    }
+                  } else {
+                    if (mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('❌ 需要悬浮窗权限才能启用悬浮歌词'),
+                          duration: Duration(seconds: 3),
+                        ),
+                      );
+                    }
+                  }
+                } else {
+                  await _lyricService.hide();
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('悬浮歌词已关闭'),
+                        duration: Duration(seconds: 2),
+                      ),
+                    );
+                  }
+                }
+                setState(() {});
+              },
+            ),
+          ],
+        ),
+
+        // 外观设置卡片
+        MD3SettingsSection(
+          title: '外观展示',
+          children: [
+            MD3SettingsTile(
+              title: '字体大小',
+              subtitle: '当前: ${_lyricService.config['fontSize']}px',
+              leading: const Icon(Icons.format_size),
+              onTap: () => _showFontSizeDialog(),
+            ),
+            MD3SettingsTile(
+              title: '文字颜色',
+              subtitle: '点击选择颜色',
+              leading: const Icon(Icons.color_lens),
+              onTap: () => _showTextColorPicker(),
+              trailing: Container(
+                width: 24,
+                height: 24,
+                decoration: BoxDecoration(
+                  color: Color(_lyricService.config['textColor']),
+                  shape: BoxShape.circle,
+                  border: Border.all(color: Colors.white24),
                 ),
-              );
-            }
-          }
-          setState(() {});
-        },
-      ),
-      const Divider(height: 1),
-      _buildListTile(
-        title: '字体大小',
-        subtitle: '当前大小: ${_lyricService.config['fontSize']}px',
-        icon: Icons.format_size,
-        onTap: () => _showFontSizeDialog(),
-      ),
-      const Divider(height: 1),
-      _buildListTile(
-        title: '文字颜色',
-        subtitle: '自定义悬浮歌词文字颜色',
-        icon: Icons.color_lens,
-        onTap: () => _showTextColorPicker(),
-        trailing: Container(
-          width: 24,
-          height: 24,
-          decoration: BoxDecoration(
-            color: Color(_lyricService.config['textColor']),
-            shape: BoxShape.circle,
-            border: Border.all(color: Colors.grey),
-          ),
+              ),
+            ),
+            MD3SettingsTile(
+              title: '描边颜色',
+              subtitle: '增加文字可读性',
+              leading: const Icon(Icons.border_color),
+              onTap: () => _showStrokeColorPicker(),
+              trailing: Container(
+                width: 24,
+                height: 24,
+                decoration: BoxDecoration(
+                  color: Color(_lyricService.config['strokeColor']),
+                  shape: BoxShape.circle,
+                  border: Border.all(color: Colors.white24),
+                ),
+              ),
+            ),
+            MD3SettingsTile(
+              title: '描边宽度',
+              subtitle: '当前: ${_lyricService.config['strokeWidth']}px',
+              leading: const Icon(Icons.line_weight),
+              onTap: () => _showStrokeWidthDialog(),
+            ),
+            MD3SettingsTile(
+              title: '透明度',
+              subtitle: '当前: ${(_lyricService.config['alpha'] * 100).toInt()}%',
+              leading: const Icon(Icons.opacity),
+              onTap: () => _showAlphaDialog(),
+            ),
+          ],
         ),
-      ),
-      const Divider(height: 1),
-      _buildListTile(
-        title: '描边颜色',
-        subtitle: '文字描边颜色，增加可读性',
-        icon: Icons.border_color,
-        onTap: () => _showStrokeColorPicker(),
-        trailing: Container(
-          width: 24,
-          height: 24,
-          decoration: BoxDecoration(
-            color: Color(_lyricService.config['strokeColor']),
-            shape: BoxShape.circle,
-            border: Border.all(color: Colors.grey),
-          ),
+
+        // 交互设置卡片
+        MD3SettingsSection(
+          title: '交互行为',
+          children: [
+            MD3SwitchTile(
+              title: '允许拖动',
+              subtitle: _lyricService.config['isDraggable']
+                  ? '可以自由拖动悬浮窗'
+                  : '悬浮窗位置已固定',
+              leading: const Icon(Icons.pan_tool),
+              value: _lyricService.config['isDraggable'],
+              onChanged: (value) async {
+                await _lyricService.setDraggable(value);
+                setState(() {});
+              },
+            ),
+          ],
         ),
-      ),
-      const Divider(height: 1),
-      _buildListTile(
-        title: '描边宽度',
-        subtitle: '当前宽度: ${_lyricService.config['strokeWidth']}px',
-        icon: Icons.line_weight,
-        onTap: () => _showStrokeWidthDialog(),
-      ),
-      const Divider(height: 1),
-      _buildListTile(
-        title: '透明度',
-        subtitle: '当前透明度: ${(_lyricService.config['alpha'] * 100).toInt()}%',
-        icon: Icons.opacity,
-        onTap: () => _showAlphaDialog(),
-      ),
-      const Divider(height: 1),
-      _buildSwitchTile(
-        title: '允许拖动',
-        subtitle: _lyricService.config['isDraggable']
-            ? '可以拖动悬浮窗位置'
-            : '悬浮窗位置固定',
-        icon: Icons.pan_tool,
-        value: _lyricService.config['isDraggable'],
-        onChanged: (value) async {
-          await _lyricService.setDraggable(value);
-          setState(() {});
-        },
-      ),
-    ]);
+        const SizedBox(height: 16),
+      ],
+    );
   }
 
   /// 构建 Cupertino 风格设置
@@ -427,83 +475,6 @@ class _AndroidFloatingLyricSettingsState extends State<AndroidFloatingLyricSetti
           ),
         );
       },
-    );
-  }
-
-  /// 构建权限状态指示器
-  Widget _buildPermissionStatusTile() {
-    return ListTile(
-      title: const Text('权限状态'),
-      subtitle: Text(_hasPermission 
-          ? '✅ 已获得悬浮窗权限' 
-          : '❌ 需要悬浮窗权限'),
-      leading: Icon(
-        _hasPermission ? Icons.verified : Icons.warning,
-        color: _hasPermission ? Colors.green : Colors.orange,
-      ),
-      trailing: _hasPermission 
-          ? null 
-          : TextButton(
-              onPressed: () async {
-                final granted = await _lyricService.requestPermissionWithDialog(context);
-                if (granted) {
-                  await _checkPermission();
-                  if (mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('✅ 权限已授予'),
-                        duration: Duration(seconds: 2),
-                      ),
-                    );
-                  }
-                }
-              },
-              child: const Text('授权'),
-            ),
-    );
-  }
-
-  /// 构建设置卡片
-  Widget _buildSettingCard(List<Widget> children) {
-    return Card(
-      margin: EdgeInsets.zero,
-      child: Column(
-        children: children,
-      ),
-    );
-  }
-
-  /// 构建开关列表项
-  Widget _buildSwitchTile({
-    required String title,
-    required String subtitle,
-    required IconData icon,
-    required bool value,
-    required ValueChanged<bool> onChanged,
-  }) {
-    return SwitchListTile(
-      title: Text(title),
-      subtitle: Text(subtitle),
-      secondary: Icon(icon),
-      value: value,
-      onChanged: onChanged,
-    );
-  }
-
-  /// 构建普通列表项
-  Widget _buildListTile({
-    required String title,
-    required String subtitle,
-    required IconData icon,
-    required VoidCallback onTap,
-    Widget? trailing,
-  }) {
-    return ListTile(
-      title: Text(title),
-      subtitle: Text(subtitle),
-      leading: Icon(icon),
-      trailing: trailing ?? const Icon(Icons.chevron_right),
-      onTap: onTap,
     );
   }
 

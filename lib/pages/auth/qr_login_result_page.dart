@@ -57,7 +57,12 @@ class _QrLoginResultPageState extends State<QrLoginResultPage> {
             actions: [
               CupertinoDialogAction(
                 isDefaultAction: true,
-                onPressed: () => Navigator.pop(context),
+                onPressed: () {
+                  final nav = Navigator.of(context);
+                  if (nav.canPop()) {
+                    nav.pop();
+                  }
+                },
                 child: const Text('好'),
               ),
             ],
@@ -70,7 +75,10 @@ class _QrLoginResultPageState extends State<QrLoginResultPage> {
       }
 
       if (mounted) {
-        Navigator.of(context).pop(true);
+        final nav = Navigator.of(context);
+        if (nav.canPop()) {
+          nav.pop(true);
+        }
       }
     } catch (e) {
       if (!mounted) return;
@@ -235,7 +243,12 @@ class _QrLoginResultPageState extends State<QrLoginResultPage> {
                 ),
                 const SizedBox(height: 8),
                 CupertinoButton(
-                  onPressed: _submitting ? null : () => Navigator.of(context).pop(false),
+                  onPressed: _submitting ? null : () {
+                    final nav = Navigator.of(context);
+                    if (nav.canPop()) {
+                      nav.pop(false);
+                    }
+                  },
                   child: const Text('取消'),
                 ),
               ],
@@ -313,7 +326,12 @@ class _QrLoginResultPageState extends State<QrLoginResultPage> {
         ),
         const SizedBox(height: 8),
         OutlinedButton(
-          onPressed: _submitting ? null : () => Navigator.of(context).pop(false),
+          onPressed: _submitting ? null : () {
+            final nav = Navigator.of(context);
+            if (nav.canPop()) {
+              nav.pop(false);
+            }
+          },
           child: const Text('取消'),
         ),
       ],

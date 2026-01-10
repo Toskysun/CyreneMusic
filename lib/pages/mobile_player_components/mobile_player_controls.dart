@@ -60,16 +60,17 @@ class MobilePlayerControls extends StatelessWidget {
 
   /// 构建进度条
   Widget _buildProgressBar() {
-    return AnimatedBuilder(
-      animation: PlayerService(),
-      builder: (context, child) {
-        final player = PlayerService();
-        final position = player.position;
-        final duration = player.duration;
-        
-        return Column(
-          children: [
-            SliderTheme(
+    final player = PlayerService();
+    
+    return Column(
+      children: [
+        AnimatedBuilder(
+          animation: player.positionNotifier,
+          builder: (context, child) {
+            final position = player.positionNotifier.value;
+            final duration = player.duration;
+            
+            return SliderTheme(
               data: SliderTheme.of(context).copyWith(
                 trackHeight: 3,
                 thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
@@ -88,32 +89,38 @@ class MobilePlayerControls extends StatelessWidget {
                   player.seek(Duration(milliseconds: value.toInt()));
                 },
               ),
-            ),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 12),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(
-                    _formatDuration(position),
-                    style: TextStyle(
-                      color: Colors.white.withOpacity(0.7),
-                      fontSize: 12,
-                    ),
+            );
+          },
+        ),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              AnimatedBuilder(
+                animation: player.positionNotifier,
+                builder: (context, child) => Text(
+                  _formatDuration(player.positionNotifier.value),
+                  style: TextStyle(
+                    color: Colors.white.withOpacity(0.7),
+                    fontSize: 12,
                   ),
-                  Text(
-                    _formatDuration(duration),
-                    style: TextStyle(
-                      color: Colors.white.withOpacity(0.7),
-                      fontSize: 12,
-                    ),
-                  ),
-                ],
+                ),
               ),
-            ),
-          ],
-        );
-      },
+              AnimatedBuilder(
+                animation: player, // 总时长监听主服务即可
+                builder: (context, child) => Text(
+                  _formatDuration(player.duration),
+                  style: TextStyle(
+                    color: Colors.white.withOpacity(0.7),
+                    fontSize: 12,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 

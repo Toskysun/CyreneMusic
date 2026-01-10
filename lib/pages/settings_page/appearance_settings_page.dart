@@ -16,6 +16,7 @@ import '../../widgets/fluent_settings_card.dart';
 import '../../widgets/cupertino/cupertino_settings_widgets.dart';
 import 'player_background_dialog.dart';
 import 'window_background_dialog.dart';
+import '../../widgets/material/material_settings_widgets.dart';
 
 /// 外观设置详情内容（二级页面内容，嵌入在设置页面中）
 class AppearanceSettingsContent extends StatefulWidget {
@@ -96,41 +97,38 @@ class _AppearanceSettingsContentState extends State<AppearanceSettingsContent> {
     final colorScheme = Theme.of(context).colorScheme;
     
     final content = ListView(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.only(top: 8, bottom: 24),
       children: [
         // 主题模式
-        _buildMaterialSection(
-          context,
+        MD3SettingsSection(
           title: '主题',
           children: [
-            SwitchListTile(
-              secondary: const Icon(Icons.dark_mode),
-              title: const Text('深色模式'),
-              subtitle: const Text('启用深色主题'),
+            MD3SwitchTile(
+              leading: const Icon(Icons.dark_mode_outlined),
+              title: '深色模式',
+              subtitle: '启用深色主题',
               value: ThemeManager().isDarkMode,
               onChanged: (value) {
                 ThemeManager().toggleDarkMode(value);
                 setState(() {});
               },
             ),
-            const Divider(height: 1),
-            SwitchListTile(
-              secondary: const Icon(Icons.auto_awesome),
-              title: const Text('跟随系统主题色'),
-              subtitle: Text(_getFollowSystemColorSubtitle()),
+            MD3SwitchTile(
+              leading: const Icon(Icons.auto_awesome_outlined),
+              title: '跟随系统主题色',
+              subtitle: _getFollowSystemColorSubtitle(),
               value: ThemeManager().followSystemColor,
               onChanged: (value) async {
                 await ThemeManager().setFollowSystemColor(value, context: context);
                 setState(() {});
               },
             ),
-            const Divider(height: 1),
-            ListTile(
-              leading: const Icon(Icons.color_lens),
-              title: const Text('主题色'),
-              subtitle: Text(_getCurrentThemeColorName()),
+            MD3SettingsTile(
+              leading: const Icon(Icons.color_lens_outlined),
+              title: '主题色',
+              subtitle: _getCurrentThemeColorName(),
               trailing: ThemeManager().followSystemColor
-                  ? Icon(Icons.lock_outline, color: Theme.of(context).disabledColor)
+                  ? Icon(Icons.lock_outline, size: 18, color: Theme.of(context).disabledColor)
                   : const Icon(Icons.chevron_right),
               onTap: ThemeManager().followSystemColor 
                   ? null
@@ -139,91 +137,78 @@ class _AppearanceSettingsContentState extends State<AppearanceSettingsContent> {
             ),
           ],
         ),
-        const SizedBox(height: 16),
         
         // 播放器设置
-        _buildMaterialSection(
-          context,
+        MD3SettingsSection(
           title: '播放器',
           children: [
-            ListTile(
-              leading: const Icon(Icons.style),
-              title: const Text('全屏播放器样式'),
-              subtitle: Text(LyricStyleService().getStyleDescription(LyricStyleService().currentStyle)),
+            MD3SettingsTile(
+              leading: const Icon(Icons.style_outlined),
+              title: '全屏播放器样式',
+              subtitle: LyricStyleService().getStyleDescription(LyricStyleService().currentStyle),
               trailing: const Icon(Icons.chevron_right),
               onTap: () => _showPlayerStyleDialog(),
             ),
-            const Divider(height: 1),
-            ListTile(
-              leading: const Icon(Icons.font_download),
-              title: const Text('歌词字体'),
-              subtitle: Text(LyricFontService().currentFontName),
+            MD3SettingsTile(
+              leading: const Icon(Icons.font_download_outlined),
+              title: '歌词字体',
+              subtitle: LyricFontService().currentFontName,
               trailing: const Icon(Icons.chevron_right),
               onTap: () => _showLyricFontDialog(),
             ),
-            const Divider(height: 1),
-            ListTile(
-              leading: const Icon(Icons.wallpaper),
-              title: const Text('播放器背景'),
-              subtitle: Text(
-                '${PlayerBackgroundService().getBackgroundTypeName()} - ${PlayerBackgroundService().getBackgroundTypeDescription()}'
-              ),
+            MD3SettingsTile(
+              leading: const Icon(Icons.wallpaper_outlined),
+              title: '播放器背景',
+              subtitle: '${PlayerBackgroundService().getBackgroundTypeName()} - ${PlayerBackgroundService().getBackgroundTypeDescription()}',
               trailing: const Icon(Icons.chevron_right),
               onTap: () => _showPlayerBackgroundDialog(),
             ),
-            ListTile(
+            MD3SettingsTile(
               leading: const Icon(Icons.photo_size_select_actual_outlined),
-              title: const Text('窗口背景'),
-              subtitle: Text(_getWindowBackgroundSubtitle()),
+              title: '窗口背景',
+              subtitle: _getWindowBackgroundSubtitle(),
               trailing: const Icon(Icons.chevron_right),
               onTap: () => _showWindowBackgroundDialog(),
             ),
           ],
         ),
-        const SizedBox(height: 16),
         
         // 移动端专属设置
-        if (Platform.isAndroid || Platform.isIOS) ...[
-          _buildMaterialSection(
-            context,
+        if (Platform.isAndroid || Platform.isIOS)
+          MD3SettingsSection(
             title: '界面风格',
             children: [
-              ListTile(
-                leading: const Icon(Icons.phone_iphone),
-                title: const Text('界面风格'),
-                subtitle: Text(_getMobileThemeFrameworkSubtitle()),
+              MD3SettingsTile(
+                leading: const Icon(Icons.phone_iphone_outlined),
+                title: '界面风格',
+                subtitle: _getMobileThemeFrameworkSubtitle(),
                 trailing: const Icon(Icons.chevron_right),
                 onTap: () => _showMobileThemeFrameworkDialog(),
               ),
             ],
           ),
-          const SizedBox(height: 16),
-        ],
         
         // Windows 专属设置
-        if (Platform.isWindows) ...[
-          _buildMaterialSection(
-            context,
+        if (Platform.isWindows)
+          MD3SettingsSection(
             title: '桌面端',
             children: [
-              ListTile(
-                leading: const Icon(Icons.layers),
-                title: const Text('桌面主题样式'),
-                subtitle: Text(_getThemeFrameworkSubtitle()),
+              MD3SettingsTile(
+                leading: const Icon(Icons.layers_outlined),
+                title: '桌面主题样式',
+                subtitle: _getThemeFrameworkSubtitle(),
                 trailing: const Icon(Icons.chevron_right),
                 onTap: () => _showThemeFrameworkDialog(),
               ),
-              const Divider(height: 1),
-              ListTile(
-                leading: const Icon(Icons.view_quilt),
-                title: const Text('布局模式'),
-                subtitle: Text(LayoutPreferenceService().getLayoutDescription()),
+              MD3SettingsTile(
+                leading: const Icon(Icons.view_quilt_outlined),
+                title: '布局模式',
+                subtitle: LayoutPreferenceService().getLayoutDescription(),
                 trailing: const Icon(Icons.chevron_right),
                 onTap: () => _showLayoutModeDialog(),
               ),
             ],
           ),
-        ],
       ],
     );
 
@@ -234,19 +219,10 @@ class _AppearanceSettingsContentState extends State<AppearanceSettingsContent> {
     return Scaffold(
       backgroundColor: colorScheme.surface,
       appBar: AppBar(
+        title: const Text('外观设置'),
+        centerTitle: false,
         backgroundColor: colorScheme.surface,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back),
-          onPressed: widget.onBack,
-        ),
-        title: Text(
-          '外观设置',
-          style: TextStyle(
-            color: colorScheme.onSurface,
-            fontSize: 20,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
+        surfaceTintColor: Colors.transparent,
       ),
       body: content,
     );

@@ -250,7 +250,7 @@ class _MobilePlayerFluidCloudLyricState extends State<MobilePlayerFluidCloudLyri
       textDirection: TextDirection.ltr,
     );
     textPainter.layout(maxWidth: maxWidth);
-    double h = textPainter.height * 1.15;
+    double h = textPainter.height; // 使用更准确的 textPainter 高阶高度测量，不再依赖魔数因子
 
     // 测量翻译高度
     if (widget.showTranslation && lyric.translation != null && lyric.translation!.isNotEmpty) {
@@ -609,7 +609,7 @@ class _MobileElasticLyricLineState extends State<_MobileElasticLyricLine> with T
           fontSize: textFontSize,
           fontWeight: FontWeight.w800,
           color: Colors.white,
-          height: 1.0,
+          height: 1.25, // 增加行高防止裁断
         ),
       );
     } else if (widget.isActive) {
@@ -1050,10 +1050,7 @@ class _MobileWordFillWidgetState extends State<_MobileWordFillWidget> with Ticke
         stops: gradientStops,
       ).createShader(bounds),
       blendMode: BlendMode.srcIn,
-      child: Padding(
-        padding: const EdgeInsets.only(top: 1.0, bottom: 1.0),
-        child: Text(widget.text, style: widget.style.copyWith(color: Colors.white)),
-      ),
+      child: Text(widget.text, style: widget.style.copyWith(color: Colors.white)),
     );
   }
 

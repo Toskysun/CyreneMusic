@@ -89,9 +89,7 @@ class _PlayerFluidCloudBackgroundState extends State<PlayerFluidCloudBackground>
       return;
     }
 
-    final song = PlayerService().currentSong;
-    final track = PlayerService().currentTrack;
-    final imageUrl = song?.pic ?? track?.picUrl ?? '';
+    final imageUrl = PlayerService().currentCoverUrl ?? '';
 
     // 1. 如果没有图片，或者当前已经在显示这张图片的颜色，直接返回
     if (imageUrl.isEmpty || imageUrl == _currentImageUrl) return;
@@ -361,8 +359,19 @@ class _PlayerFluidCloudBackgroundState extends State<PlayerFluidCloudBackground>
     );
   }
 
-  /// 构建封面图片（支持网络 URL 和本地文件路径）
   Widget _buildCoverImage(String imageUrl, Color greyColor, {bool fullCover = false}) {
+    // 性能优化：优先使用 PlayerService 已经稳定的 Provider
+    final player = PlayerService();
+    if (player.currentCoverUrl == imageUrl && player.currentCoverImageProvider != null) {
+      return Image(
+        image: player.currentCoverImageProvider!,
+        fit: BoxFit.cover,
+        width: fullCover ? double.infinity : null,
+        height: fullCover ? double.infinity : null,
+        filterQuality: FilterQuality.medium,
+      );
+    }
+
     // 判断是网络 URL 还是本地文件路径
     final isNetwork = imageUrl.startsWith('http://') || imageUrl.startsWith('https://');
     

@@ -117,7 +117,7 @@ class TrackBannerCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final themeManager = ThemeManager();
-    final borderRadius = BorderRadius.circular(12);
+    final borderRadius = BorderRadius.circular(24);
 
     final cardContent = Material(
       type: MaterialType.transparency,
@@ -394,7 +394,7 @@ class HistorySection extends StatelessWidget {
       return const SizedBox.shrink(); // 如果没有历史，不显示任何东西
     }
 
-    final borderRadius = BorderRadius.circular(12);
+    final borderRadius = BorderRadius.circular(24);
     final cardContent = Material(
       type: MaterialType.transparency,
       child: InkWell(
@@ -475,7 +475,9 @@ class HistorySection extends StatelessWidget {
     }
 
     return Card(
+      elevation: 0,
       clipBehavior: Clip.antiAlias,
+      shape: RoundedRectangleBorder(borderRadius: borderRadius),
       color: Theme.of(context).colorScheme.surfaceContainer,
       child: cardContent,
     );
@@ -490,7 +492,7 @@ class GuessYouLikeSection extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final themeManager = ThemeManager();
-    final borderRadius = BorderRadius.circular(12);
+    final borderRadius = BorderRadius.circular(24);
     final cardContent = Material(
       type: MaterialType.transparency,
       child: InkWell(
@@ -531,7 +533,9 @@ class GuessYouLikeSection extends StatelessWidget {
     }
 
     return Card(
+      elevation: 0,
       clipBehavior: Clip.antiAlias,
+      shape: RoundedRectangleBorder(borderRadius: borderRadius),
       color: Theme.of(context).colorScheme.surfaceContainer,
       child: cardContent,
     );

@@ -124,7 +124,12 @@ class _QrLoginDialogState extends State<QrLoginDialog> {
           await AuthService().loginWithToken(token: r.token!, userJson: r.user!);
 
           if (!mounted) return;
-          Navigator.of(context).pop(true);
+          if (mounted) {
+            final nav = Navigator.of(context);
+            if (nav.canPop()) {
+              nav.pop(true);
+            }
+          }
           return;
         }
 
@@ -224,7 +229,12 @@ class _QrLoginDialogState extends State<QrLoginDialog> {
           fluent_ui.Button(
             onPressed: () async {
               await _cancel();
-              if (context.mounted) Navigator.pop(context, false);
+              if (context.mounted) {
+                final nav = Navigator.of(context);
+                if (nav.canPop()) {
+                  nav.pop(false);
+                }
+              }
             },
             child: const Text('关闭'),
           ),
@@ -249,7 +259,12 @@ class _QrLoginDialogState extends State<QrLoginDialog> {
         TextButton(
           onPressed: () async {
             await _cancel();
-            if (context.mounted) Navigator.pop(context, false);
+            if (context.mounted) {
+              final nav = Navigator.of(context);
+              if (nav.canPop()) {
+                nav.pop(false);
+              }
+            }
           },
           child: const Text('关闭'),
         ),

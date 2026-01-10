@@ -9,6 +9,7 @@ import '../../services/audio_source_service.dart';
 import '../../widgets/fluent_settings_card.dart';
 import '../../widgets/cupertino/cupertino_settings_widgets.dart';
 import '../../utils/theme_manager.dart';
+import '../../widgets/material/material_settings_widgets.dart';
 
 /// 网络设置组件
 class NetworkSettings extends StatefulWidget {
@@ -104,45 +105,31 @@ class _NetworkSettingsState extends State<NetworkSettings> {
       return _buildCupertinoUI(context);
     }
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+    return MD3SettingsSection(
       children: [
-        _buildSectionTitle(context, '网络'),
-        Card(
-          child: Column(
-            children: [
-              ListTile(
-                leading: const Icon(Icons.dns),
-                title: const Text('后端源'),
-                subtitle: Text(UrlService().getSourceDescription()),
-                trailing: const Icon(Icons.chevron_right),
-                onTap: () => _showBackendSourceDialog(context),
-              ),
-              const Divider(height: 1),
-              ListTile(
-                leading: const Icon(Icons.music_note),
-                title: const Text('音源设置'),
-                subtitle: Text(
-                  AudioSourceService().isConfigured
-                      ? AudioSourceService().getSourceDescription()
-                      : '未配置（点击配置）',
-                ),
-                trailing: const Icon(Icons.chevron_right),
-                onTap: widget.onAudioSourceTap,
-              ),
-              const Divider(height: 1),
-              ListTile(
-                leading: const Icon(Icons.wifi_tethering),
-                title: const Text('测试连接'),
-                subtitle: Text(
-                  _errorMessage != null
-                      ? '无法连接后端服务器'
-                      : '自动检测与后端服务器的连接',
-                ),
-                trailing: _buildLatencyIndicator(context),
-              ),
-            ],
-          ),
+        MD3SettingsTile(
+          leading: const Icon(Icons.dns_outlined),
+          title: '后端源',
+          subtitle: UrlService().getSourceDescription(),
+          trailing: const Icon(Icons.chevron_right),
+          onTap: () => _showBackendSourceDialog(context),
+        ),
+        MD3SettingsTile(
+          leading: const Icon(Icons.music_note_outlined),
+          title: '音源设置',
+          subtitle: AudioSourceService().isConfigured
+              ? AudioSourceService().getSourceDescription()
+              : '未配置（点击配置）',
+          trailing: const Icon(Icons.chevron_right),
+          onTap: widget.onAudioSourceTap,
+        ),
+        MD3SettingsTile(
+          leading: const Icon(Icons.wifi_tethering_outlined),
+          title: '测试连接',
+          subtitle: _errorMessage != null
+              ? '无法连接后端服务器'
+              : '自动检测与后端服务器的连接',
+          trailing: _buildLatencyIndicator(context),
         ),
       ],
     );

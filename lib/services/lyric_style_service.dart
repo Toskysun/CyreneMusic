@@ -27,15 +27,30 @@ class LyricStyleService extends ChangeNotifier {
 
   static const String _storageKey = 'lyric_style';
   static const String _alignmentStorageKey = 'lyric_alignment';
+  static const String _fontSizeMultiplierKey = 'lyric_font_size_multiplier';
+  static const String _fadeLinesKey = 'lyric_fade_lines';
+  static const String _blurSigmaKey = 'lyric_blur_sigma';
   
   LyricStyle _currentStyle = LyricStyle.defaultStyle;
   LyricAlignment _currentAlignment = LyricAlignment.center;
+  double _lyricFontSizeMultiplier = 1.0;
+  int _lyricBlurLines = 4;
+  double _lyricBlurSigma = 4.0;
 
   /// 获取当前歌词样式
   LyricStyle get currentStyle => _currentStyle;
   
   /// 获取当前歌词对齐方式
   LyricAlignment get currentAlignment => _currentAlignment;
+
+  /// 获取歌词字号倍率
+  double get lyricFontSizeMultiplier => _lyricFontSizeMultiplier;
+
+  /// 获取歌词渐隐范围（行数）
+  int get lyricBlurLines => _lyricBlurLines;
+
+  /// 获取歌词视觉模糊强度
+  double get lyricBlurSigma => _lyricBlurSigma;
 
   /// 初始化服务
   Future<void> initialize() async {
@@ -62,11 +77,20 @@ class LyricStyleService extends ChangeNotifier {
       } else {
         _currentAlignment = LyricAlignment.center;
       }
+
+      // 加载字号倍率
+      _lyricFontSizeMultiplier = prefs.getDouble(_fontSizeMultiplierKey) ?? 1.0;
+      
+      // 加载渐隐行数
+      _lyricBlurLines = prefs.getInt(_fadeLinesKey) ?? 4;
+      
+      // 加载模糊强度
+      _lyricBlurSigma = prefs.getDouble(_blurSigmaKey) ?? 4.0;
       
       notifyListeners();
     } catch (e) {
       print('❌ [LyricStyleService] 加载歌词配置失败: $e');
-      _currentStyle = LyricStyle.defaultStyle;
+      _currentStyle = LyricStyle.fluidCloud;
       _currentAlignment = LyricAlignment.center;
     }
   }
@@ -100,6 +124,51 @@ class LyricStyleService extends ChangeNotifier {
       print('✅ [LyricStyleService] 歌词对齐已保存: ${alignment.name}');
     } catch (e) {
       print('❌ [LyricStyleService] 保存歌词对齐失败: $e');
+    }
+  }
+
+  /// 设置歌词字号倍率
+  Future<void> setFontSizeMultiplier(double multiplier) async {
+    if ((_lyricFontSizeMultiplier - multiplier).abs() < 0.01) return;
+    
+    _lyricFontSizeMultiplier = multiplier;
+    notifyListeners();
+    
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setDouble(_fontSizeMultiplierKey, multiplier);
+    } catch (e) {
+      print('❌ [LyricStyleService] 保存歌词字号倍率失败: $e');
+    }
+  }
+
+  /// 设置歌词渐隐范围
+  Future<void> setBlurLines(int lines) async {
+    if (_lyricBlurLines == lines) return;
+    
+    _lyricBlurLines = lines;
+    notifyListeners();
+    
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setInt(_fadeLinesKey, lines);
+    } catch (e) {
+      print('❌ [LyricStyleService] 保存歌词渐隐范围失败: $e');
+    }
+  }
+
+  /// 设置歌词模糊强度
+  Future<void> setBlurSigma(double sigma) async {
+    if ((_lyricBlurSigma - sigma).abs() < 0.1) return;
+    
+    _lyricBlurSigma = sigma;
+    notifyListeners();
+    
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setDouble(_blurSigmaKey, sigma);
+    } catch (e) {
+      print('❌ [LyricStyleService] 保存歌词模糊强度失败: $e');
     }
   }
 

@@ -8,6 +8,8 @@ import '../../services/download_service.dart';
 import '../../widgets/fluent_settings_card.dart';
 import '../../widgets/cupertino/cupertino_settings_widgets.dart';
 import '../../utils/theme_manager.dart';
+import '../../widgets/material/material_settings_widgets.dart';
+
 
 /// 存储设置组件
 class StorageSettings extends StatefulWidget {
@@ -70,58 +72,43 @@ class _StorageSettingsState extends State<StorageSettings> {
       return _buildCupertinoUI(context);
     }
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+    return MD3SettingsSection(
       children: [
-        _buildSectionTitle('存储'),
-        Card(
-          child: Column(
-            children: [
-              SwitchListTile(
-                secondary: const Icon(Icons.cloud_download),
-                title: const Text('启用缓存'),
-                subtitle: Text(
-                  CacheService().cacheEnabled
-                      ? '自动缓存播放过的歌曲'
-                      : '缓存已禁用'
-                ),
-                value: CacheService().cacheEnabled,
-                onChanged: (value) async {
-                  await CacheService().setCacheEnabled(value);
-                  setState(() {});
-                },
-              ),
-              if (Platform.isWindows) ...[
-                const Divider(height: 1),
-                ListTile(
-                  leading: const Icon(Icons.folder),
-                  title: const Text('缓存目录'),
-                  subtitle: Text(_getCacheDirSubtitle()),
-                  trailing: const Icon(Icons.chevron_right),
-                  onTap: () => _showCacheDirSettings(),
-                ),
-              ],
-              const Divider(height: 1),
-              ListTile(
-                leading: const Icon(Icons.storage),
-                title: const Text('缓存管理'),
-                subtitle: Text(_getCacheSubtitle()),
-                trailing: const Icon(Icons.chevron_right),
-                onTap: () => _showCacheManagement(),
-              ),
-              if (Platform.isWindows) ...[
-                const Divider(height: 1),
-                ListTile(
-                  leading: const Icon(Icons.download),
-                  title: const Text('下载目录'),
-                  subtitle: Text(_getDownloadDirSubtitle()),
-                  trailing: const Icon(Icons.chevron_right),
-                  onTap: () => _showDownloadDirSettings(),
-                ),
-              ],
-            ],
-          ),
+        MD3SwitchTile(
+          leading: const Icon(Icons.cloud_download_outlined),
+          title: '启用缓存',
+          subtitle: CacheService().cacheEnabled
+              ? '自动缓存播放过的歌曲'
+              : '缓存已禁用',
+          value: CacheService().cacheEnabled,
+          onChanged: (value) async {
+            await CacheService().setCacheEnabled(value);
+            setState(() {});
+          },
         ),
+        if (Platform.isWindows)
+          MD3SettingsTile(
+            leading: const Icon(Icons.folder_outlined),
+            title: '缓存目录',
+            subtitle: _getCacheDirSubtitle(),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => _showCacheDirSettings(),
+          ),
+        MD3SettingsTile(
+          leading: const Icon(Icons.storage_outlined),
+          title: '缓存管理',
+          subtitle: _getCacheSubtitle(),
+          trailing: const Icon(Icons.chevron_right),
+          onTap: () => _showCacheManagement(),
+        ),
+        if (Platform.isWindows)
+          MD3SettingsTile(
+            leading: const Icon(Icons.download_outlined),
+            title: '下载目录',
+            subtitle: _getDownloadDirSubtitle(),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => _showDownloadDirSettings(),
+          ),
       ],
     );
   }

@@ -110,22 +110,15 @@ class _PlayerFluidCloudLayoutState extends State<PlayerFluidCloudLayout>
   void _onPlayerChanged() {
     // 检查封面 URL 是否变化
     final player = PlayerService();
-    final newImageUrl = player.currentSong?.pic ?? player.currentTrack?.picUrl ?? '';
+    final newImageUrl = player.currentCoverUrl ?? '';
     
     if (_currentImageUrl != newImageUrl) {
       setState(() {
         _currentImageUrl = newImageUrl;
       });
 
-      if (newImageUrl.isNotEmpty) {
-        // 判断是网络 URL 还是本地文件路径
-        final isNetwork = newImageUrl.startsWith('http://') || newImageUrl.startsWith('https://');
-        final ImageProvider provider;
-        if (isNetwork) {
-          provider = CachedNetworkImageProvider(newImageUrl);
-        } else {
-          provider = FileImage(File(newImageUrl));
-        }
+      final provider = player.currentCoverImageProvider;
+      if (provider != null) {
         _pendingCoverPrecache = precacheImage(
           provider,
           context,
@@ -136,8 +129,7 @@ class _PlayerFluidCloudLayoutState extends State<PlayerFluidCloudLayout>
   }
   
   void _updateCurrentImageUrl() {
-    final player = PlayerService();
-    _currentImageUrl = player.currentSong?.pic ?? player.currentTrack?.picUrl ?? '';
+    _currentImageUrl = PlayerService().currentCoverUrl ?? '';
   }
 
   @override
@@ -323,14 +315,16 @@ class _PlayerFluidCloudLayoutState extends State<PlayerFluidCloudLayout>
     final player = PlayerService();
     final song = player.currentSong;
     final track = player.currentTrack;
-    final imageUrl = song?.pic ?? track?.picUrl ?? '';
+    // ✅ 关键修复：使用 PlayerService 的封面 URL 和 Provider，避免详情加载导致重新请求
+    final imageUrl = player.currentCoverUrl ?? track?.picUrl ?? '';
+    final coverProvider = player.currentCoverImageProvider;
     
     // 获取折叠动画值
     final animValue = _collapseAnimationValue;
     // 是否处于折叠状态（动画进行中或已折叠）
     final isCollapsing = animValue > 0;
 
-    // 构建封面 widget
+    // 构建封面 widget（带渐变切换效果）
     Widget cover = AspectRatio(
       aspectRatio: 1.0,
       child: Container(
@@ -345,18 +339,32 @@ class _PlayerFluidCloudLayoutState extends State<PlayerFluidCloudLayout>
           ],
         ),
         clipBehavior: Clip.antiAlias,
-        child: imageUrl.isNotEmpty
-            ? RepaintBoundary(
-                child: _buildCoverImage(imageUrl),
-              )
-            : Container(
-                color: Colors.grey[900],
-                child: const Icon(
-                  Icons.music_note,
-                  size: 80,
-                  color: Colors.white54,
+        // ✨ Apple Music 风格：使用 AnimatedSwitcher 实现封面渐变切换
+        child: AnimatedSwitcher(
+          duration: const Duration(milliseconds: 600),
+          switchInCurve: Curves.easeOut,
+          switchOutCurve: Curves.easeIn,
+          transitionBuilder: (Widget child, Animation<double> animation) {
+            return FadeTransition(
+              opacity: animation,
+              child: child,
+            );
+          },
+          child: imageUrl.isNotEmpty
+              ? RepaintBoundary(
+                  key: ValueKey(imageUrl),
+                  child: _buildCoverImage(imageUrl, preferProvider: coverProvider),
+                )
+              : Container(
+                  key: const ValueKey('placeholder'),
+                  color: Colors.grey[900],
+                  child: const Icon(
+                    Icons.music_note,
+                    size: 80,
+                    color: Colors.white54,
+                  ),
                 ),
-              ),
+        ),
       ),
     );
 
@@ -411,9 +419,9 @@ class _PlayerFluidCloudLayoutState extends State<PlayerFluidCloudLayout>
                 
                 // 进度条
                 AnimatedBuilder(
-                  animation: player,
+                  animation: player.positionNotifier,
                   builder: (context, _) {
-                    final position = player.position.inMilliseconds.toDouble();
+                    final position = player.positionNotifier.value.inMilliseconds.toDouble();
                     final duration = player.duration.inMilliseconds.toDouble();
                     final value = (duration > 0) ? (position / duration).clamp(0.0, 1.0) : 0.0;
                     
@@ -434,7 +442,7 @@ class _PlayerFluidCloudLayoutState extends State<PlayerFluidCloudLayout>
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
                             Text(
-                              _formatDuration(player.position),
+                              _formatDuration(player.positionNotifier.value),
                               style: TextStyle(
                                 color: Colors.white.withOpacity(0.6),
                                 fontSize: 12,
@@ -553,9 +561,9 @@ class _PlayerFluidCloudLayoutState extends State<PlayerFluidCloudLayout>
           
                   // 3. 进度条 - Apple Music 风格 (Hover 显现滑块)
                   AnimatedBuilder(
-                    animation: player,
+                    animation: player.positionNotifier,
                     builder: (context, _) {
-                      final position = player.position.inMilliseconds.toDouble();
+                      final position = player.positionNotifier.value.inMilliseconds.toDouble();
                       final duration = player.duration.inMilliseconds.toDouble();
                       final value = (duration > 0) ? (position / duration).clamp(0.0, 1.0) : 0.0;
                       
@@ -575,7 +583,7 @@ class _PlayerFluidCloudLayoutState extends State<PlayerFluidCloudLayout>
                               mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
                                 Text(
-                                  _formatDuration(player.position),
+                                  _formatDuration(player.positionNotifier.value),
                                   style: TextStyle(
                                     color: Colors.white.withOpacity(0.6), 
                                     fontSize: 12,
@@ -722,11 +730,25 @@ class _PlayerFluidCloudLayoutState extends State<PlayerFluidCloudLayout>
   }
 
   /// 构建封面图片（支持网络 URL 和本地文件路径）
-  Widget _buildCoverImage(String imageUrl) {
+  /// [preferProvider] 优先使用的预缓存 ImageProvider，避免重复请求
+  Widget _buildCoverImage(String imageUrl, {ImageProvider? preferProvider}) {
     // 判断是网络 URL 还是本地文件路径
     final isNetwork = imageUrl.startsWith('http://') || imageUrl.startsWith('https://');
     
     if (isNetwork) {
+      // ✅ 优先使用预缓存的 provider，避免歌曲详情加载时因 URL 轻微变化导致重新请求
+      if (preferProvider != null) {
+        return Image(
+          key: ValueKey(imageUrl),
+          image: preferProvider,
+          fit: BoxFit.cover,
+          filterQuality: FilterQuality.medium,
+          errorBuilder: (context, error, stackTrace) => Container(
+            color: Colors.grey[900],
+          ),
+        );
+      }
+      // 降级：无 provider 时使用 CachedNetworkImage
       return CachedNetworkImage(
         key: ValueKey(imageUrl),
         imageUrl: imageUrl,

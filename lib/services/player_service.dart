@@ -68,6 +68,8 @@ class PlayerService extends ChangeNotifier {
   String? _currentTempFilePath;  // 记录当前临时文件路径
   final Map<String, Color> _themeColorCache = {}; // 主题色缓存
   final ValueNotifier<Color?> themeColorNotifier = ValueNotifier<Color?>(null); // 主题色通知器
+  final ValueNotifier<Duration> positionNotifier = ValueNotifier<Duration>(Duration.zero); // 进度通知器（高频更新，单独解耦）
+  DateTime _lastNativeSyncTime = DateTime.fromMillisecondsSinceEpoch(0); // 上次同步到原生层的时间
   double _volume = 0.7; // 当前音量 (0.0 - 1.0)，默认 70% 避免破音
   ImageProvider? _currentCoverImageProvider; // 当前歌曲的预取封面图像提供器（避免二次请求）
   String? _currentCoverUrl; // 当前封面图对应的原始 URL（用于去重）
@@ -101,6 +103,7 @@ class PlayerService extends ChangeNotifier {
   bool get isLoading => _state == PlayerState.loading;
   double get volume => _volume; // 获取当前音量
   ImageProvider? get currentCoverImageProvider => _currentCoverImageProvider;
+  String? get currentCoverUrl => _currentCoverUrl;
   
   /// 是否因音源未配置导致播放失败
   bool get isAudioSourceNotConfigured => _isAudioSourceNotConfigured;
@@ -177,6 +180,12 @@ class PlayerService extends ChangeNotifier {
       });
       print('✅ [PlayerService] 桌面歌词播放控制回调已设置');
     }
+
+    // 监听播放集与播放模式变化，触发预缓存
+    PlaybackModeService().addListener(_precacheNextCover);
+    PlaylistQueueService().addListener(_precacheNextCover);
+
+    print('✅ [PlayerService] 预缓存监听器已设置');
 
     print('🎵 [PlayerService] 播放器初始化完成');
   }
@@ -277,12 +286,12 @@ class PlayerService extends ChangeNotifier {
     // 监听播放进度
     _audioPlayer!.onPositionChanged.listen((position) {
       _position = position;
+      positionNotifier.value = position; // 更新独立的进度通知器
       _updateFloatingLyric(); // 更新桌面/悬浮歌词
-      // 🔥 通知Android原生层播放位置（后台歌词更新关键）
-      if (Platform.isAndroid) {
-        AndroidFloatingLyricService().updatePosition(position);
-      }
-      notifyListeners();
+      // 🔥 性能优化：使用节流同步到 Android 原生层（不再每帧同步）
+      _syncPositionToNative(position);
+      // 🔧 性能优化：不再在进度更新时调用 notifyListeners()，避免全局范围的 UI 重建
+      // notifyListeners();
     });
 
     // 监听总时长
@@ -360,11 +369,18 @@ class PlayerService extends ChangeNotifier {
       _currentSong = null;
       _errorMessage = null;
       _isAudioSourceNotConfigured = false;  // 重置标志
-      await _updateCoverImage(track.picUrl, notify: false);
+      
+      // ✅ 关键逻辑：如果是手动点击（未提供预取的 coverProvider），则强制刷新一次封面
+      final shouldForceUpdate = coverProvider == null;
+      await _updateCoverImage(track.picUrl, notify: false, force: shouldForceUpdate);
+      
       notifyListeners();
 
       print('🎵 [PlayerService] 开始播放: ${track.name} - ${track.artists}');
       print('   Track ID: ${track.id} (类型: ${track.id.runtimeType})');
+      
+      // 触发下一首封面预缓存
+      _precacheNextCover();
       
       // 记录到播放历史
       await PlayHistoryService().addToHistory(track);
@@ -401,7 +417,10 @@ class PlayerService extends ChangeNotifier {
             source: track.source,
           );
           
-          await _updateCoverImage(metadata.picUrl, notify: false);
+          // 如果缓存的封面图与 Track 的不同才更新 (通常相同)
+          if (metadata.picUrl != track.picUrl) {
+            await _updateCoverImage(metadata.picUrl, notify: false);
+          }
 
           // 🔧 立即通知监听器，确保 PlayerPage 能获取到包含歌词的 currentSong
           notifyListeners();
@@ -490,7 +509,8 @@ class PlayerService extends ChangeNotifier {
           source: MusicSource.local,
         );
 
-        await _updateCoverImage(track.picUrl, notify: false);
+        // 本地歌曲已在 playTrack 开始时更新过轨道封面，此处不再重复更新
+        // 如果本地文件有嵌入封面（目前逻辑尚未支持动态提取到 _currentSong.pic），则后续再按需扩展
 
         notifyListeners();
         _loadLyricsForFloatingDisplay();
@@ -571,7 +591,10 @@ class PlayerService extends ChangeNotifier {
 
       _currentSong = songDetail;
       
-      await _updateCoverImage(songDetail.pic, notify: false);
+      // 如果获取到的详情封面与预期的不同才更新
+      if (songDetail.pic != track.picUrl) {
+        await _updateCoverImage(songDetail.pic, notify: false);
+      }
 
       // 🔧 修复：立即通知监听器，让 PlayerPage 能获取到包含歌词的 currentSong
       notifyListeners();
@@ -994,22 +1017,31 @@ class PlayerService extends ChangeNotifier {
     }
   }
 
-  /// 更新封面 Provider，统一管理封面缓存与刷新
-  /// 支持网络 URL 和本地文件路径
-  Future<void> _updateCoverImage(String? imageUrl, {bool notify = true}) async {
-    print('🖼️ [PlayerService] _updateCoverImage 调用, imageUrl: ${imageUrl ?? "null"}');
-    
+  Future<void> _updateCoverImage(String? imageUrl, {bool notify = true, bool force = false}) async {
+    // 调试日志输出调用时机
+    // print('🖼️ [PlayerService] _updateCoverImage: $imageUrl (Notify: $notify, Force: $force)');
+
     if (imageUrl == null || imageUrl.isEmpty) {
-      print('⚠️ [PlayerService] 封面URL为空，跳过更新');
       if (_currentCoverImageProvider != null) {
         setCurrentCoverImageProvider(null, shouldNotify: notify);
+        _currentCoverUrl = null;
       }
       return;
     }
 
-    if (_currentCoverUrl == imageUrl && _currentCoverImageProvider != null) {
+    // ✅ 关键优化：如果显式提供了 provider 且没有强制要求刷新（针对同一首歌），则锁定封面
+    if (!force && _currentCoverImageProvider != null && _currentCoverUrl != null) {
+      // 如果 URL 看起来是同一个（简单字符串匹配）或者我们已经锁定了 provider，则直接跳过
+      if (_currentCoverUrl == imageUrl) return;
+      
+      // 进一步优化：即使 URL 字符串不一致，但如果我们正处于“歌曲详情加载”阶段，
+      // 且已经有了来自 Track 的封面，通常不需要因为 SongDetail 的 URL 稍有不同而刷新。
+      // 这里我们保守一点，只在非 force 情况下拦截。
       return;
     }
+
+    // 更新当前 URL 记录（仅在准备真正创建新的 provider 时）
+    _currentCoverUrl = imageUrl;
 
     try {
       // 判断是网络 URL 还是本地文件路径
@@ -1040,6 +1072,69 @@ class PlayerService extends ChangeNotifier {
     } catch (e) {
       print('⚠️ [PlayerService] 预加载封面失败: $e');
       setCurrentCoverImageProvider(null, shouldNotify: notify);
+    }
+  }
+
+  /// 预取下一首歌曲的封面和主题色
+  Future<void> _precacheNextCover() async {
+    try {
+      final nextTrack = PlaylistQueueService().peekNext(PlaybackModeService().currentMode);
+      if (nextTrack == null || nextTrack.picUrl.isEmpty) return;
+
+      final imageUrl = nextTrack.picUrl;
+      final isNetwork = imageUrl.startsWith('http://') || imageUrl.startsWith('https://');
+      
+      if (isNetwork) {
+        print('🖼️ [PlayerService] 预缓存下一首封面: ${nextTrack.name} -> $imageUrl');
+        final provider = CachedNetworkImageProvider(imageUrl);
+        
+        // 检查是否需要预加载主题色
+        final backgroundService = PlayerBackgroundService();
+        final shouldPrecacheThemeColor = backgroundService.enableGradient && 
+            backgroundService.backgroundType == PlayerBackgroundType.adaptive;
+        
+        // 触发加载
+        final ImageStream stream = provider.resolve(ImageConfiguration.empty);
+        final listener = ImageStreamListener((_, __) {
+          print('✅ [PlayerService] 下一首封面预缓存完成: ${nextTrack.name}');
+          
+          // ✨ 关键修复：封面缓存完成后再提取主题色
+          if (shouldPrecacheThemeColor) {
+            _precacheNextThemeColor(imageUrl, nextTrack.name);
+          }
+        }, onError: (dynamic exception, StackTrace? stackTrace) {
+          print('⚠️ [PlayerService] 下一首封面预缓存失败: $exception');
+        });
+        stream.addListener(listener);
+      }
+    } catch (e) {
+      print('⚠️ [PlayerService] 预缓存图片逻辑异常: $e');
+    }
+  }
+
+  /// 预加载下一首歌曲的主题色（仅缓存，不更新 UI）
+  Future<void> _precacheNextThemeColor(String imageUrl, String trackName) async {
+    try {
+      // 检查是否已经缓存
+      final cacheKey = imageUrl;
+      if (_themeColorCache.containsKey(cacheKey)) {
+        print('🎨 [PlayerService] 下一首主题色已在缓存: $trackName');
+        return;
+      }
+
+      print('🎨 [PlayerService] 预加载下一首主题色: $trackName');
+      
+      // 使用 isolate 提取颜色，不阻塞主线程
+      final themeColor = await _extractColorFromFullImageAsync(imageUrl);
+      
+      if (themeColor != null) {
+        _themeColorCache[cacheKey] = themeColor;
+        print('✅ [PlayerService] 下一首主题色预加载完成: $trackName -> $themeColor');
+      } else {
+        print('⚠️ [PlayerService] 下一首主题色预加载失败: $trackName');
+      }
+    } catch (e) {
+      print('⚠️ [PlayerService] 预加载主题色异常: $e');
     }
   }
 
@@ -1099,9 +1194,11 @@ class PlayerService extends ChangeNotifier {
   }
 
   /// 从整张图片提取主题色（使用 isolate，不阻塞主线程）
+  /// ✅ 优化：优先从 CachedNetworkImage 的本地缓存读取图片，避免重复下载
   Future<Color?> _extractColorFromFullImageAsync(String imageUrl) async {
     try {
-      final result = await ColorExtractionService().extractColorsFromUrl(
+      // 优先使用本地缓存的图片（封面已被预加载到缓存）
+      final result = await ColorExtractionService().extractColorsFromCachedImage(
         imageUrl,
         sampleSize: 64, // 主题色使用稍大的尺寸以获取更准确的颜色
         timeout: const Duration(seconds: 3),
@@ -1278,9 +1375,10 @@ class PlayerService extends ChangeNotifier {
       _state = PlayerState.idle;
       _currentSong = null;
       _currentTrack = null;
-      _position = Duration.zero;
+      _errorMessage = null;
       _duration = Duration.zero;
-      setCurrentCoverImageProvider(null, shouldNotify: false);
+      _position = Duration.zero;
+      positionNotifier.value = Duration.zero; // 重置进度通知器
       setCurrentCoverImageProvider(null, shouldNotify: false);
       notifyListeners();
       print('⏹️ [PlayerService] 停止播放');
@@ -1297,9 +1395,25 @@ class PlayerService extends ChangeNotifier {
       } else if (_audioPlayer != null) {
         await _audioPlayer!.seek(position);
       }
+      _position = position;
+      positionNotifier.value = position;
+      // 强制立即同步到原生层
+      _syncPositionToNative(position, force: true);
       print('⏩ [PlayerService] 跳转到: ${position.inSeconds}s');
     } catch (e) {
       print('❌ [PlayerService] 跳转失败: $e');
+    }
+  }
+
+  /// 节流同步位置到 Android 原生层
+  void _syncPositionToNative(Duration position, {bool force = false}) {
+    if (!Platform.isAndroid) return;
+    
+    final now = DateTime.now();
+    // 正常播放时每 500ms 同步一次，seek 时强制同步
+    if (force || now.difference(_lastNativeSyncTime).inMilliseconds > 500) {
+      AndroidFloatingLyricService().updatePosition(position);
+      _lastNativeSyncTime = now;
     }
   }
 
@@ -1307,6 +1421,11 @@ class PlayerService extends ChangeNotifier {
   Future<void> setVolume(double volume) async {
     try {
       final clampedVolume = volume.clamp(0.0, 1.0);
+      
+      // 🔧 性能优化：增加音量变化检测 (epsilon = 0.001)
+      // 如果音量变化微乎其微，则跳过后续操作，减少通知和 I/O
+      if ((clampedVolume - _volume).abs() < 0.001) return;
+      
       _volume = clampedVolume;
 
       // 只有在播放器已初始化时才应用音量
@@ -1316,12 +1435,21 @@ class PlayerService extends ChangeNotifier {
         await _audioPlayer!.setVolume(clampedVolume);
       }
 
-      await _saveVolume(); // 保存音量设置
+      _saveVolumeThrottled(); // 🔧 性能优化：使用节约流方式保存音量设置
       notifyListeners(); // 通知监听器音量已改变
       print('🔊 [PlayerService] 音量设置为: ${(clampedVolume * 100).toInt()}%');
     } catch (e) {
-      print('❌ [PlayerService] 音量设置失败: $e');
+      print('⚠️ [PlayerService] 设置音量失败: $e');
     }
+  }
+
+  async_lib.Timer? _saveVolumeTimer;
+  /// 节流方式保存音量，避免在连续调节音量时频繁触发磁盘写入
+  void _saveVolumeThrottled() {
+    _saveVolumeTimer?.cancel();
+    _saveVolumeTimer = async_lib.Timer(const Duration(milliseconds: 1000), () {
+      _saveVolume();
+    });
   }
 
   /// 保存音量设置
@@ -1367,8 +1495,10 @@ class PlayerService extends ChangeNotifier {
 
     _mediaKitPositionSub = _mediaKitPlayer!.stream.position.listen((position) {
       _position = position;
+      positionNotifier.value = position; // 更新独立的进度通知器
       _updateFloatingLyric();
-      notifyListeners();
+      // 🔧 性能优化：不再在进度更新时调用 notifyListeners()，避免全国范围的 UI 重建
+      // notifyListeners(); 
     });
 
     _mediaKitDurationSub = _mediaKitPlayer!.stream.duration.listen((duration) {
@@ -1986,15 +2116,16 @@ class PlayerService extends ChangeNotifier {
         _position = currentPos;
 
         // 同步位置到原生层，让原生层可以基于最新的位置进行自动推进
-        if (Platform.isAndroid && AndroidFloatingLyricService().isVisible) {
-          AndroidFloatingLyricService().updatePosition(_position);
-        }
+        _syncPositionToNative(_position);
       }
     } catch (e) {
       // 忽略获取位置失败的错误，使用缓存的位置
     }
 
-    _updateFloatingLyric();
+    // 🔥 性能优化：移除冗余的 _updateFloatingLyric() 调用
+    // _syncPositionToNative 已经将位置同步到了原生层，原生层具有自推进机制。
+    // 在后台时重复调用 _updateFloatingLyric 会导致不必要的 MethodChannel 消息和 UI 刷新开销。
+    // _updateFloatingLyric();
   }
 
   /// 从保存的状态恢复播放

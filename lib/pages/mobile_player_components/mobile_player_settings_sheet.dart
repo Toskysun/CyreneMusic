@@ -101,6 +101,11 @@ class _MobilePlayerSettingsSheetState extends State<MobilePlayerSettingsSheet> {
                     _buildPlayerStyleSection(),
                     
                     const SizedBox(height: 20),
+
+                    // 歌词细节设置
+                    _buildLyricDetailedSettingsSection(),
+
+                    const SizedBox(height: 20),
                     
                     // 播放器背景
                     _buildBackgroundSection(),
@@ -291,6 +296,147 @@ class _MobilePlayerSettingsSheetState extends State<MobilePlayerSettingsSheet> {
                     onTap: () => styleService.setAlignment(LyricAlignment.top),
                   ),
                 ],
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  /// 构建歌词细节设置区域 (字号和模糊行数)
+  Widget _buildLyricDetailedSettingsSection() {
+    return AnimatedBuilder(
+      animation: LyricStyleService(),
+      builder: (context, _) {
+        final styleService = LyricStyleService();
+        
+        return Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                '歌词细节',
+                style: TextStyle(
+                  color: Colors.white70,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+              const SizedBox(height: 12),
+              
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.05),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Column(
+                  children: [
+                    // 字号调节
+                    Row(
+                      children: [
+                        const Icon(Icons.format_size_rounded, color: Colors.white60, size: 18),
+                        const SizedBox(width: 10),
+                        const Text(
+                          '歌词字号',
+                          style: TextStyle(color: Colors.white, fontSize: 13),
+                        ),
+                        const Spacer(),
+                        Text(
+                          '${(styleService.lyricFontSizeMultiplier * 100).toInt()}%',
+                          style: const TextStyle(color: Colors.white70, fontSize: 13, fontWeight: FontWeight.bold),
+                        ),
+                      ],
+                    ),
+                    SliderTheme(
+                      data: SliderTheme.of(context).copyWith(
+                        activeTrackColor: Colors.white,
+                        inactiveTrackColor: Colors.white24,
+                        thumbColor: Colors.white,
+                        overlayColor: Colors.white24,
+                        trackHeight: 4,
+                      ),
+                      child: Slider(
+                        value: styleService.lyricFontSizeMultiplier,
+                        min: 0.8,
+                        max: 1.5,
+                        divisions: 7,
+                        onChanged: (v) => styleService.setFontSizeMultiplier(v),
+                      ),
+                    ),
+                    
+                    const SizedBox(height: 8),
+                    
+                    // 渐隐范围
+                    Row(
+                      children: [
+                        const Icon(Icons.blur_linear_rounded, color: Colors.white60, size: 18),
+                        const SizedBox(width: 10),
+                        const Text(
+                          '歌词渐隐范围',
+                          style: TextStyle(color: Colors.white, fontSize: 13),
+                        ),
+                        const Spacer(),
+                        Text(
+                          '${styleService.lyricBlurLines} 行',
+                          style: const TextStyle(color: Colors.white70, fontSize: 13, fontWeight: FontWeight.bold),
+                        ),
+                      ],
+                    ),
+                    SliderTheme(
+                      data: SliderTheme.of(context).copyWith(
+                        activeTrackColor: Colors.white,
+                        inactiveTrackColor: Colors.white24,
+                        thumbColor: Colors.white,
+                        overlayColor: Colors.white24,
+                        trackHeight: 4,
+                      ),
+                      child: Slider(
+                        value: styleService.lyricBlurLines.toDouble(),
+                        min: 2,
+                        max: 8,
+                        onChanged: (v) => styleService.setBlurLines(v.toInt()),
+                      ),
+                    ),
+
+                    const SizedBox(height: 8),
+
+                    // 模糊强度调节
+                    Row(
+                      children: [
+                        const Icon(Icons.lens_blur_rounded, color: Colors.white60, size: 18),
+                        const SizedBox(width: 10),
+                        const Text(
+                          '视觉模糊强度',
+                          style: TextStyle(color: Colors.white, fontSize: 13),
+                        ),
+                        const Spacer(),
+                        Text(
+                          '${styleService.lyricBlurSigma.toStringAsFixed(1)}',
+                          style: const TextStyle(color: Colors.white70, fontSize: 13, fontWeight: FontWeight.bold),
+                        ),
+                      ],
+                    ),
+                    SliderTheme(
+                      data: SliderTheme.of(context).copyWith(
+                        activeTrackColor: Colors.white,
+                        inactiveTrackColor: Colors.white24,
+                        thumbColor: Colors.white,
+                        overlayColor: Colors.white24,
+                        trackHeight: 4,
+                      ),
+                      child: Slider(
+                        value: styleService.lyricBlurSigma,
+                        min: 0.0,
+                        max: 10.0,
+                        divisions: 20,
+                        onChanged: (v) => styleService.setBlurSigma(v),
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ],
           ),

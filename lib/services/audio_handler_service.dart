@@ -43,16 +43,17 @@ class CyreneAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler
   
   /// 启动悬浮歌词后台更新定时器
   void _startLyricUpdateTimer() {
-    // 🔥 优化：每200ms更新一次悬浮歌词，提高后台同步精度
-    // 更频繁的同步可以减少原生层自动推进的累积误差
-    _lyricUpdateTimer = Timer.periodic(const Duration(milliseconds: 200), (timer) async {
+    // 🔧 性能优化：将同步频率从 200ms 降低至 2000ms。
+    // Android 原生层 (FloatingLyricService) 内部已有 100ms 的平滑自推进机制，
+    // Dart 侧只需每 2 秒同步一次基准位置进行校准即可，这样可以显著降低后台 CPU 占用。
+    _lyricUpdateTimer = Timer.periodic(const Duration(milliseconds: 2000), (timer) async {
       if (Platform.isAndroid && AndroidFloatingLyricService().isVisible) {
         // 使用 await 确保每次更新完成后再进行下一次
         // 这样可以避免并发调用导致的问题
         await PlayerService().updateFloatingLyricManually();
       }
     });
-    print('✅ [AudioHandler] 悬浮歌词后台更新定时器已启动（200ms间隔）');
+    print('✅ [AudioHandler] 悬浮歌词后台更新定时器已启动（2000ms间隔，定期校准）');
   }
 
   /// 启动进度条更新定时器（播放时定期更新进度）

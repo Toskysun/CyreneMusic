@@ -8,7 +8,9 @@ import '../../services/auth_service.dart';
 import '../../services/netease_login_service.dart';
 import '../../services/kugou_login_service.dart';
 import '../../utils/theme_manager.dart';
+import '../../widgets/material/material_settings_widgets.dart';
 import 'netease_qr_dialog.dart';
+
 import 'kugou_qr_dialog.dart';
 
 /// 第三方账号管理二级页面内容
@@ -212,16 +214,19 @@ class _ThirdPartyAccountsContentState extends State<ThirdPartyAccountsContent> {
     );
   }
 
-  /// 构建 Material UI 内容
   Widget _buildMaterialContent(BuildContext context, dynamic user) {
     return ListView(
-      padding: const EdgeInsets.all(24),
+      padding: const EdgeInsets.symmetric(vertical: 8),
       children: [
         // 提示信息
-        Card(
-          color: Theme.of(context).colorScheme.primaryContainer.withOpacity(0.3),
-          child: Padding(
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          child: Container(
             padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: Theme.of(context).colorScheme.primaryContainer.withValues(alpha: 0.3),
+              borderRadius: BorderRadius.circular(24),
+            ),
             child: Row(
               children: [
                 Icon(
@@ -242,18 +247,20 @@ class _ThirdPartyAccountsContentState extends State<ThirdPartyAccountsContent> {
             ),
           ),
         ),
-        const SizedBox(height: 24),
         
-        // 网易云音乐
-        _buildSectionTitle(context, '网易云音乐'),
-        const SizedBox(height: 8),
-        _buildNeteaseCard(context, user),
-        const SizedBox(height: 24),
+        MD3SettingsSection(
+          title: '网易云音乐',
+          children: [
+            _buildNeteaseCard(context, user),
+          ],
+        ),
         
-        // 酷狗音乐
-        _buildSectionTitle(context, '酷狗音乐'),
-        const SizedBox(height: 8),
-        _buildKugouCard(context, user),
+        MD3SettingsSection(
+          title: '酷狗音乐',
+          children: [
+            _buildKugouCard(context, user),
+          ],
+        ),
       ],
     );
   }
@@ -635,139 +642,113 @@ class _ThirdPartyAccountsContentState extends State<ThirdPartyAccountsContent> {
     );
   }
 
-  /// 构建网易云音乐卡片 (Material)
   Widget _buildNeteaseCard(BuildContext context, dynamic user) {
-    return Card(
-      child: FutureBuilder<Map<String, dynamic>>(
-        key: ValueKey(_refreshKey),
-        future: NeteaseLoginService().fetchBindings(),
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const ListTile(
-              leading: CircleAvatar(child: Icon(Icons.cloud)),
-              title: Text('网易云音乐'),
-              subtitle: Text('加载中...'),
-              trailing: SizedBox(
-                width: 20,
-                height: 20,
-                child: CircularProgressIndicator(strokeWidth: 2),
-              ),
-            );
-          }
-
-          final bindings = snapshot.data?['data'] as Map<String, dynamic>?;
-          final netease = bindings?['netease'] as Map<String, dynamic>?;
-          final bound = (netease != null) && (netease['bound'] == true);
-          final nickname = netease?['nickname'] as String?;
-          final avatarUrl = netease?['avatarUrl'] as String?;
-          final neteaseUserId = netease?['userId']?.toString();
-
-          return ListTile(
-            leading: CircleAvatar(
-              backgroundImage: avatarUrl != null ? NetworkImage(avatarUrl) : null,
-              child: avatarUrl == null ? const Icon(Icons.cloud) : null,
+    return FutureBuilder<Map<String, dynamic>>(
+      key: ValueKey(_refreshKey),
+      future: NeteaseLoginService().fetchBindings(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const MD3SettingsTile(
+            leading: Icon(Icons.cloud_outlined),
+            title: '网易云音乐',
+            subtitle: '加载中...',
+            trailing: SizedBox(
+              width: 18,
+              height: 18,
+              child: CircularProgressIndicator(strokeWidth: 2),
             ),
-            title: const Text('网易云音乐'),
-            subtitle: bound
-                ? Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text('昵称: ${nickname ?? '-'}'),
-                      Text(
-                        '用户ID: ${neteaseUserId ?? '-'}',
-                        style: Theme.of(context).textTheme.bodySmall,
-                      ),
-                    ],
-                  )
-                : const Text('未绑定'),
-            trailing: bound
-                ? OutlinedButton.icon(
-                    onPressed: () => _showUnbindDialog(context),
-                    icon: const Icon(Icons.link_off, size: 18),
-                    label: const Text('解绑'),
-                    style: OutlinedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                    ),
-                  )
-                : FilledButton.icon(
-                    onPressed: () => _bindNetease(context, user.id),
-                    icon: const Icon(Icons.qr_code, size: 18),
-                    label: const Text('去绑定'),
-                    style: FilledButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                    ),
-                  ),
           );
-        },
-      ),
+        }
+
+        final bindings = snapshot.data?['data'] as Map<String, dynamic>?;
+        final netease = bindings?['netease'] as Map<String, dynamic>?;
+        final bound = (netease != null) && (netease['bound'] == true);
+        final nickname = netease?['nickname'] as String?;
+        final avatarUrl = netease?['avatarUrl'] as String?;
+        final neteaseUserId = netease?['userId']?.toString();
+
+        return MD3SettingsTile(
+          leading: avatarUrl != null
+              ? CircleAvatar(
+                  radius: 12,
+                  backgroundImage: NetworkImage(avatarUrl),
+                )
+              : const Icon(Icons.cloud_outlined),
+          title: '网易云音乐',
+          subtitle: bound
+              ? '昵称: ${nickname ?? '-'}\n用户ID: ${neteaseUserId ?? '-'}'
+              : '未绑定',
+          trailing: bound
+              ? TextButton.icon(
+                  onPressed: () => _showUnbindDialog(context),
+                  icon: const Icon(Icons.link_off, size: 18),
+                  label: const Text('解绑'),
+                  style: TextButton.styleFrom(
+                    foregroundColor: Theme.of(context).colorScheme.error,
+                  ),
+                )
+              : FilledButton.icon(
+                  onPressed: () => _bindNetease(context, user.id),
+                  icon: const Icon(Icons.qr_code, size: 18),
+                  label: const Text('去绑定'),
+                ),
+        );
+      },
     );
   }
 
-  /// 构建酷狗音乐卡片 (Material)
   Widget _buildKugouCard(BuildContext context, dynamic user) {
-    return Card(
-      child: FutureBuilder<Map<String, dynamic>>(
-        key: ValueKey(_refreshKey),
-        future: KugouLoginService().fetchBindings(),
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const ListTile(
-              leading: CircleAvatar(child: Icon(Icons.music_note)),
-              title: Text('酷狗音乐'),
-              subtitle: Text('加载中...'),
-              trailing: SizedBox(
-                width: 20,
-                height: 20,
-                child: CircularProgressIndicator(strokeWidth: 2),
-              ),
-            );
-          }
-
-          final bindings = snapshot.data?['data'] as Map<String, dynamic>?;
-          final kugou = bindings?['kugou'] as Map<String, dynamic>?;
-          final bound = (kugou != null) && (kugou['bound'] == true);
-          final username = kugou?['username'] as String?;
-          final avatar = kugou?['avatar'] as String?;
-          final kugouUserId = kugou?['userId']?.toString();
-
-          return ListTile(
-            leading: CircleAvatar(
-              backgroundImage: avatar != null ? NetworkImage(avatar) : null,
-              child: avatar == null ? const Icon(Icons.music_note) : null,
+    return FutureBuilder<Map<String, dynamic>>(
+      key: ValueKey(_refreshKey),
+      future: KugouLoginService().fetchBindings(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const MD3SettingsTile(
+            leading: Icon(Icons.music_note_outlined),
+            title: '酷狗音乐',
+            subtitle: '加载中...',
+            trailing: SizedBox(
+              width: 18,
+              height: 18,
+              child: CircularProgressIndicator(strokeWidth: 2),
             ),
-            title: const Text('酷狗音乐'),
-            subtitle: bound
-                ? Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text('昵称: ${username ?? '-'}'),
-                      Text(
-                        '用户ID: ${kugouUserId ?? '-'}',
-                        style: Theme.of(context).textTheme.bodySmall,
-                      ),
-                    ],
-                  )
-                : const Text('未绑定'),
-            trailing: bound
-                ? OutlinedButton.icon(
-                    onPressed: () => _showUnbindKugouDialog(context),
-                    icon: const Icon(Icons.link_off, size: 18),
-                    label: const Text('解绑'),
-                    style: OutlinedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                    ),
-                  )
-                : FilledButton.icon(
-                    onPressed: () => _bindKugou(context, user.id),
-                    icon: const Icon(Icons.qr_code, size: 18),
-                    label: const Text('去绑定'),
-                    style: FilledButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                    ),
-                  ),
           );
-        },
-      ),
+        }
+
+        final bindings = snapshot.data?['data'] as Map<String, dynamic>?;
+        final kugou = bindings?['kugou'] as Map<String, dynamic>?;
+        final bound = (kugou != null) && (kugou['bound'] == true);
+        final username = kugou?['username'] as String?;
+        final avatar = kugou?['avatar'] as String?;
+        final kugouUserId = kugou?['userId']?.toString();
+
+        return MD3SettingsTile(
+          leading: avatar != null
+              ? CircleAvatar(
+                  radius: 12,
+                  backgroundImage: NetworkImage(avatar),
+                )
+              : const Icon(Icons.music_note_outlined),
+          title: '酷狗音乐',
+          subtitle: bound
+              ? '昵称: ${username ?? '-'}\n用户ID: ${kugouUserId ?? '-'}'
+              : '未绑定',
+          trailing: bound
+              ? TextButton.icon(
+                  onPressed: () => _showUnbindKugouDialog(context),
+                  icon: const Icon(Icons.link_off, size: 18),
+                  label: const Text('解绑'),
+                  style: TextButton.styleFrom(
+                    foregroundColor: Theme.of(context).colorScheme.error,
+                  ),
+                )
+              : FilledButton.icon(
+                  onPressed: () => _bindKugou(context, user.id),
+                  icon: const Icon(Icons.qr_code, size: 18),
+                  label: const Text('去绑定'),
+                ),
+        );
+      },
     );
   }
 

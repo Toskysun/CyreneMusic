@@ -78,22 +78,35 @@ class ChartsTab extends StatelessWidget {
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // 1. 顶部 BENTO GRID (替代单一轮播图)
+            // 0. Expressive Page Title
             Padding(
-              padding: const EdgeInsets.only(bottom: 32),
+              padding: const EdgeInsets.only(top: 16, bottom: 40),
+              child: Text(
+                '音乐榜单',
+                style: Theme.of(context).textTheme.displaySmall?.copyWith(
+                  fontWeight: FontWeight.w900,
+                  letterSpacing: -1.0,
+                  color: Theme.of(context).colorScheme.onSurface,
+                ),
+              ),
+            ),
+
+            // 1. 顶部 BENTO GRID
+            Padding(
+              padding: const EdgeInsets.only(bottom: 56),
               child: _buildFeaturedSection(context, constraints),
             ),
 
             // 2. 历史与推荐 (Quick Access)
             Padding(
-              padding: const EdgeInsets.only(bottom: 32),
+              padding: const EdgeInsets.only(bottom: 56),
               child: _buildQuickAccessSection(context, isWide),
             ),
 
-            // 3. 榜单列表 (恢复为水平列表布局)
+            // 3. 榜单列表 (更具表现力的间距)
             ...MusicService().toplists.map((toplist) {
               return Padding(
-                padding: const EdgeInsets.only(bottom: 32.0),
+                padding: const EdgeInsets.only(bottom: 64.0),
                 child: _ToplistSection(
                   toplist: toplist,
                   checkLoginStatus: checkLoginStatus,
@@ -161,30 +174,27 @@ class ChartsTab extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Padding(
-          padding: const EdgeInsets.only(bottom: 16.0),
+          padding: const EdgeInsets.only(bottom: 24.0),
           child: Text(
             '今日推荐',
-            style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-              fontWeight: FontWeight.bold,
+            style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+              fontWeight: FontWeight.w800,
+              letterSpacing: -0.5,
             ),
           ),
         ),
         SizedBox(
-          height: 220,
-          child: ListView.builder(
-            scrollDirection: Axis.horizontal,
-            itemCount: cachedRandomTracks.length,
-            itemBuilder: (context, index) {
-              return Container(
-                width: 300, 
-                margin: const EdgeInsets.only(right: 16),
-                child: _FeaturedCard(
-                  track: cachedRandomTracks[index],
-                  checkLoginStatus: checkLoginStatus,
-                  showDetails: true,
-                ),
+          height: 240,
+          child: CarouselView.weighted(
+            flexWeights: const [7, 2, 1], // 强制比例：一大(70%), 一中(20%), 一小(10%)
+            padding: const EdgeInsets.symmetric(horizontal: 4),
+            children: cachedRandomTracks.map((track) {
+              return _FeaturedCard(
+                track: track,
+                checkLoginStatus: checkLoginStatus,
+                showDetails: true,
               );
-            },
+            }).toList(),
           ),
         ),
       ],
@@ -241,7 +251,7 @@ class _FeaturedCardState extends State<_FeaturedCard> {
 
   @override
   Widget build(BuildContext context) {
-    final borderRadius = BorderRadius.circular(16);
+    final borderRadius = BorderRadius.circular(28); // Material Expressive 大圆角
 
     return MouseRegion(
       onEnter: (_) => setState(() => _isHovering = true),
@@ -298,9 +308,9 @@ class _FeaturedCardState extends State<_FeaturedCard> {
                 ),
                 if (widget.showDetails)
                   Positioned(
-                    left: 20,
-                    right: 20,
-                    bottom: 20,
+                    left: 24,
+                    right: 24,
+                    bottom: 24,
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       mainAxisSize: MainAxisSize.min,
@@ -409,8 +419,9 @@ class _ToplistSection extends StatelessWidget {
                 const SizedBox(width: 8),
                 Text(
                   toplist.name,
-                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                    fontWeight: FontWeight.bold,
+                  style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: -0.5,
                   ),
                 ),
               ],
@@ -428,9 +439,9 @@ class _ToplistSection extends StatelessWidget {
               ),
           ],
         ),
-        const SizedBox(height: 16),
+        const SizedBox(height: 24),
         SizedBox(
-          height: 180,
+          height: 220, // 增加高度以容纳更美观的卡片
           child: ListView.separated(
             scrollDirection: Axis.horizontal,
             itemCount: toplist.tracks.take(12).length,
@@ -470,8 +481,8 @@ class _ToplistTrackCardState extends State<_ToplistTrackCard> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final width = 140.0;
-    final borderRadius = BorderRadius.circular(8);
+    final width = 160.0; // 宽度略微增加
+    final borderRadius = BorderRadius.circular(24); // 圆角增加
 
     return MouseRegion(
       onEnter: (_) => setState(() => _isHovering = true),
@@ -508,18 +519,19 @@ class _ToplistTrackCardState extends State<_ToplistTrackCard> {
                       child: Container(
                         padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                         decoration: BoxDecoration(
-                          color: Colors.black.withOpacity(0.6),
-                          borderRadius: BorderRadius.circular(4),
+                          color: Colors.black.withOpacity(0.7),
+                          borderRadius: BorderRadius.circular(12),
                           border: widget.rank < 3 
-                              ? Border.all(color: theme.colorScheme.primary, width: 1)
-                              : null,
+                              ? Border.all(color: theme.colorScheme.primary.withOpacity(0.5), width: 1.5)
+                              : Border.all(color: Colors.white10, width: 1),
                         ),
                         child: Text(
-                          '${widget.rank + 1}',
+                          '#${widget.rank + 1}',
                           style: TextStyle(
-                            color: widget.rank < 3 ? theme.colorScheme.primary : Colors.white,
-                            fontSize: 12,
-                            fontWeight: FontWeight.bold,
+                            color: widget.rank < 3 ? theme.colorScheme.primary : Colors.white.withOpacity(0.9),
+                            fontSize: 14,
+                            fontWeight: FontWeight.w900,
+                            letterSpacing: -0.5,
                           ),
                         ),
                       ),
@@ -542,21 +554,29 @@ class _ToplistTrackCardState extends State<_ToplistTrackCard> {
                   ],
                 ),
               ),
-              const SizedBox(height: 8),
-              Text(
-                widget.track.name,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: theme.textTheme.bodyMedium?.copyWith(
-                  fontWeight: FontWeight.w600,
+              const SizedBox(height: 12),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 4.0),
+                child: Text(
+                  widget.track.name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.titleSmall?.copyWith(
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: -0.2,
+                  ),
                 ),
               ),
-              Text(
-                widget.track.artists,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: theme.textTheme.bodySmall?.color?.withOpacity(0.7),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 4.0),
+                child: Text(
+                  widget.track.artists,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.textTheme.bodySmall?.color?.withOpacity(0.6),
+                    fontWeight: FontWeight.w500,
+                  ),
                 ),
               ),
             ],

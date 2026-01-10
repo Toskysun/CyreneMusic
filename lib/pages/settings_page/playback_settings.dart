@@ -6,6 +6,8 @@ import '../../widgets/cupertino/cupertino_settings_widgets.dart';
 import '../../services/audio_quality_service.dart';
 import '../../models/song_detail.dart';
 import '../../utils/theme_manager.dart';
+import '../../widgets/material/material_settings_widgets.dart';
+
 
 /// 播放设置组件
 class PlaybackSettings extends StatelessWidget {
@@ -36,19 +38,14 @@ class PlaybackSettings extends StatelessWidget {
       return _buildCupertinoUI(context);
     }
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+    return MD3SettingsSection(
       children: [
-        _buildSectionTitle(context, '播放'),
-        Card(
-          child: ListTile(
-            leading: const Icon(Icons.high_quality),
-            title: const Text('音质选择'),
-            subtitle: Text(
-                '${AudioQualityService().getQualityName()} - ${AudioQualityService().getQualityDescription()}'),
-            trailing: const Icon(Icons.chevron_right),
-            onTap: () => _showAudioQualityDialog(context),
-          ),
+        MD3SettingsTile(
+          leading: const Icon(Icons.high_quality_outlined),
+          title: '音质选择',
+          subtitle: '${AudioQualityService().getQualityName()} - ${AudioQualityService().getQualityDescription()}',
+          trailing: const Icon(Icons.chevron_right),
+          onTap: () => _showAudioQualityDialog(context),
         ),
       ],
     );

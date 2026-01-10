@@ -4,22 +4,52 @@ part of 'my_page.dart';
 extension MyPageMaterialUI on _MyPageState {
   Widget _buildMaterialPage(BuildContext context, ColorScheme colorScheme, bool isLoggedIn) {
     if (!isLoggedIn) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.person_outline, size: 80, color: colorScheme.primary.withOpacity(0.5)),
-            const SizedBox(height: 24),
-            Text('登录后查看更多', style: Theme.of(context).textTheme.headlineSmall),
-            const SizedBox(height: 8),
-            Text('登录即可管理歌单和查看听歌统计', style: TextStyle(color: colorScheme.onSurface.withOpacity(0.6))),
-            const SizedBox(height: 24),
-            FilledButton.icon(
-              onPressed: () => showAuthDialog(context).then((_) { refresh(); }),
-              icon: const Icon(Icons.login),
-              label: const Text('立即登录'),
-            ),
-          ],
+      return Container(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [
+              colorScheme.primaryContainer.withOpacity(0.3),
+              colorScheme.surface,
+            ],
+          ),
+        ),
+        child: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(32),
+                decoration: BoxDecoration(
+                  color: colorScheme.primaryContainer.withOpacity(0.5),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(Icons.person_outline, size: 80, color: colorScheme.primary),
+              ),
+              const SizedBox(height: 32),
+              Text('发现你的音乐世界', style: Theme.of(context).textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.bold)),
+              const SizedBox(height: 12),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 48),
+                child: Text(
+                  '登录即可解锁个性化推荐、管理云端歌单并记录你的每一次聆听。',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: colorScheme.onSurface.withOpacity(0.7), fontSize: 16),
+                ),
+              ),
+              const SizedBox(height: 48),
+              FilledButton.icon(
+                onPressed: () => showAuthDialog(context).then((_) { refresh(); }),
+                style: FilledButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
+                  textStyle: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                ),
+                icon: const Icon(Icons.login),
+                label: const Text('立即开启'),
+              ),
+            ],
+          ),
         ),
       );
     }
@@ -28,193 +58,356 @@ extension MyPageMaterialUI on _MyPageState {
       return _buildMaterialPlaylistDetail(_selectedPlaylist!, colorScheme);
     }
 
+    final user = AuthService().currentUser;
+
     return RefreshIndicator(
       onRefresh: () async {
         await _playlistService.loadPlaylists();
         await _loadStats();
       },
-      child: ListView(
-        padding: const EdgeInsets.all(16),
+      child: Stack(
         children: [
-          _buildMaterialUserCard(colorScheme),
-          const SizedBox(height: 16),
-          _buildMaterialStatsCard(colorScheme),
-          const SizedBox(height: 24),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              const Text('我的歌单', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-              Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  IconButton(icon: const Icon(Icons.auto_awesome), onPressed: _showMusicTasteDialog, tooltip: '听歌品味总结'),
-                  IconButton(icon: const Icon(Icons.cloud_download), onPressed: _showImportPlaylistDialog, tooltip: '从网易云导入歌单'),
-                  TextButton.icon(onPressed: _showCreatePlaylistDialog, icon: const Icon(Icons.add), label: const Text('新建')),
-                ],
+          // 全局沉浸式背景
+          Positioned.fill(
+            child: user?.avatarUrl != null
+                ? CachedNetworkImage(
+                    imageUrl: user!.avatarUrl!,
+                    fit: BoxFit.cover,
+                  )
+                : Container(color: colorScheme.surface),
+          ),
+          Positioned.fill(
+            child: BackdropFilter(
+              filter: ImageFilter.blur(sigmaX: 60, sigmaY: 60),
+              child: Container(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [
+                      colorScheme.surface.withOpacity(0.2),
+                      colorScheme.surface.withOpacity(0.6),
+                      colorScheme.surface.withOpacity(0.8),
+                      colorScheme.surface,
+                    ],
+                    stops: const [0.0, 0.3, 0.6, 1.0],
+                  ),
+                ),
               ),
+            ),
+          ),
+          
+          CustomScrollView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            slivers: [
+              // 沉浸式头部 - 背景设为透明，因为底层已有背景
+              SliverAppBar(
+                expandedHeight: 240,
+                pinned: true,
+                stretch: true,
+                backgroundColor: Colors.transparent,
+                surfaceTintColor: Colors.transparent,
+                flexibleSpace: FlexibleSpaceBar(
+                  stretchModes: const [
+                    StretchMode.zoomBackground,
+                  ],
+                  background: Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const SizedBox(height: 48), // 为状态栏和可能的返回键留出空间
+                        CircleAvatar(
+                          radius: 50,
+                          backgroundColor: colorScheme.secondaryContainer.withOpacity(0.5),
+                          backgroundImage: user?.avatarUrl != null ? CachedNetworkImageProvider(user!.avatarUrl!) : null,
+                          child: user?.avatarUrl == null ? Text(user?.username[0].toUpperCase() ?? '?', style: TextStyle(fontSize: 32, color: colorScheme.onSecondaryContainer)) : null,
+                        ),
+                        const SizedBox(height: 16),
+                        Text(
+                          user?.username ?? '未登录',
+                          style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                            fontWeight: FontWeight.bold,
+                            color: colorScheme.onSurface,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          user?.email ?? '',
+                          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                            color: colorScheme.onSurfaceVariant,
+                            letterSpacing: 0.5,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+
+              // 核心统计磁贴
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  child: _buildMaterialStatsTiles(colorScheme),
+                ),
+              ),
+
+              // 歌单部分标题
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 24, 20, 8),
+                  child: Row(
+                    children: [
+                      Text('我的收藏', style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold)),
+                      const Spacer(),
+                      IconButton.filledTonal(
+                        onPressed: _showMusicTasteDialog,
+                        icon: const Icon(Icons.auto_awesome, size: 20),
+                        tooltip: '品味总结',
+                      ),
+                      const SizedBox(width: 8),
+                      IconButton.filledTonal(
+                        onPressed: _showImportPlaylistDialog,
+                        icon: const Icon(Icons.cloud_download_outlined, size: 20),
+                        tooltip: '导入',
+                      ),
+                      const SizedBox(width: 8),
+                      IconButton.filled(
+                        onPressed: _showCreatePlaylistDialog,
+                        icon: const Icon(Icons.add, size: 20),
+                        tooltip: '新建',
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+
+              // 歌单列表
+              SliverPadding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                sliver: _buildMaterialPlaylistsSliver(colorScheme),
+              ),
+
+              // 播放排行榜标题
+              if (_statsData != null && _statsData!.playCounts.isNotEmpty) ...[
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 16, 20, 12),
+                    child: Text('播放排行 Top 10', style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold)),
+                  ),
+                ),
+                SliverPadding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  sliver: _buildMaterialTopPlaysSliver(colorScheme),
+                ),
+              ],
+              const SliverToBoxAdapter(child: SizedBox(height: 32)),
             ],
           ),
-          const SizedBox(height: 8),
-          _buildMaterialPlaylistsList(colorScheme),
-          const SizedBox(height: 24),
-          if (_statsData != null && _statsData!.playCounts.isNotEmpty) ...[
-            const Text('播放排行榜 Top 10', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-            const SizedBox(height: 8),
-            _buildMaterialTopPlaysList(colorScheme),
-          ],
         ],
       ),
     );
   }
 
-  Widget _buildMaterialUserCard(ColorScheme colorScheme) {
-    final user = AuthService().currentUser;
-    if (user == null) return const SizedBox.shrink();
-
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Row(
-          children: [
-            CircleAvatar(
-              radius: 32,
-              backgroundImage: user.avatarUrl != null ? CachedNetworkImageProvider(user.avatarUrl!) : null,
-              child: user.avatarUrl == null ? Text(user.username[0].toUpperCase(), style: const TextStyle(fontSize: 24)) : null,
-            ),
-            const SizedBox(width: 16),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(user.username, style: Theme.of(context).textTheme.titleLarge),
-                  const SizedBox(height: 4),
-                  Text(user.email, style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: colorScheme.onSurface.withOpacity(0.6))),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildMaterialStatsCard(ColorScheme colorScheme) {
+  Widget _buildMaterialStatsTiles(ColorScheme colorScheme) {
     if (_isLoadingStats) {
-      return const Card(child: Padding(padding: EdgeInsets.all(32), child: Center(child: CircularProgressIndicator())));
+      return const Padding(
+        padding: EdgeInsets.symmetric(vertical: 32),
+        child: Center(child: CircularProgressIndicator()),
+      );
     }
 
     if (_statsData == null) {
-      return Card(child: Padding(padding: const EdgeInsets.all(16), child: Text('暂无统计数据', style: TextStyle(color: colorScheme.onSurface.withOpacity(0.6)))));
+      return const SizedBox.shrink();
     }
 
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('听歌统计', style: Theme.of(context).textTheme.titleMedium),
-            const SizedBox(height: 16),
-            Row(
-              children: [
-                Expanded(child: _buildMaterialStatItem(icon: Icons.access_time, label: '累计时长', value: ListeningStatsService.formatDuration(_statsData!.totalListeningTime), colorScheme: colorScheme)),
-                const SizedBox(width: 16),
-                Expanded(child: _buildMaterialStatItem(icon: Icons.play_circle_outline, label: '播放次数', value: '${_statsData!.totalPlayCount} 次', colorScheme: colorScheme)),
-              ],
+    return Row(
+      children: [
+        Expanded(
+          child: _buildExpressiveStatTile(
+            icon: Icons.access_time_filled,
+            label: '聆听时长',
+            value: ListeningStatsService.formatDuration(_statsData!.totalListeningTime),
+            color: colorScheme.primary,
+            onSurface: colorScheme.onPrimary,
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: _buildExpressiveStatTile(
+            icon: Icons.play_circle_filled,
+            label: '播放次数',
+            value: '${_statsData!.totalPlayCount}',
+            color: colorScheme.tertiary,
+            onSurface: colorScheme.onTertiary,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildExpressiveStatTile({
+    required IconData icon,
+    required String label,
+    required String value,
+    required Color color,
+    required Color onSurface,
+  }) {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.08),
+        borderRadius: BorderRadius.circular(28),
+        border: Border.all(color: color.withOpacity(0.1)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, size: 28, color: color),
+          const SizedBox(height: 16),
+          Text(value, style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold, color: color)),
+          const SizedBox(height: 4),
+          Text(label, style: Theme.of(context).textTheme.labelMedium?.copyWith(color: color.withOpacity(0.7), fontWeight: FontWeight.bold)),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMaterialPlaylistsSliver(ColorScheme colorScheme) {
+    final playlists = _playlistService.playlists;
+
+    if (playlists.isEmpty) {
+      return SliverToBoxAdapter(
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 48),
+          decoration: BoxDecoration(
+            color: colorScheme.surfaceContainerLow,
+            borderRadius: BorderRadius.circular(28),
+          ),
+          child: Column(
+            children: [
+              Icon(Icons.library_music_outlined, size: 48, color: colorScheme.outline.withOpacity(0.5)),
+              const SizedBox(height: 16),
+              Text('快去开启你的第一个歌单吧', style: TextStyle(color: colorScheme.onSurfaceVariant)),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return SliverList(
+      delegate: SliverChildBuilderDelegate(
+        (context, index) {
+          final playlist = playlists[index];
+          return Container(
+            margin: const EdgeInsets.only(bottom: 12),
+            decoration: BoxDecoration(
+              color: colorScheme.surfaceContainerLow,
+              borderRadius: BorderRadius.circular(24),
             ),
+            child: ListTile(
+              contentPadding: const EdgeInsets.fromLTRB(12, 4, 8, 4),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+              leading: _buildMaterialPlaylistCover(playlist, colorScheme),
+              title: Text(playlist.name, style: const TextStyle(fontWeight: FontWeight.bold)),
+              subtitle: Text('${playlist.trackCount} 首歌曲', style: TextStyle(color: colorScheme.onSurfaceVariant)),
+              trailing: IconButton(
+                icon: const Icon(Icons.more_vert, size: 22),
+                onPressed: () => _showPlaylistMoreOptions(playlist, colorScheme),
+              ),
+              onTap: () => _openPlaylistDetail(playlist),
+            ),
+          );
+        },
+        childCount: playlists.length,
+      ),
+    );
+  }
+
+  /// 显示歌单更多操作底板
+  void _showPlaylistMoreOptions(Playlist playlist, ColorScheme colorScheme) {
+    final canSync = _hasImportConfig(playlist);
+    
+    showModalBottomSheet(
+      context: context,
+      useRootNavigator: true,
+      backgroundColor: colorScheme.surface,
+      elevation: 0,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+      ),
+      builder: (context) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const SizedBox(height: 8),
+            Container(
+              width: 32,
+              height: 4,
+              decoration: BoxDecoration(
+                color: colorScheme.outlineVariant,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            const SizedBox(height: 16),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
+              child: Row(
+                children: [
+                  _buildMaterialPlaylistCover(playlist, colorScheme),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(playlist.name, style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
+                        Text('${playlist.trackCount} 首歌曲', style: Theme.of(context).textTheme.bodySmall?.copyWith(color: colorScheme.onSurfaceVariant)),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const Divider(indent: 24, endIndent: 24),
+            ListTile(
+              leading: const Icon(Icons.play_circle_outline),
+              title: const Text('播放全部'),
+              onTap: () {
+                Navigator.pop(context);
+                _openPlaylistDetail(playlist);
+                // 等待加载完成后播放的逻辑通常在详情页，这里仅打开详情
+              },
+            ),
+            ListTile(
+              leading: Icon(Icons.sync, color: canSync ? colorScheme.primary : colorScheme.onSurfaceVariant.withOpacity(0.3)),
+              title: const Text('同步歌单'),
+              subtitle: canSync ? null : const Text('请先设置导入来源', style: TextStyle(fontSize: 10)),
+              onTap: canSync ? () {
+                Navigator.pop(context);
+                _syncPlaylistFromList(playlist);
+              } : null,
+            ),
+            if (!playlist.isDefault)
+              ListTile(
+                leading: const Icon(Icons.delete_outline, color: Colors.redAccent),
+                title: const Text('删除歌单', style: TextStyle(color: Colors.redAccent)),
+                onTap: () {
+                  Navigator.pop(context);
+                  _confirmDeletePlaylist(playlist);
+                },
+              ),
+            const SizedBox(height: 16),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildMaterialStatItem({required IconData icon, required String label, required String value, required ColorScheme colorScheme}) {
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(color: colorScheme.surfaceContainerHighest, borderRadius: BorderRadius.circular(8)),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(icon, size: 20, color: colorScheme.primary),
-          const SizedBox(height: 8),
-          Text(label, style: TextStyle(fontSize: 12, color: colorScheme.onSurface.withOpacity(0.6))),
-          const SizedBox(height: 4),
-          Text(value, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildMaterialPlaylistsList(ColorScheme colorScheme) {
-    final playlists = _playlistService.playlists;
-
-    if (playlists.isEmpty) {
-      return Card(
-        child: Padding(
-          padding: const EdgeInsets.all(32),
-          child: Center(
-            child: Column(
-              children: [
-                Icon(Icons.library_music_outlined, size: 48, color: colorScheme.onSurface.withOpacity(0.3)),
-                const SizedBox(height: 16),
-                Text('暂无歌单', style: TextStyle(color: colorScheme.onSurface.withOpacity(0.6))),
-              ],
-            ),
-          ),
-        ),
-      );
-    }
-
-    return Column(
-      children: playlists.map((playlist) {
-        final canSync = _hasImportConfig(playlist);
-        return Card(
-          margin: const EdgeInsets.only(bottom: 8),
-          child: ListTile(
-            leading: _buildMaterialPlaylistCover(playlist, colorScheme),
-            title: Text(playlist.name),
-            subtitle: Text('${playlist.trackCount} 首歌曲'),
-            trailing: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                if (!playlist.isDefault) ...[
-                  IconButton(icon: const Icon(Icons.sync, size: 20), color: canSync ? colorScheme.primary : null, onPressed: canSync ? () => _syncPlaylistFromList(playlist) : null, tooltip: canSync ? '同步歌单' : '请先设置导入来源'),
-                  IconButton(icon: const Icon(Icons.delete_outline, size: 20), color: Colors.redAccent, onPressed: () => _confirmDeletePlaylist(playlist), tooltip: '删除歌单'),
-                ],
-                const Icon(Icons.chevron_right),
-              ],
-            ),
-            onTap: () => _openPlaylistDetail(playlist),
-          ),
-        );
-      }).toList(),
-    );
-  }
-
-  Widget _buildMaterialPlaylistCover(Playlist playlist, ColorScheme colorScheme) {
-    if (playlist.coverUrl != null && playlist.coverUrl!.isNotEmpty) {
-      return ClipRRect(
-        borderRadius: BorderRadius.circular(8),
-        child: CachedNetworkImage(
-          imageUrl: playlist.coverUrl!,
-          width: 48, height: 48, fit: BoxFit.cover,
-          placeholder: (_, __) => Container(width: 48, height: 48, decoration: BoxDecoration(color: playlist.isDefault ? colorScheme.primaryContainer : colorScheme.secondaryContainer, borderRadius: BorderRadius.circular(8)), child: Icon(playlist.isDefault ? Icons.favorite : Icons.library_music, color: playlist.isDefault ? Colors.red : colorScheme.primary)),
-          errorWidget: (_, __, ___) => Container(width: 48, height: 48, decoration: BoxDecoration(color: playlist.isDefault ? colorScheme.primaryContainer : colorScheme.secondaryContainer, borderRadius: BorderRadius.circular(8)), child: Icon(playlist.isDefault ? Icons.favorite : Icons.library_music, color: playlist.isDefault ? Colors.red : colorScheme.primary)),
-        ),
-      );
-    }
-    return Container(width: 48, height: 48, decoration: BoxDecoration(color: playlist.isDefault ? colorScheme.primaryContainer : colorScheme.secondaryContainer, borderRadius: BorderRadius.circular(8)), child: Icon(playlist.isDefault ? Icons.favorite : Icons.library_music, color: playlist.isDefault ? Colors.red : colorScheme.primary));
-  }
-
-  Widget _buildMaterialTopPlaysList(ColorScheme colorScheme) {
+  Widget _buildMaterialTopPlaysSliver(ColorScheme colorScheme) {
     final topPlays = _statsData!.playCounts.take(10).toList();
-    return Card(
-      child: ListView.separated(
-        shrinkWrap: true,
-        physics: const NeverScrollableScrollPhysics(),
-        itemCount: topPlays.length,
-        separatorBuilder: (_, __) => const Divider(height: 1),
-        itemBuilder: (context, index) {
+    return SliverList(
+      delegate: SliverChildBuilderDelegate(
+        (context, index) {
           final item = topPlays[index];
           final rank = index + 1;
           Color? rankColor;
@@ -222,33 +415,52 @@ extension MyPageMaterialUI on _MyPageState {
           else if (rank == 2) rankColor = Colors.grey.shade400;
           else if (rank == 3) rankColor = Colors.brown.shade300;
 
-          return ListTile(
-            leading: Stack(
-              children: [
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(4),
-                  child: CachedNetworkImage(
-                    imageUrl: item.picUrl, width: 48, height: 48, fit: BoxFit.cover,
-                    placeholder: (_, __) => Container(width: 48, height: 48, color: colorScheme.surfaceContainerHighest, child: const Icon(Icons.music_note)),
-                    errorWidget: (_, __, ___) => Container(width: 48, height: 48, color: colorScheme.surfaceContainerHighest, child: const Icon(Icons.music_note)),
+          return Container(
+            margin: const EdgeInsets.only(bottom: 8),
+            decoration: BoxDecoration(
+              color: colorScheme.surfaceContainerLow.withOpacity(0.5),
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: ListTile(
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              leading: Stack(
+                children: [
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(12),
+                    child: CachedNetworkImage(
+                      imageUrl: item.picUrl, width: 56, height: 56, fit: BoxFit.cover,
+                      placeholder: (_, __) => Container(width: 56, height: 56, color: colorScheme.surfaceContainerHighest, child: const Icon(Icons.music_note)),
+                      errorWidget: (_, __, ___) => Container(width: 56, height: 56, color: colorScheme.surfaceContainerHighest, child: const Icon(Icons.music_note)),
+                    ),
                   ),
-                ),
-                Positioned(left: 0, top: 0, child: Container(padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2), decoration: BoxDecoration(color: rankColor ?? colorScheme.primary, borderRadius: const BorderRadius.only(topLeft: Radius.circular(4), bottomRight: Radius.circular(4))), child: Text('$rank', style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.white)))),
-              ],
+                  Positioned(
+                    left: 0, top: 0,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: rankColor ?? colorScheme.primary.withOpacity(0.9),
+                        borderRadius: const BorderRadius.only(topLeft: Radius.circular(12), bottomRight: Radius.circular(12)),
+                      ),
+                      child: Text('$rank', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.white)),
+                    ),
+                  ),
+                ],
+              ),
+              title: Text(item.trackName, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.bold)),
+              subtitle: Text(item.artists, maxLines: 1, overflow: TextOverflow.ellipsis),
+              trailing: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Text('${item.playCount} 次', style: TextStyle(fontWeight: FontWeight.bold, color: colorScheme.primary)),
+                  Text(item.toTrack().getSourceName(), style: TextStyle(fontSize: 10, color: colorScheme.onSurfaceVariant)),
+                ],
+              ),
+              onTap: () => _playTrack(item),
             ),
-            title: Text(item.trackName, maxLines: 1, overflow: TextOverflow.ellipsis),
-            subtitle: Text(item.artists, maxLines: 1, overflow: TextOverflow.ellipsis),
-            trailing: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                Text('${item.playCount} 次', style: const TextStyle(fontWeight: FontWeight.bold)),
-                Text(item.toTrack().getSourceName(), style: TextStyle(fontSize: 10, color: colorScheme.onSurface.withOpacity(0.5))),
-              ],
-            ),
-            onTap: () => _playTrack(item),
           );
         },
+        childCount: topPlays.length,
       ),
     );
   }
@@ -408,30 +620,65 @@ extension MyPageMaterialUI on _MyPageState {
                     borderRadius: BorderRadius.circular(4),
                     child: CachedNetworkImage(
                       imageUrl: item.picUrl, width: 50, height: 50, fit: BoxFit.cover,
-                      placeholder: (_, __) => Container(width: 50, height: 50, color: colorScheme.surfaceContainerHighest, child: const Center(child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)))),
-                      errorWidget: (_, __, ___) => Container(width: 50, height: 50, color: colorScheme.surfaceContainerHighest, child: Icon(Icons.music_note, color: colorScheme.onSurfaceVariant)),
+                      placeholder: (_, __) => Container(width: 50, height: 50, color: colorScheme.surfaceContainerHighest),
+                      errorWidget: (_, __, ___) => Container(width: 50, height: 50, color: colorScheme.surfaceContainerHighest),
                     ),
                   ),
                   Positioned(bottom: 0, right: 0, child: Container(padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2), decoration: BoxDecoration(color: colorScheme.primaryContainer, borderRadius: const BorderRadius.only(topLeft: Radius.circular(4))), child: Text('#${index + 1}', style: TextStyle(color: colorScheme.onPrimaryContainer, fontSize: 10, fontWeight: FontWeight.bold)))),
                 ],
               ),
         title: Text(item.name, maxLines: 1, overflow: TextOverflow.ellipsis),
-        subtitle: Row(
-          children: [
-            Expanded(child: Text('${item.artists} • ${item.album}', maxLines: 1, overflow: TextOverflow.ellipsis, style: Theme.of(context).textTheme.bodySmall)),
-            const SizedBox(width: 8),
-            Text(_getSourceIcon(item.source), style: const TextStyle(fontSize: 12)),
-          ],
-        ),
-        trailing: _isEditMode ? null : Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            IconButton(icon: const Icon(Icons.play_arrow), onPressed: () => _playDetailTrack(index), tooltip: '播放'),
-            IconButton(icon: const Icon(Icons.remove_circle_outline, size: 20), color: Colors.redAccent, onPressed: () => _confirmRemoveTrack(item), tooltip: '从歌单移除'),
-          ],
-        ),
+        subtitle: Text('${item.artists} • ${item.album}', maxLines: 1, overflow: TextOverflow.ellipsis, style: Theme.of(context).textTheme.bodySmall),
+        trailing: _isEditMode ? null : const SizedBox.shrink(),
         onTap: _isEditMode ? () => _toggleTrackSelection(item) : () => _playDetailTrack(index),
       ),
     );
   }
+
+  Widget _buildMaterialUserCard(ColorScheme colorScheme) {
+    final user = AuthService().currentUser;
+    if (user == null) return const SizedBox.shrink();
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Row(
+          children: [
+            CircleAvatar(
+              radius: 32,
+              backgroundImage: user.avatarUrl != null ? CachedNetworkImageProvider(user.avatarUrl!) : null,
+              child: user.avatarUrl == null ? Text(user.username[0].toUpperCase(), style: const TextStyle(fontSize: 24)) : null,
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(user.username, style: Theme.of(context).textTheme.titleLarge),
+                  const SizedBox(height: 4),
+                  Text(user.email, style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: colorScheme.onSurface.withOpacity(0.6))),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMaterialPlaylistCover(Playlist playlist, ColorScheme colorScheme) {
+    if (playlist.coverUrl != null && playlist.coverUrl!.isNotEmpty) {
+      return ClipRRect(
+        borderRadius: BorderRadius.circular(12),
+        child: CachedNetworkImage(
+          imageUrl: playlist.coverUrl!,
+          width: 56, height: 56, fit: BoxFit.cover,
+          placeholder: (_, __) => Container(width: 56, height: 56, decoration: BoxDecoration(color: playlist.isDefault ? colorScheme.primaryContainer : colorScheme.secondaryContainer, borderRadius: BorderRadius.circular(12)), child: Icon(playlist.isDefault ? Icons.favorite : Icons.library_music, color: playlist.isDefault ? Colors.red : colorScheme.primary)),
+          errorWidget: (_, __, ___) => Container(width: 56, height: 56, decoration: BoxDecoration(color: playlist.isDefault ? colorScheme.primaryContainer : colorScheme.secondaryContainer, borderRadius: BorderRadius.circular(12)), child: Icon(playlist.isDefault ? Icons.favorite : Icons.library_music, color: playlist.isDefault ? Colors.red : colorScheme.primary)),
+        ),
+      );
+    }
+    return Container(width: 56, height: 56, decoration: BoxDecoration(color: playlist.isDefault ? colorScheme.primaryContainer : colorScheme.secondaryContainer, borderRadius: BorderRadius.circular(12)), child: Icon(playlist.isDefault ? Icons.favorite : Icons.library_music, color: playlist.isDefault ? Colors.red : colorScheme.primary));
+  }
 }
+

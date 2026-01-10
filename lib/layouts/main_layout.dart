@@ -770,10 +770,7 @@ class _MainLayoutState extends State<MainLayout>
           ],
         ),
         child: ClipRRect(
-          borderRadius: const BorderRadius.only(
-            topLeft: Radius.circular(20),
-            topRight: Radius.circular(20),
-          ),
+          borderRadius: BorderRadius.zero,
           child: Stack(
             children: [
               // 毛玻璃模糊层

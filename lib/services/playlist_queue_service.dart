@@ -156,6 +156,63 @@ class PlaylistQueueService extends ChangeNotifier {
     print('🔀 [PlaylistQueueService] 生成新的洗牌序列，共 ${_shuffledIndices.length} 首');
   }
 
+  /// 预测下一首歌曲（不改变当前索引）
+  /// [mode] 播放模式
+  Track? peekNext(dynamic mode) {
+    if (_queue.isEmpty) return null;
+
+    final modeStr = mode.toString();
+    
+    // 单曲循环：下一首还是当前首
+    if (modeStr.contains('repeatOne')) {
+      return _currentIndex >= 0 ? _queue[_currentIndex] : null;
+    }
+
+    // 随机播放
+    if (modeStr.contains('shuffle')) {
+      // 如果还没有生成过洗牌序列，无法预测
+      if (_shuffledIndices.isEmpty) return null;
+      
+      final nextShufflePos = _shufflePosition + 1;
+      if (nextShufflePos < _shuffledIndices.length) {
+        return _queue[_shuffledIndices[nextShufflePos]];
+      }
+      // 如果播到底了，下一首是重新洗牌后的第一位（通常无法精准预测，返回第一首作为兜底）
+      return _queue[_shuffledIndices[0]];
+    }
+
+    // 顺序播放
+    final nextIndex = _currentIndex + 1;
+    if (nextIndex < _queue.length) {
+      return _queue[nextIndex];
+    }
+    
+    // 列表循环：如果到了最后，下一首是第一首
+    return _queue[0];
+  }
+
+  /// 预测上一首歌曲（不改变当前索引）
+  Track? peekPrevious(dynamic mode) {
+    if (_queue.isEmpty) return null;
+
+    final modeStr = mode.toString();
+
+    // 随机播放
+    if (modeStr.contains('shuffle')) {
+      if (_shuffledIndices.isEmpty || _shufflePosition <= 0) return null;
+      return _queue[_shuffledIndices[_shufflePosition - 1]];
+    }
+
+    // 顺序播放
+    final prevIndex = _currentIndex - 1;
+    if (prevIndex >= 0) {
+      return _queue[prevIndex];
+    }
+    
+    // 列表循环
+    return _queue[_queue.length - 1];
+  }
+
   /// 获取随机歌曲（用于随机播放）
   /// 使用洗牌算法确保每首歌只播放一次，直到全部播放完毕
   Track? getRandomTrack() {

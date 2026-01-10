@@ -56,7 +56,12 @@ class _LoginPageState extends State<LoginPage> {
           print('❌ [LoginPage] IP归属地更新异常: $error');
         });
         
-        Navigator.pop(context, true); // 返回主页面
+        if (mounted) {
+          final nav = Navigator.of(context);
+          if (nav.canPop()) {
+            nav.pop(true);
+          }
+        }
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(

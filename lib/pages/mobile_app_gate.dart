@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import '../services/audio_source_service.dart';
 import '../services/auth_service.dart';
+import '../services/persistent_storage_service.dart';
 import '../layouts/main_layout.dart';
 import 'mobile_setup_page.dart';
 
@@ -41,9 +42,10 @@ class _MobileAppGateState extends State<MobileAppGate> {
   Widget build(BuildContext context) {
     final isConfigured = AudioSourceService().isConfigured;
     final isLoggedIn = AuthService().isLoggedIn;
+    final isTermsAccepted = PersistentStorageService().getBool('terms_accepted') ?? false;
 
-    // 音源配置和登录都完成后，显示主布局
-    if (isConfigured && isLoggedIn) {
+    // 音源配置、登录以及协议确认都完成后，显示主布局
+    if (isConfigured && isLoggedIn && isTermsAccepted) {
       return const MainLayout();
     }
 

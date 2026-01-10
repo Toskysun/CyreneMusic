@@ -98,6 +98,7 @@ class _PlayerPageState extends State<PlayerPage> with WindowListener, TickerProv
     
     if (Platform.isWindows) {
       LayoutPreferenceService().addListener(_onLayoutModeChanged);
+      PlayerService().positionNotifier.addListener(_onPositionChanged);
       windowManager.addListener(this);
       _checkMaximizedState();
     }
@@ -110,6 +111,7 @@ class _PlayerPageState extends State<PlayerPage> with WindowListener, TickerProv
     
     if (Platform.isWindows) {
       LayoutPreferenceService().removeListener(_onLayoutModeChanged);
+      PlayerService().positionNotifier.removeListener(_onPositionChanged);
       windowManager.removeListener(this);
     }
   }
@@ -174,6 +176,12 @@ class _PlayerPageState extends State<PlayerPage> with WindowListener, TickerProv
         print('🎤 [PlayerPage] 歌词样式已变化，刷新歌词面板');
       });
     }
+  }
+
+  /// 播放进度变化回调
+  void _onPositionChanged() {
+    if (!mounted) return;
+    _updateCurrentLyric();
   }
 
   /// 播放器状态变化回调

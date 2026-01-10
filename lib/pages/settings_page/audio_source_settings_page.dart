@@ -4,7 +4,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:fluent_ui/fluent_ui.dart' as fluent;
 import 'package:http/http.dart' as http;
+import '../../widgets/material/material_settings_widgets.dart';
 import '../../services/audio_source_service.dart';
+
 import '../../services/lx_music_source_parser.dart';
 import '../../models/audio_source_config.dart';
 import '../../utils/theme_manager.dart';
@@ -856,220 +858,126 @@ class _AudioSourceSettingsContentState
     );
   }
 
-  /// Material 风格内容
   Widget _buildMaterialContent(BuildContext context) {
     final sources = _audioSourceService.sources;
     final theme = Theme.of(context);
-
-    // 计算 Grid 的列数，适配不同宽度
-    final screenWidth = MediaQuery.of(context).size.width;
-    final crossAxisCount = (screenWidth / 300).floor().clamp(1, 4);
+    final colorScheme = theme.colorScheme;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('音源设置')),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // 说明卡片
-            Card(
-              elevation: 0,
-              color: theme.colorScheme.surfaceContainerHighest,
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Row(
-                  children: [
-                    Icon(Icons.info_outline, color: theme.colorScheme.primary),
-                    const SizedBox(width: 16),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            '关于音源',
-                            style: theme.textTheme.titleMedium?.copyWith(
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                          const Text(
-                            '添加并管理多个音源。您可以随时切换当前使用的音源。',
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
+      appBar: AppBar(
+        title: const Text('音源设置'),
+        centerTitle: true,
+      ),
+      body: ListView(
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        children: [
+          // 说明卡片
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            child: Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: colorScheme.secondaryContainer.withValues(alpha: 0.3),
+                borderRadius: BorderRadius.circular(24),
               ),
-            ),
-            const SizedBox(height: 24),
-            Text(
-              '已配置音源',
-              style: theme.textTheme.titleMedium,
-            ),
-            const SizedBox(height: 16),
-
-            // 音源 Grid
-            LayoutBuilder(
-              builder: (context, constraints) {
-                return Wrap(
-                  spacing: 16,
-                  runSpacing: 16,
-                  children: [
-                    ...sources.map((config) {
-                      final isActive =
-                          config.id == _audioSourceService.activeSource?.id;
-                      return SizedBox(
-                        width: (constraints.maxWidth - (16 * (crossAxisCount - 1))) / crossAxisCount,
-                        child: _buildMaterialSourceCard(config, theme, isActive),
-                      );
-                    }),
-                    // 添加按钮卡片
-                    SizedBox(
-                      width: (constraints.maxWidth - (16 * (crossAxisCount - 1))) / crossAxisCount,
-                      height: 190, // Match typical card height
-                      child: Card(
-                        clipBehavior: Clip.antiAlias,
-                        child: InkWell(
-                          onTap: _showAddSourceDialog,
-                          child: Center(
-                            child: Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Icon(Icons.add_circle_outline,
-                                    size: 48,
-                                    color: theme.colorScheme.primary),
-                                const SizedBox(height: 12),
-                                Text(
-                                  '添加音源',
-                                  style: theme.textTheme.titleMedium?.copyWith(
-                                    color: theme.colorScheme.primary,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                              ],
-                            ),
+              child: Row(
+                children: [
+                  Icon(Icons.info_outline, color: colorScheme.secondary),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          '关于音源',
+                          style: theme.textTheme.titleSmall?.copyWith(
+                            fontWeight: FontWeight.bold,
+                            color: colorScheme.onSecondaryContainer,
                           ),
                         ),
-                      ),
+                        const SizedBox(height: 4),
+                        Text(
+                          '添加并管理多个音源。您可以随时切换当前使用的音源。',
+                          style: theme.textTheme.bodyMedium?.copyWith(
+                            color: colorScheme.onSecondaryContainer.withValues(alpha: 0.8),
+                          ),
+                        ),
+                      ],
                     ),
-                  ],
-                );
-              },
+                  ),
+                ],
+              ),
             ),
-          ],
-        ),
+          ),
+
+          MD3SettingsSection(
+            title: '已配置音源',
+            children: [
+              if (sources.isEmpty)
+                const Padding(
+                  padding: EdgeInsets.all(24.0),
+                  child: Center(child: Text('暂无已配置音源')),
+                )
+              else
+                ...sources.map((config) {
+                  final isActive = config.id == _audioSourceService.activeSource?.id;
+                  return _buildMaterialSourceTile(config, theme, isActive);
+                }),
+              MD3SettingsTile(
+                leading: Icon(Icons.add_circle_outline, color: colorScheme.primary),
+                title: '添加音源',
+                onTap: _showAddSourceDialog,
+              ),
+            ],
+          ),
+        ],
       ),
       floatingActionButton: FloatingActionButton(
         onPressed: _showAddSourceDialog,
+        elevation: 0,
+        focusElevation: 0,
+        hoverElevation: 0,
+        disabledElevation: 0,
+        highlightElevation: 0,
+        backgroundColor: colorScheme.primaryContainer,
+        foregroundColor: colorScheme.onPrimaryContainer,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         child: const Icon(Icons.add),
       ),
     );
   }
 
-  Widget _buildMaterialSourceCard(
-      AudioSourceConfig config, ThemeData theme, bool isActive) {
-    return Card(
-      elevation: isActive ? 4 : 1,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-        side: isActive
-            ? BorderSide(color: theme.colorScheme.primary, width: 2)
-            : BorderSide.none,
-      ),
-      child: Container(
-        height: 190,
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Icon(
-                      config.type == AudioSourceType.lxmusic
-                          ? Icons.music_note
-                          : Icons.link,
-                      color: isActive ? theme.colorScheme.primary : null,
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        config.name,
-                        style: theme.textTheme.titleMedium?.copyWith(
-                          fontWeight: FontWeight.bold,
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                  ],
-                ),
-                if (isActive) ...[
-                  const SizedBox(height: 8),
-                  Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                    decoration: BoxDecoration(
-                      color: theme.colorScheme.primaryContainer,
-                      borderRadius: BorderRadius.circular(4),
-                    ),
-                    child: Text(
-                      '当前使用',
-                      style: theme.textTheme.labelSmall?.copyWith(
-                        color: theme.colorScheme.onPrimaryContainer,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ),
-                ],
-                const SizedBox(height: 8),
-                Text(
-                  '类型: ${config.type == AudioSourceType.lxmusic ? "洛雪音乐" : (config.type == AudioSourceType.tunehub ? "TuneHub" : "OmniParse")}',
-                  style: theme.textTheme.bodySmall,
-                ),
-                const SizedBox(height: 4),
-                Tooltip(
-                  message: config.url,
-                  child: Text(
-                    config.url,
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: theme.textTheme.bodySmall?.color?.withOpacity(0.7),
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-              ],
-            ),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.end,
-              children: [
-                if (!isActive)
-                  TextButton(
-                    onPressed: () => _setActiveSource(config.id),
-                    child: const Text('启用'),
-                  ),
-                IconButton(
-                  icon: const Icon(Icons.edit, size: 20),
-                  onPressed: () => _showEditSourceDialog(config),
-                  tooltip: '编辑',
-                ),
-                IconButton(
-                  icon: Icon(Icons.delete,
-                      size: 20, color: theme.colorScheme.error),
-                  onPressed: () => _deleteSource(config.id),
-                  tooltip: '删除',
-                ),
-              ],
-            ),
-          ],
+  Widget _buildMaterialSourceTile(AudioSourceConfig config, ThemeData theme, bool isActive) {
+    final colorScheme = theme.colorScheme;
+    return MD3SettingsTile(
+      leading: Container(
+        padding: const EdgeInsets.all(8),
+        decoration: BoxDecoration(
+          color: isActive ? colorScheme.primaryContainer : colorScheme.surfaceContainerHigh,
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Icon(
+          config.type == AudioSourceType.lxmusic ? Icons.music_note : Icons.link,
+          color: isActive ? colorScheme.onPrimaryContainer : colorScheme.onSurfaceVariant,
+          size: 20,
         ),
       ),
+      title: config.name,
+      subtitle: '${_getSourceTypeName(config.type)} • ${isActive ? "当前使用" : "未开启"}',
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          IconButton(
+            icon: const Icon(Icons.edit_outlined, size: 20),
+            onPressed: () => _showEditSourceDialog(config),
+          ),
+          IconButton(
+            icon: Icon(Icons.delete_outline, size: 20, color: colorScheme.error),
+            onPressed: () => _deleteSource(config.id),
+          ),
+        ],
+      ),
+      onTap: isActive ? null : () => _setActiveSource(config.id),
     );
   }
 }
@@ -2022,8 +1930,11 @@ class _AddAudioSourceDialogState extends State<AddAudioSourceDialog> {
 
   Widget _buildMaterialDialog(BuildContext context) {
     final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
     
     return AlertDialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
+      backgroundColor: colorScheme.surfaceContainerHigh,
       title: Text(_isEditing ? '编辑音源' : '添加音源'),
       content: SingleChildScrollView(
         child: SizedBox(
@@ -2035,9 +1946,14 @@ class _AddAudioSourceDialogState extends State<AddAudioSourceDialog> {
               // Type Selector
               DropdownButtonFormField<AudioSourceType>(
                 value: _selectedType,
-                decoration: const InputDecoration(
+                decoration: InputDecoration(
                   labelText: '音源类型',
-                  border: OutlineInputBorder(),
+                  filled: true,
+                  fillColor: colorScheme.surfaceContainerHighest,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide.none,
+                  ),
                 ),
                 items: AudioSourceType.values.map((e) => DropdownMenuItem(
                       value: e,
@@ -2057,25 +1973,31 @@ class _AddAudioSourceDialogState extends State<AddAudioSourceDialog> {
                         }
                       },
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: 20),
 
               // Content based on type
               if (_selectedType == AudioSourceType.lxmusic) ...[
-                Text('输入洛雪音源脚本链接或从文件导入', style: theme.textTheme.bodySmall),
-                const SizedBox(height: 8),
+                Text('输入洛雪音源脚本链接或从文件导入', 
+                   style: theme.textTheme.bodySmall?.copyWith(color: colorScheme.onSurfaceVariant)),
+                const SizedBox(height: 12),
                 TextField(
                   controller: _lxScriptUrlController,
-                  decoration: const InputDecoration(
-                      labelText: '脚本链接',
-                      hintText: 'https://example.com/script.js',
-                      border: OutlineInputBorder(),
+                  decoration: InputDecoration(
+                    labelText: '脚本链接',
+                    hintText: 'https://example.com/script.js',
+                    filled: true,
+                    fillColor: colorScheme.surfaceContainerHighest,
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide.none,
+                    ),
                   ),
                 ),
                 const SizedBox(height: 16),
                 Row(
                   children: [
                     Expanded(
-                      child: ElevatedButton.icon(
+                      child: FilledButton.tonalIcon(
                         icon: const Icon(Icons.link),
                         onPressed: _isProcessing ? null : _importLxScriptFromUrl,
                          label: const Text('链接导入'),
@@ -2084,24 +2006,32 @@ class _AddAudioSourceDialogState extends State<AddAudioSourceDialog> {
                     const SizedBox(width: 8),
                     Expanded(
                       child: OutlinedButton.icon(
-                        icon: const Icon(Icons.folder_open),
+                        icon: const Icon(Icons.folder_open_outlined),
                         onPressed: _isProcessing ? null : _importLxScriptFromFile,
                         label: const Text('本地文件'),
+                        style: OutlinedButton.styleFrom(
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        ),
                       ),
                     ),
                   ],
                 ),
                 if (_needsApiKeyInput) ...[
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 20),
                   TextField(
                     controller: _lxApiKeyController,
-                     decoration: const InputDecoration(
+                     decoration: InputDecoration(
                       labelText: 'API Key',
                       hintText: '输入 API Key',
-                       border: OutlineInputBorder(),
+                      filled: true,
+                      fillColor: colorScheme.surfaceContainerHighest,
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: BorderSide.none,
+                      ),
+                    ),
                   ),
-                  ),
-                  const SizedBox(height: 8),
+                  const SizedBox(height: 12),
                   SizedBox(
                     width: double.infinity,
                     child: FilledButton(
@@ -2113,44 +2043,54 @@ class _AddAudioSourceDialogState extends State<AddAudioSourceDialog> {
               ] else ...[
                  TextField(
                   controller: _nameController,
-                  decoration: const InputDecoration(
-                      labelText: '名称 (可选)',
-                      hintText: '给音源起个名字',
-                       border: OutlineInputBorder(),
+                  decoration: InputDecoration(
+                    labelText: '名称 (可选)',
+                    hintText: '给音源起个名字',
+                    filled: true,
+                    fillColor: colorScheme.surfaceContainerHighest,
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide.none,
+                    ),
                   ),
                 ),
                 const SizedBox(height: 16),
                 TextField(
                   controller: _urlController,
-                   decoration: const InputDecoration(
-                      labelText: 'API 地址',
-                      hintText: 'http://...',
-                       border: OutlineInputBorder(),
+                   decoration: InputDecoration(
+                    labelText: 'API 地址',
+                    hintText: 'http://...',
+                    filled: true,
+                    fillColor: colorScheme.surfaceContainerHighest,
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide.none,
+                    ),
                   ),
                 ),
               ],
 
                if (_statusMessage != null) ...[
-                const SizedBox(height: 16),
+                const SizedBox(height: 20),
                 Container(
-                   padding: const EdgeInsets.all(8),
+                   padding: const EdgeInsets.all(12),
                    decoration: BoxDecoration(
-                     color: _isError ? theme.colorScheme.errorContainer : theme.colorScheme.primaryContainer,
-                     borderRadius: BorderRadius.circular(8),
+                     color: _isError ? colorScheme.errorContainer : colorScheme.primaryContainer,
+                     borderRadius: BorderRadius.circular(16),
                    ),
                    child: Row(
                      children: [
                        Icon(
                          _isError ? Icons.error_outline : Icons.check_circle_outline,
-                         color: _isError ? theme.colorScheme.onErrorContainer : theme.colorScheme.onPrimaryContainer,
+                         color: _isError ? colorScheme.onErrorContainer : colorScheme.onPrimaryContainer,
                          size: 20
                        ),
-                       const SizedBox(width: 8),
+                       const SizedBox(width: 12),
                        Expanded(
                          child: Text(
                            _statusMessage!,
-                           style: TextStyle(
-                              color: _isError ? theme.colorScheme.onErrorContainer : theme.colorScheme.onPrimaryContainer,
+                           style: theme.textTheme.bodyMedium?.copyWith(
+                              color: _isError ? colorScheme.onErrorContainer : colorScheme.onPrimaryContainer,
                            ),
                          ),
                        ),
@@ -2176,9 +2116,9 @@ class _AddAudioSourceDialogState extends State<AddAudioSourceDialog> {
                     : _saveOmniParseSource),
             child: _isProcessing
                 ? const SizedBox(
-                    width: 16,
-                    height: 16,
-                    child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2.5, color: Colors.white)
                   )
                 : Text(_isEditing ? '保存' : '添加'),
           ),
