@@ -168,7 +168,20 @@ class _HistoryPageState extends State<HistoryPage> with AutomaticKeepAliveClient
                 ? _buildFluentEmptyState(context)
                 : ListView.separated(
                     padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-                    itemBuilder: (context, index) => _buildFluentHistoryItem(context, history[index], index),
+                    itemBuilder: (context, index) => RepaintBoundary(
+                      child: _FluentHistoryTile(
+                        item: history[index],
+                        index: index,
+                        onDelete: () {
+                          _historyService.removeHistoryItem(history[index]);
+                          _showFluentInfo('已删除');
+                        },
+                        onPlay: () {
+                          PlayerService().playTrack(history[index].toTrack());
+                          _showFluentInfo('正在播放: ${history[index].name}');
+                        },
+                      ),
+                    ),
                     separatorBuilder: (_, __) => const SizedBox(height: 8),
                     itemCount: history.length,
                   ),
@@ -864,118 +877,6 @@ class _HistoryPageState extends State<HistoryPage> with AutomaticKeepAliveClient
     );
   }
 
-  Widget _buildFluentHistoryItem(BuildContext context, PlayHistoryItem item, int index) {
-    final theme = fluent.FluentTheme.of(context);
-    return fluent.Card(
-      padding: EdgeInsets.zero,
-      child: fluent.ListTile(
-        leading: Stack(
-          children: [
-            ClipRRect(
-              borderRadius: BorderRadius.circular(4),
-              child: CachedNetworkImage(
-                imageUrl: item.picUrl,
-                width: 50,
-                height: 50,
-                fit: BoxFit.cover,
-                placeholder: (context, url) => Container(
-                  width: 50,
-                  height: 50,
-                  color: theme.resources.controlAltFillColorSecondary,
-                ),
-                errorWidget: (context, url, error) => Container(
-                  width: 50,
-                  height: 50,
-                  color: theme.resources.controlAltFillColorSecondary,
-                  child: Icon(
-                    fluent.FluentIcons.music_in_collection,
-                    color: theme.resources.textFillColorTertiary,
-                  ),
-                ),
-              ),
-            ),
-            Positioned(
-              bottom: 0,
-              right: 0,
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-                decoration: BoxDecoration(
-                  color: theme.resources.controlFillColorTertiary,
-                  borderRadius: const BorderRadius.only(
-                    topLeft: Radius.circular(4),
-                  ),
-                ),
-                child: Text(
-                  '#${index + 1}',
-                  style: TextStyle(
-                    color: theme.resources.textFillColorSecondary,
-                    fontSize: 10,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ),
-            ),
-          ],
-        ),
-        title: Text(
-          item.name,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-        ),
-        subtitle: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              '${item.artists} • ${item.album}',
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-            const SizedBox(height: 2),
-            Row(
-              children: [
-                Text(
-                  _getSourceIcon(item.source),
-                  style: const TextStyle(fontSize: 12),
-                ),
-                const SizedBox(width: 4),
-                Text(
-                  _formatTime(item.playedAt),
-                  style: TextStyle(
-                    color: theme.resources.textFillColorTertiary,
-                    fontSize: 11,
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ),
-        trailing: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            fluent.IconButton(
-              icon: const Icon(fluent.FluentIcons.play),
-              onPressed: () {
-                PlayerService().playTrack(item.toTrack());
-                _showFluentInfo('正在播放: ${item.name}');
-              },
-            ),
-            fluent.IconButton(
-              icon: const Icon(fluent.FluentIcons.delete),
-              onPressed: () {
-                _historyService.removeHistoryItem(item);
-                _showFluentInfo('已删除');
-              },
-            ),
-          ],
-        ),
-        onPressed: () {
-          PlayerService().playTrack(item.toTrack());
-          _showFluentInfo('正在播放: ${item.name}');
-        },
-      ),
-    );
-  }
-
   Widget _buildFluentEmptyState(BuildContext context) {
     return Center(
       child: Column(
@@ -989,6 +890,156 @@ class _HistoryPageState extends State<HistoryPage> with AutomaticKeepAliveClient
         ],
       ),
     );
+  }
+}
+
+/// 独立的播放历史卡片组件，用于性能优化
+class _FluentHistoryTile extends StatelessWidget {
+  final PlayHistoryItem item;
+  final int index;
+  final VoidCallback onDelete;
+  final VoidCallback onPlay;
+
+  const _FluentHistoryTile({
+    required this.item,
+    required this.index,
+    required this.onDelete,
+    required this.onPlay,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = fluent.FluentTheme.of(context);
+    final resources = theme.resources;
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: fluent.Card(
+        borderRadius: BorderRadius.circular(12),
+        padding: EdgeInsets.zero,
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: onPlay,
+          child: Padding(
+            padding: const EdgeInsets.all(12),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                SizedBox(
+                  width: 32,
+                  child: Text(
+                    '${index + 1}',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontWeight: FontWeight.w600,
+                      color: resources.textFillColorSecondary,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(8),
+                  child: CachedNetworkImage(
+                    imageUrl: item.picUrl,
+                    width: 64,
+                    height: 64,
+                    memCacheWidth: 128, // 性能优化：限制内存缓存大小
+                    memCacheHeight: 128,
+                    fit: BoxFit.cover,
+                    placeholder: (context, url) => Container(
+                      width: 64,
+                      height: 64,
+                      color: resources.controlAltFillColorSecondary,
+                      alignment: Alignment.center,
+                      child: const fluent.ProgressRing(strokeWidth: 2),
+                    ),
+                    errorWidget: (context, url, error) => Container(
+                      width: 64,
+                      height: 64,
+                      color: resources.controlAltFillColorSecondary,
+                      alignment: Alignment.center,
+                      child: Icon(
+                        fluent.FluentIcons.music_in_collection,
+                        size: 24,
+                        color: resources.textFillColorTertiary,
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        item.name,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w600,
+                          fontSize: 15,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        '${item.artists} • ${item.album}',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: resources.textFillColorSecondary,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        // 移除 emoji，仅显示时间
+                        _formatTime(item.playedAt),
+                        style: TextStyle(
+                          color: resources.textFillColorTertiary,
+                          fontSize: 11,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    fluent.IconButton(
+                      icon: const Icon(fluent.FluentIcons.play),
+                      onPressed: onPlay,
+                    ),
+                    fluent.IconButton(
+                      icon: const Icon(fluent.FluentIcons.delete),
+                      onPressed: onDelete,
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// 格式化时间显示 (复制自 HistoryPage 以便独立使用)
+  String _formatTime(DateTime time) {
+    final now = DateTime.now();
+    final difference = now.difference(time);
+
+    if (difference.inMinutes < 1) {
+      return '刚刚';
+    } else if (difference.inHours < 1) {
+      return '${difference.inMinutes}分钟前';
+    } else if (difference.inDays < 1) {
+      return '${difference.inHours}小时前';
+    } else if (difference.inDays < 7) {
+      return '${difference.inDays}天前';
+    } else {
+      return '${time.month}月${time.day}日';
+    }
   }
 }
 

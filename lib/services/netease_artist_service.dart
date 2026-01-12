@@ -87,6 +87,22 @@ class NeteaseArtistDetailService extends ChangeNotifier {
       return null;
     }
   }
+
+  /// 获取歌手描述
+  Future<Map<String, dynamic>?> fetchArtistDesc(int id) async {
+    try {
+      final baseUrl = UrlService().baseUrl;
+      final url = '$baseUrl/artist/desc?id=$id';
+      final resp = await http.get(Uri.parse(url)).timeout(const Duration(seconds: 15));
+      print('🌐 [NeteaseService] artist/desc HTTP 状态: ${resp.statusCode}');
+      if (resp.statusCode != 200) return null;
+      final data = json.decode(utf8.decode(resp.bodyBytes)) as Map<String, dynamic>;
+      if (data['status'] != 200) return null;
+      return data;
+    } catch (_) {
+      return null;
+    }
+  }
 }
 
 

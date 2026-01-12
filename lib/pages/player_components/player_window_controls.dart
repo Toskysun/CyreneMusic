@@ -34,6 +34,14 @@ class PlayerWindowControls extends StatelessWidget {
   final Track? currentTrack;
   final SongDetail? currentSong;
 
+  // 顶部切换按钮相关
+  final bool isLyricsActive;
+  final bool isQueueActive;
+  final bool isWikiActive;
+  final VoidCallback? onLyricsToggle;
+  final VoidCallback? onQueueToggle;
+  final VoidCallback? onWikiToggle;
+
   const PlayerWindowControls({
     super.key,
     required this.isMaximized,
@@ -46,6 +54,12 @@ class PlayerWindowControls extends StatelessWidget {
     this.onTranslationToggle,
     this.currentTrack,
     this.currentSong,
+    this.isLyricsActive = false,
+    this.isQueueActive = false,
+    this.isWikiActive = false,
+    this.onLyricsToggle,
+    this.onQueueToggle,
+    this.onWikiToggle,
   });
 
   @override
@@ -100,6 +114,35 @@ class PlayerWindowControls extends StatelessWidget {
                     ),
                   // 迷你播放器按钮
                   _MiniPlayerButton(),
+                  
+                  const SizedBox(width: 8),
+
+                  // 歌曲百科按钮 (Apple Music 风格)
+                  if (onWikiToggle != null)
+                    _TopBarButton(
+                      icon: CupertinoIcons.info_circle,
+                      isActive: isWikiActive,
+                      onPressed: onWikiToggle!,
+                      tooltip: '歌曲信息',
+                    ),
+                  
+                  // 待播清单按钮 (Apple Music 风格)
+                  if (onQueueToggle != null)
+                    _TopBarButton(
+                      icon: Icons.format_list_bulleted_rounded,
+                      isActive: isQueueActive,
+                      onPressed: onQueueToggle!,
+                      tooltip: '待播清单',
+                    ),
+                    
+                  // 歌词按钮 (Apple Music 风格)
+                  if (onLyricsToggle != null)
+                    _TopBarButton(
+                      icon: Icons.lyrics_rounded,
+                      isActive: isLyricsActive,
+                      onPressed: onLyricsToggle!,
+                      tooltip: '歌词',
+                    ),
                 ],
               ),
             ),
@@ -456,6 +499,61 @@ class _MoreMenuButtonState extends State<_MoreMenuButton> {
                   }
                 },
               ),
+
+              _buildSectionDivider(),
+
+              // ======= 歌词微调分组 =======
+              _buildSectionTitle('歌词调节'),
+
+              // 歌词大小
+              _buildSliderMenuItem(
+                icon: Icons.format_size_rounded,
+                label: '歌词大小',
+                value: lyricStyle.fontSize,
+                min: 24.0,
+                max: 48.0,
+                divisions: 24,
+                iconColor: Colors.indigo[300],
+                onChanged: (v) => lyricStyle.setFontSize(v),
+              ),
+
+              // 歌词间距 (只在未开启自适应时支持手动调整)
+              _buildSliderMenuItem(
+                icon: Icons.format_line_spacing_rounded,
+                label: '歌词间距',
+                value: lyricStyle.lineHeight,
+                min: 60.0,
+                max: 180.0,
+                divisions: 60,
+                iconColor: Colors.blueGrey[300],
+                enabled: !lyricStyle.autoLineHeight,
+                onChanged: (v) => lyricStyle.setLineHeight(v),
+                trailing: Tooltip(
+                  message: lyricStyle.autoLineHeight ? '已开启自适应' : '手动调整',
+                  child: IconButton(
+                    icon: Icon(
+                      lyricStyle.autoLineHeight ? Icons.auto_awesome_rounded : Icons.edit_note_rounded,
+                      size: 16,
+                      color: lyricStyle.autoLineHeight ? Colors.cyan[300] : Colors.white38,
+                    ),
+                    onPressed: () => lyricStyle.setAutoLineHeight(!lyricStyle.autoLineHeight),
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(),
+                  ),
+                ),
+              ),
+
+              // 歌词模糊度
+              _buildSliderMenuItem(
+                icon: Icons.blur_on_rounded,
+                label: '渐隐模糊',
+                value: lyricStyle.blurSigma,
+                min: 0.0,
+                max: 10.0,
+                divisions: 20,
+                iconColor: Colors.cyan[300],
+                onChanged: (v) => lyricStyle.setBlurSigma(v),
+              ),
             ],
           ),
         );
@@ -629,6 +727,100 @@ class _MoreMenuButtonState extends State<_MoreMenuButton> {
         _hideMenu();
       }
     });
+  }
+
+  Widget _buildSliderMenuItem({
+    required IconData icon,
+    required String label,
+    required double value,
+    required double min,
+    required double max,
+    required ValueChanged<double> onChanged,
+    int? divisions,
+    Color? iconColor,
+    bool enabled = true,
+    Widget? trailing,
+  }) {
+    return Builder(
+      builder: (context) {
+        final textColor = Colors.white;
+        
+        return Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+          margin: const EdgeInsets.symmetric(horizontal: 4),
+          child: Opacity(
+            opacity: enabled ? 1.0 : 0.5,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      width: 28,
+                      height: 28,
+                      decoration: BoxDecoration(
+                        color: (iconColor ?? textColor).withOpacity(0.12),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Icon(
+                        icon,
+                        color: iconColor ?? textColor.withOpacity(0.85),
+                        size: 16,
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        label,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w500,
+                          fontFamily: 'Microsoft YaHei',
+                        ),
+                      ),
+                    ),
+                    if (trailing != null) ...[
+                      trailing,
+                      const SizedBox(width: 8),
+                    ],
+                    Text(
+                      value.toStringAsFixed(1),
+                      style: TextStyle(
+                        color: Colors.white.withOpacity(0.5),
+                        fontSize: 11,
+                        fontFamily: 'Consolas',
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                SliderTheme(
+                  data: SliderThemeData(
+                    trackHeight: 2,
+                    thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
+                    overlayShape: const RoundSliderOverlayShape(overlayRadius: 14),
+                    activeTrackColor: (iconColor ?? Colors.white).withOpacity(0.8),
+                    inactiveTrackColor: Colors.white.withOpacity(0.1),
+                    thumbColor: Colors.white,
+                  ),
+                  child: SizedBox(
+                    height: 24,
+                    child: Slider(
+                      value: value,
+                      min: min,
+                      max: max,
+                      divisions: divisions,
+                      onChanged: enabled ? onChanged : null,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
   }
 
   Widget _buildMenuItem({
@@ -1169,6 +1361,37 @@ class _MiniPlayerButton extends StatelessWidget {
           Navigator.of(context).pop();
           MiniPlayerWindowService().enterMiniMode();
         },
+      ),
+    );
+  }
+}
+
+/// 顶部栏专用切换按钮 (Lyrics/Queue)
+class _TopBarButton extends StatelessWidget {
+  final IconData icon;
+  final bool isActive;
+  final VoidCallback onPressed;
+  final String tooltip;
+
+  const _TopBarButton({
+    required this.icon,
+    required this.isActive,
+    required this.onPressed,
+    required this.tooltip,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: tooltip,
+      child: IconButton(
+        icon: Icon(icon, size: 20),
+        color: isActive ? Colors.white : Colors.white24,
+        style: IconButton.styleFrom(
+          backgroundColor: isActive ? Colors.white.withOpacity(0.15) : Colors.transparent,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+        ),
+        onPressed: onPressed,
       ),
     );
   }

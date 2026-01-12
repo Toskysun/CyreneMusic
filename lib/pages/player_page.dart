@@ -424,6 +424,7 @@ class _PlayerPageState extends State<PlayerPage> with WindowListener, TickerProv
                         PlayerWindowControls(
                           isMaximized: _isMaximized,
                           onBackPressed: () => Navigator.pop(context),
+                          onPlaylistPressed: _togglePlaylist,
                         ),
                         
                         // 左右分栏内容区域

@@ -345,7 +345,7 @@ class _MobilePlayerSettingsSheetState extends State<MobilePlayerSettingsSheet> {
                         ),
                         const Spacer(),
                         Text(
-                          '${(styleService.lyricFontSizeMultiplier * 100).toInt()}%',
+                          '${styleService.fontSize.toInt()} px',
                           style: const TextStyle(color: Colors.white70, fontSize: 13, fontWeight: FontWeight.bold),
                         ),
                       ],
@@ -359,11 +359,11 @@ class _MobilePlayerSettingsSheetState extends State<MobilePlayerSettingsSheet> {
                         trackHeight: 4,
                       ),
                       child: Slider(
-                        value: styleService.lyricFontSizeMultiplier,
-                        min: 0.8,
-                        max: 1.5,
-                        divisions: 7,
-                        onChanged: (v) => styleService.setFontSizeMultiplier(v),
+                        value: styleService.fontSize,
+                        min: 24.0,
+                        max: 48.0,
+                        divisions: 24,
+                        onChanged: (v) => styleService.setFontSize(v),
                       ),
                     ),
                     
@@ -375,46 +375,12 @@ class _MobilePlayerSettingsSheetState extends State<MobilePlayerSettingsSheet> {
                         const Icon(Icons.blur_linear_rounded, color: Colors.white60, size: 18),
                         const SizedBox(width: 10),
                         const Text(
-                          '歌词渐隐范围',
-                          style: TextStyle(color: Colors.white, fontSize: 13),
-                        ),
-                        const Spacer(),
-                        Text(
-                          '${styleService.lyricBlurLines} 行',
-                          style: const TextStyle(color: Colors.white70, fontSize: 13, fontWeight: FontWeight.bold),
-                        ),
-                      ],
-                    ),
-                    SliderTheme(
-                      data: SliderTheme.of(context).copyWith(
-                        activeTrackColor: Colors.white,
-                        inactiveTrackColor: Colors.white24,
-                        thumbColor: Colors.white,
-                        overlayColor: Colors.white24,
-                        trackHeight: 4,
-                      ),
-                      child: Slider(
-                        value: styleService.lyricBlurLines.toDouble(),
-                        min: 2,
-                        max: 8,
-                        onChanged: (v) => styleService.setBlurLines(v.toInt()),
-                      ),
-                    ),
-
-                    const SizedBox(height: 8),
-
-                    // 模糊强度调节
-                    Row(
-                      children: [
-                        const Icon(Icons.lens_blur_rounded, color: Colors.white60, size: 18),
-                        const SizedBox(width: 10),
-                        const Text(
                           '视觉模糊强度',
                           style: TextStyle(color: Colors.white, fontSize: 13),
                         ),
                         const Spacer(),
                         Text(
-                          '${styleService.lyricBlurSigma.toStringAsFixed(1)}',
+                          '${styleService.blurSigma.toStringAsFixed(1)}',
                           style: const TextStyle(color: Colors.white70, fontSize: 13, fontWeight: FontWeight.bold),
                         ),
                       ],
@@ -428,11 +394,59 @@ class _MobilePlayerSettingsSheetState extends State<MobilePlayerSettingsSheet> {
                         trackHeight: 4,
                       ),
                       child: Slider(
-                        value: styleService.lyricBlurSigma,
+                        value: styleService.blurSigma,
                         min: 0.0,
                         max: 10.0,
                         divisions: 20,
                         onChanged: (v) => styleService.setBlurSigma(v),
+                      ),
+                    ),
+
+                    const SizedBox(height: 8),
+
+                    // 移除过时的第三个滑块或替换为间距调节
+                    Row(
+                      children: [
+                        const Icon(Icons.format_line_spacing_rounded, color: Colors.white60, size: 18),
+                        const SizedBox(width: 10),
+                        const Text(
+                          '歌词行间距',
+                          style: TextStyle(color: Colors.white, fontSize: 13),
+                        ),
+                        const Spacer(),
+                        if (styleService.autoLineHeight)
+                          const Text(
+                             '自动',
+                             style: TextStyle(color: Colors.cyan, fontSize: 12, fontWeight: FontWeight.bold),
+                          )
+                        else
+                          Text(
+                            '${styleService.lineHeight.toInt()} px',
+                            style: const TextStyle(color: Colors.white70, fontSize: 13, fontWeight: FontWeight.bold),
+                          ),
+                        const SizedBox(width: 8),
+                        GestureDetector(
+                          onTap: () => styleService.setAutoLineHeight(!styleService.autoLineHeight),
+                          child: Icon(
+                            styleService.autoLineHeight ? Icons.auto_awesome_rounded : Icons.edit_note_rounded,
+                            size: 16,
+                            color: styleService.autoLineHeight ? Colors.cyan : Colors.white38,
+                          ),
+                        ),
+                      ],
+                    ),
+                    SliderTheme(
+                      data: SliderTheme.of(context).copyWith(
+                        activeTrackColor: styleService.autoLineHeight ? Colors.white38 : Colors.white,
+                        inactiveTrackColor: Colors.white24,
+                        thumbColor: styleService.autoLineHeight ? Colors.white38 : Colors.white,
+                        trackHeight: 4,
+                      ),
+                      child: Slider(
+                        value: styleService.lineHeight,
+                        min: 60.0,
+                        max: 180.0,
+                        onChanged: styleService.autoLineHeight ? null : (v) => styleService.setLineHeight(v),
                       ),
                     ),
                   ],

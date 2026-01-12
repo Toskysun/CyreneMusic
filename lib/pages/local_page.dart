@@ -57,29 +57,6 @@ extension on _LocalPageState {
     return '';
   }
 
-  Widget _buildFluentTrackTile(Track track) {
-    final theme = fluent.FluentTheme.of(context);
-    return fluent.Card(
-      padding: EdgeInsets.zero,
-      child: fluent.ListTile(
-        leading: _buildFluentCover(theme, track),
-        title: Text(track.name, maxLines: 1, overflow: TextOverflow.ellipsis),
-        subtitle: Text(_buildSubtitle(track), maxLines: 1, overflow: TextOverflow.ellipsis),
-        trailing: fluent.IconButton(
-          icon: const Icon(fluent.FluentIcons.play),
-          onPressed: () async {
-            await PlayerService().playTrack(track);
-            _showFluentInfo('正在播放: ${track.name}');
-          },
-        ),
-        onPressed: () async {
-          await PlayerService().playTrack(track);
-          _showFluentInfo('正在播放: ${track.name}');
-        },
-      ),
-    );
-  }
-
   /// 构建 subtitle 显示（艺术家 • 格式）
   String _buildSubtitle(Track track) {
     final parts = <String>[];
@@ -89,41 +66,135 @@ extension on _LocalPageState {
     parts.add(_extOf(track.id));
     return parts.join(' • ');
   }
+}
 
-  Widget _buildFluentCover(fluent.FluentThemeData theme, Track track) {
-    if (track.picUrl.isNotEmpty) {
-      // 本地文件使用 Image.file
-      return ClipRRect(
-        borderRadius: BorderRadius.circular(6),
-        child: Image.file(
-          File(track.picUrl),
-          width: 48,
-          height: 48,
-          fit: BoxFit.cover,
-          errorBuilder: (context, error, stackTrace) => Container(
-            width: 48,
-            height: 48,
-            color: theme.resources.controlAltFillColorSecondary,
-            child: Icon(
-              fluent.FluentIcons.music_in_collection,
-              color: theme.resources.textFillColorTertiary,
+/// 独立的本地音乐卡片组件，用于性能优化
+class _FluentLocalTrackTile extends StatelessWidget {
+  final Track track;
+  final int index;
+  final VoidCallback onPlay;
+
+  const _FluentLocalTrackTile({
+    required this.track,
+    required this.index,
+    required this.onPlay,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = fluent.FluentTheme.of(context);
+    final resources = theme.resources;
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: fluent.Card(
+        borderRadius: BorderRadius.circular(12),
+        padding: EdgeInsets.zero,
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: onPlay,
+          child: Padding(
+            padding: const EdgeInsets.all(12),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                SizedBox(
+                  width: 32,
+                  child: Text(
+                    '${index + 1}',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontWeight: FontWeight.w600,
+                      color: resources.textFillColorSecondary,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                _buildCover(resources, track),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        track.name,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w600,
+                          fontSize: 15,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        _buildSubtitleText(track),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: resources.textFillColorSecondary,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 12),
+                fluent.IconButton(
+                  icon: const Icon(fluent.FluentIcons.play),
+                  onPressed: onPlay,
+                ),
+              ],
             ),
           ),
         ),
-      );
-    }
-    return Container(
-      width: 48,
-      height: 48,
+      ),
+    );
+  }
+
+  Widget _buildCover(fluent.ResourceDictionary resources, Track track) {
+    final placeholder = Container(
+      width: 64,
+      height: 64,
       decoration: BoxDecoration(
-        color: theme.resources.controlAltFillColorSecondary,
-        borderRadius: BorderRadius.circular(6),
+        color: resources.controlAltFillColorSecondary,
+        borderRadius: BorderRadius.circular(8),
       ),
       child: Icon(
         fluent.FluentIcons.music_in_collection,
-        color: theme.resources.textFillColorTertiary,
+        color: resources.textFillColorTertiary,
+        size: 24,
       ),
     );
+
+    if (track.picUrl.isEmpty) return placeholder;
+
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(8),
+      child: Image.file(
+        File(track.picUrl),
+        width: 64,
+        height: 64,
+        cacheWidth: 128, // 性能优化
+        cacheHeight: 128,
+        fit: BoxFit.cover,
+        errorBuilder: (context, error, stackTrace) => placeholder,
+      ),
+    );
+  }
+
+  String _buildSubtitleText(Track track) {
+    final parts = <String>[];
+    if (track.artists.isNotEmpty && track.artists != '本地文件') {
+      parts.add(track.artists);
+    }
+    final id = track.id;
+    if (id is String) {
+      final idx = id.lastIndexOf('.');
+      if (idx > 0 && idx < id.length - 1) {
+        parts.add(id.substring(idx + 1).toUpperCase());
+      }
+    }
+    return parts.join(' • ');
   }
 }
 
@@ -277,7 +348,16 @@ class _LocalPageState extends State<LocalPage> {
                 ? _buildFluentEmpty()
                 : ListView.separated(
                     padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-                    itemBuilder: (context, index) => _buildFluentTrackTile(tracks[index]),
+                    itemBuilder: (context, index) => RepaintBoundary(
+                      child: _FluentLocalTrackTile(
+                        track: tracks[index],
+                        index: index,
+                        onPlay: () async {
+                          await PlayerService().playTrack(tracks[index]);
+                          _showFluentInfo('正在播放: ${tracks[index].name}');
+                        },
+                      ),
+                    ),
                     separatorBuilder: (_, __) => const SizedBox(height: 8),
                     itemCount: tracks.length,
                   ),

@@ -182,16 +182,9 @@ class _MeshGradientBackgroundState extends State<MeshGradientBackground>
               colors: _currentColors,
               time: _time,
               backgroundColor: widget.backgroundColor,
-              bassIntensity: _bassIntensity, // 传递律动强度
+              bassIntensity: _bassIntensity,
             ),
             size: Size.infinite,
-          ),
-          // Apple Music 液态感的关键：极高模糊
-          Positioned.fill(
-            child: BackdropFilter(
-              filter: ui.ImageFilter.blur(sigmaX: 100, sigmaY: 100), // 增加模糊半径以显著消除色块边界感
-              child: Container(color: Colors.transparent),
-            ),
           ),
           // 质感杂色层 (Grain/Noise)
           const Positioned.fill(child: _GrainTexture()),
@@ -216,79 +209,156 @@ class _MeshGradientPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    // 稳定性检查：如果尺寸为 0，跳过绘制以防止 Gradient.radial 抛出异常
     if (size.width <= 0 || size.height <= 0 || colors.isEmpty) return;
 
-    final paint = Paint()..style = PaintingStyle.fill;
-    
-    // 背景底色
-    canvas.drawRect(Offset.zero & size, paint..color = backgroundColor);
+    final paint = Paint()
+      ..style = PaintingStyle.fill
+      ..isAntiAlias = true;
 
-    final random = math.Random(42); // 固定种子保证逻辑一致性
+    // 1. 绘制底层渐变 (参考 bg.html linear-gradient(40deg, #1a0b2e, #2e1a47))
+    final bgHSL = HSLColor.fromColor(backgroundColor);
+    final bgDarker = bgHSL.withLightness((bgHSL.lightness * 0.8).clamp(0.0, 1.0)).toColor();
+    final bgLighter = bgHSL.withLightness((bgHSL.lightness * 1.2).clamp(0.0, 1.0)).toColor();
+
+    final bgGradient = ui.Gradient.linear(
+      Offset(0, size.height),
+      Offset(size.width, 0),
+      [bgDarker, bgLighter],
+      [0.0, 1.0],
+    );
+    canvas.drawRect(Offset.zero & size, paint..shader = bgGradient);
+    paint.shader = null;
 
     final double shortestSide = size.shortestSide;
+    final double longestSide = size.longestSide;
 
-    // 绘制 6 个动态流体色彩斑块
-    for (int i = 0; i < 6; i++) {
-      final color = colors[i % colors.length];
-      // 提取核心颜色，强制增加饱和度和明亮度，使画面更"鲜艳明显"
+    // 2. 绘制 5 个动态光斑 (参考 bg.html)
+    // 映射颜色：确保至少有 5 个颜色
+    final activeColors = colors;
+    
+    // 定义 5 个光斑的配置
+    final blobConfigs = [
+      // Blob 1: 左上，金黄色/橙色变体
+      _BlobConfig(
+        basePos: const Offset(-0.1, -0.1),
+        sizeRatio: 0.5 * (longestSide / shortestSide),
+        speed: 1.0,
+        blendMode: BlendMode.screen,
+        moveFn: (time, i) {
+          return Offset(
+            0.2 * math.sin(time * 0.3),
+            0.2 * math.cos(time * 0.2),
+          );
+        },
+        scaleFn: (time) => 1.0 + 0.2 * math.sin(time * 0.4),
+      ),
+      // Blob 2: 左下，艳丽玫红色变体
+      _BlobConfig(
+        basePos: const Offset(-0.1, 1.1),
+        sizeRatio: 0.6 * (longestSide / shortestSide),
+        speed: 0.8,
+        blendMode: BlendMode.screen,
+        moveFn: (time, i) {
+          return Offset(
+            0.25 * math.cos(time * 0.25),
+            -0.2 * math.sin(time * 0.3),
+          );
+        },
+        rotateFn: (time) => time * 0.2,
+      ),
+      // Blob 3: 右上，淡蓝色/青色变体
+      _BlobConfig(
+        basePos: const Offset(1.1, -0.2),
+        sizeRatio: 0.55 * (longestSide / shortestSide),
+        speed: 0.9,
+        blendMode: BlendMode.screen,
+        moveFn: (time, i) {
+          return Offset(
+            -0.2 * math.sin(time * 0.35),
+            0.25 * math.cos(time * 0.2),
+          );
+        },
+        scaleFn: (time) => 1.0 + 0.3 * math.sin(time * 0.3),
+      ),
+      // Blob 4: 右下，深蓝紫色变体
+      _BlobConfig(
+        basePos: const Offset(1.2, 1.2),
+        sizeRatio: 0.7 * (longestSide / shortestSide),
+        speed: 0.7,
+        blendMode: BlendMode.screen,
+        moveFn: (time, i) {
+          return Offset(
+            -0.25 * math.cos(time * 0.2),
+            -0.25 * math.sin(time * 0.25),
+          );
+        },
+        scaleFn: (time) => 0.8 + 0.2 * math.cos(time * 0.3),
+      ),
+      // Blob 5: 中间，高光
+      _BlobConfig(
+        basePos: const Offset(0.5, 0.5),
+        sizeRatio: 0.4 * (longestSide / shortestSide),
+        speed: 1.25,
+        blendMode: BlendMode.overlay,
+        moveFn: (time, i) {
+          return Offset(
+            0.2 * math.sin(time * 0.5),
+            -0.2 * math.cos(time * 0.4),
+          );
+        },
+        scaleFn: (time) => 1.0 + 0.4 * math.sin(time * 0.5),
+        opacity: 0.6,
+      ),
+    ];
+
+    for (int i = 0; i < 5; i++) {
+      final config = blobConfigs[i];
+      final color = activeColors[i % activeColors.length];
+      
+      final offset = config.moveFn(time, i);
+      final centerX = size.width * (config.basePos.dx + offset.dx);
+      final centerY = size.height * (config.basePos.dy + offset.dy);
+      
+      double radius = shortestSide * config.sizeRatio;
+      if (config.scaleFn != null) {
+        radius *= config.scaleFn!(time);
+      }
+      
+      // 律动加成
+      radius += (shortestSide * 0.1) * bassIntensity;
+      
+      if (radius < 10) radius = 10;
+
       final hsl = HSLColor.fromColor(color);
       final boostedColor = hsl
-          .withSaturation((hsl.saturation + 0.25).clamp(0.6, 1.0))
-          .withLightness((hsl.lightness + 0.05).clamp(0.4, 0.8))
+          .withSaturation((hsl.saturation + 0.1).clamp(0.4, 1.0))
+          .withLightness((hsl.lightness + 0.05).clamp(0.3, 0.9))
           .toColor();
-      
-      // 为每个斑块生成独特的有机运动轨迹 (使用较大幅度和频率)
-      final double xFreq = (0.2 + random.nextDouble() * 0.2);
-      final double yFreq = (0.15 + random.nextDouble() * 0.2);
-      
-      // 锚点分布逻辑：收紧到可视区域内部，避免溢出
-      final anchors = [
-        const Offset(0.25, 0.25),   // 左上（内收）
-        const Offset(0.75, 0.25),   // 右上（内收）
-        const Offset(0.25, 0.75),   // 左下（内收）
-        const Offset(0.75, 0.75),   // 右下（内收）
-        const Offset(0.4, 0.5),     // 中偏左
-        const Offset(0.6, 0.5),     // 中偏右
-      ];
-      final anchor = anchors[i % anchors.length];
-      
-      // 减小位移幅度（0.18 -> 0.12），避免色块溢出边界
-      final centerX = size.width * (anchor.dx + 0.12 * math.sin(time * xFreq + i * 1.5));
-      final centerY = size.height * (anchor.dy + 0.12 * math.cos(time * yFreq + i * 2.2));
-      
-      // 斑块半径：减小基础半径（0.8~1.3 -> 0.5~0.85），确保大部分渐变在可视区域内
-      final double baseRadius = shortestSide * (0.5 + random.nextDouble() * 0.35);
-      double radius = baseRadius * (1.0 + 0.12 * math.sin(time * 0.2 + i));
-      
-      // 律动膨胀（降低膨胀系数 0.8 -> 0.5，保持动态但避免溢出）
-      radius += baseRadius * bassIntensity * 0.5;
-      
-      if (radius <= 0.001) radius = 0.001; // 强制正值
 
-      // 提高不透明度，增加"色块厚度感"，使渐变层次更分明
+      final paintBlob = Paint()
+        ..blendMode = config.blendMode
+        ..maskFilter = MaskFilter.blur(BlurStyle.normal, (radius * 0.4).clamp(40, 150));
+
       final gradient = ui.Gradient.radial(
         Offset(centerX, centerY),
         radius,
         [
-          boostedColor.withOpacity(0.95), // 中心极高不透明度
-          boostedColor.withOpacity(0.5),  // 中间层（稍微提高，增强层次感）
-          boostedColor.withOpacity(0.0),  // 边缘淡出
+          boostedColor.withOpacity(config.opacity),
+          boostedColor.withOpacity(config.opacity * 0.5),
+          boostedColor.withOpacity(0.0),
         ],
-        const [0.0, 0.6, 1.0], // 调整渐变分布，使颜色更集中在可视区域
+        const [0.0, 0.4, 1.0],
       );
 
-      paint.shader = gradient;
-      
-      // 弹性变形（降低变形幅度 0.2 -> 0.15，避免极端拉伸导致溢出）
-      final distortion = bassIntensity * 0.3;
-      final canvasScaleX = (1.0 + 0.15 * math.sin(time * 0.15 + i) + distortion);
-      final canvasScaleY = (1.0 + 0.15 * math.cos(time * 0.18 + i * 0.5) - distortion);
-      
+      paintBlob.shader = gradient;
+
       canvas.save();
-      canvas.translate(centerX, centerY);
-      canvas.scale(canvasScaleX, canvasScaleY);
-      canvas.drawCircle(Offset.zero, radius, paint);
+      if (config.rotateFn != null) {
+        canvas.translate(centerX, centerY);
+        canvas.rotate(config.rotateFn!(time));
+        canvas.translate(-centerX, -centerY);
+      }
+      canvas.drawCircle(Offset(centerX, centerY), radius, paintBlob);
       canvas.restore();
     }
   }
@@ -296,7 +366,30 @@ class _MeshGradientPainter extends CustomPainter {
   @override
   bool shouldRepaint(_MeshGradientPainter oldDelegate) => 
       oldDelegate.time != time || 
-      oldDelegate.colors != colors;
+      oldDelegate.colors != colors ||
+      oldDelegate.bassIntensity != bassIntensity;
+}
+
+class _BlobConfig {
+  final Offset basePos;
+  final double sizeRatio;
+  final double speed;
+  final BlendMode blendMode;
+  final Offset Function(double time, int index) moveFn;
+  final double Function(double time)? scaleFn;
+  final double Function(double time)? rotateFn;
+  final double opacity;
+
+  _BlobConfig({
+    required this.basePos,
+    required this.sizeRatio,
+    required this.speed,
+    required this.blendMode,
+    required this.moveFn,
+    this.scaleFn,
+    this.rotateFn,
+    this.opacity = 0.8,
+  });
 }
 
 /// 增加质感的杂色层
@@ -317,15 +410,17 @@ class _GrainTexture extends StatelessWidget {
 class _GrainPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
-    final paint = Paint()..color = Colors.white;
-    final random = math.Random();
+    final random = math.Random(123); // 固定种子
+    final paint = Paint()
+      ..color = Colors.white.withOpacity(0.08)
+      ..style = PaintingStyle.fill;
     
-    // 模拟杂色的简单点阵绘制
-    // 减小点数以平衡性能
-    for (int i = 0; i < 800; i++) {
+    // 增加点数并减小尺寸，让噪点更细腻
+    for (int i = 0; i < 2000; i++) {
       final x = random.nextDouble() * size.width;
       final y = random.nextDouble() * size.height;
-      canvas.drawRect(Rect.fromLTWH(x, y, 1.2, 1.2), paint);
+      final dotSize = 0.5 + random.nextDouble() * 0.8;
+      canvas.drawRect(Rect.fromLTWH(x, y, dotSize, dotSize), paint);
     }
   }
 

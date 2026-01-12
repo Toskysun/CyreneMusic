@@ -47,11 +47,11 @@ app.*.map.json
 /data/
 /musicapi/
 /background_dev/
-/api-enhanced/
 /installer/
 /website/
 /gamdl/
 /AppleMusicDecrypt/
 test.html
-/demo/
 /backend/
+/api-enhanced/
+/demo/

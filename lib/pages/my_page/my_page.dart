@@ -17,6 +17,7 @@ import '../../widgets/source_switch_dialog.dart';
 import '../../widgets/music_taste_dialog.dart';
 import '../auth/auth_page.dart';
 import '../settings_page/user_card.dart';
+import 'my_page_breadcrumbs.dart';
 
 // UI 组件分离到 part 文件
 part 'my_page_material.dart';
@@ -43,6 +44,7 @@ class _MyPageState extends State<MyPage> {
   bool _isSearchMode = false;
   String _searchQuery = '';
   final TextEditingController _searchController = TextEditingController();
+  bool _reverseTransition = false; // 用于控制滑动动画方向
 
   @override
   void initState() {
@@ -152,12 +154,16 @@ class _MyPageState extends State<MyPage> {
   }
 
   void _openPlaylistDetail(Playlist playlist) {
-    setState(() => _selectedPlaylist = playlist);
+    setState(() {
+      _reverseTransition = false;
+      _selectedPlaylist = playlist;
+    });
     _playlistService.loadPlaylistTracks(playlist.id);
   }
 
   void _backToList() {
     setState(() {
+      _reverseTransition = true;
       _selectedPlaylist = null;
       _isEditMode = false;
       _selectedTrackIds.clear();

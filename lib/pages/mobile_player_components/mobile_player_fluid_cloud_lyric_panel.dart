@@ -102,7 +102,7 @@ class _MobilePlayerFluidCloudLyricsPanelState extends State<MobilePlayerFluidClo
             final textMaxWidth = layoutWidth - horizontalPadding;
 
             // 🔧 关键修复：基础行高随字号倍率缩放
-            final baseLineHeight = 80.0 * styleService.lyricFontSizeMultiplier;
+            final baseLineHeight = styleService.lineHeight;
             
             final centerY = styleService.currentAlignment == LyricAlignment.center 
                 ? viewportHeight * 0.5 
@@ -176,8 +176,8 @@ class _MobilePlayerFluidCloudLyricsPanelState extends State<MobilePlayerFluidClo
     final lyric = widget.lyrics[index];
     final fontFamily = LyricFontService().currentFontFamily ?? 'Microsoft YaHei';
     
-    final fontSizeMultiplier = LyricStyleService().lyricFontSizeMultiplier;
-    final cacheKey = '${lyric.startTime.inMilliseconds}_${lyric.text.hashCode}_${maxWidth.round()}_$fontSizeMultiplier';
+    final fontSize = LyricStyleService().fontSize * 0.9;
+    final cacheKey = '${lyric.startTime.inMilliseconds}_${lyric.text.hashCode}_${maxWidth.round()}_$fontSize';
     
     if (_lastViewportWidth != null && 
         (_lastViewportWidth! - maxWidth).abs() < 0.1 && 
@@ -186,8 +186,6 @@ class _MobilePlayerFluidCloudLyricsPanelState extends State<MobilePlayerFluidClo
         _heightCache.containsKey(cacheKey)) {
       return _heightCache[cacheKey]!;
     }
-
-    final fontSize = 28.8 * fontSizeMultiplier; // 32.0 * 0.9 * multiplier
 
     final textPainter = TextPainter(
       text: TextSpan(
@@ -210,7 +208,7 @@ class _MobilePlayerFluidCloudLyricsPanelState extends State<MobilePlayerFluidClo
           text: lyric.translation,
           style: TextStyle(
             fontFamily: fontFamily,
-            fontSize: 16.2 * LyricStyleService().lyricFontSizeMultiplier, // 18 * 0.9 * multiplier
+            fontSize: fontSize * 0.56,
             fontWeight: FontWeight.w600,
             height: 1.0,
           ),
@@ -218,11 +216,11 @@ class _MobilePlayerFluidCloudLyricsPanelState extends State<MobilePlayerFluidClo
         textDirection: TextDirection.ltr,
       );
       transPainter.layout(maxWidth: maxWidth);
-      h += 8.0 * fontSizeMultiplier; // 比例间距
+      h += 8.0 * (fontSize / 32.0); // 比例间距
       h += transPainter.height * 1.4;
     }
     
-    h += 24.0 * fontSizeMultiplier; // 比例底部间距
+    h += 24.0 * (fontSize / 32.0); // 比例底部间距
     final result = max(h, baseHeight);
     
     _lastViewportWidth = maxWidth;
@@ -245,7 +243,7 @@ class _MobilePlayerFluidCloudLyricsPanelState extends State<MobilePlayerFluidClo
     final diff = index - activeIndex;
     
     final double baseTranslation = relativeOffset;
-    final double sineOffset = sin(diff * 0.8) * 20.0 * styleService.lyricFontSizeMultiplier; // 这里的抖动也随字号缩放
+    final double sineOffset = sin(diff * 0.8) * 20.0 * (styleService.fontSize / 32.0); // 这里的抖动也随字号缩放
     
     double targetY = centerYOffset + baseTranslation + sineOffset - (itemHeight * _getTargetScale(diff) / 2);
 
@@ -255,20 +253,18 @@ class _MobilePlayerFluidCloudLyricsPanelState extends State<MobilePlayerFluidClo
     
     final targetScale = _getTargetScale(diff);
 
-    final blurLines = styleService.lyricBlurLines;
-
     double targetOpacity;
-    if (diff.abs() > blurLines) {
+    if (diff.abs() > 4) {
       targetOpacity = 0.0;
     } else {
-      targetOpacity = 1.0 - diff.abs() * (1.0 / blurLines);
+      targetOpacity = 1.0 - diff.abs() * 0.2;
     }
     targetOpacity = targetOpacity.clamp(0.0, 1.0).toDouble();
 
     final int delayMs = (diff.abs() * 50).toInt();
 
     // 🔧 关键修复：修正模糊逻辑，使用 User 调节的 Sigma 强度
-    final globalSigma = styleService.lyricBlurSigma;
+    final globalSigma = styleService.blurSigma;
     double targetBlur = globalSigma;
     if (diff == 0) {
       targetBlur = 0.0; // 活跃行始终清晰
@@ -561,7 +557,7 @@ class _ElasticLyricLineState extends State<_ElasticLyricLine> with TickerProvide
   Widget _buildInnerContent() {
     final styleService = LyricStyleService();
     final fontFamily = LyricFontService().currentFontFamily ?? 'Microsoft YaHei';
-    final double textFontSize = 28.8 * styleService.lyricFontSizeMultiplier; // 32.0 * 0.9 * multiplier
+    final double textFontSize = styleService.fontSize * 0.9;
 
     Color textColor;
     if (widget.isActive) {
@@ -612,7 +608,7 @@ class _ElasticLyricLineState extends State<_ElasticLyricLine> with TickerProvide
               widget.translation!,
               style: TextStyle(
                 fontFamily: fontFamily,
-                fontSize: 16.2 * styleService.lyricFontSizeMultiplier, // 18 * 0.9 * multiplier
+                fontSize: textFontSize * 0.56,
                 fontWeight: FontWeight.w600,
                 color: Colors.white.withOpacity(0.3),
                 height: 1.4,

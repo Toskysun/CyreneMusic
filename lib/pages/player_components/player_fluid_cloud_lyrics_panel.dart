@@ -9,6 +9,22 @@ import '../../services/lyric_style_service.dart';
 import '../../models/lyric_line.dart';
 
 /// 核心：弹性间距动画 + 波浪式延迟 (1:1 复刻 HTML)
+enum _VirtualEntryType { lyric, dots }
+
+class _VirtualLyricEntry {
+  final _VirtualEntryType type;
+  final int? lyricIndex; 
+  final Duration startTime;
+  final String key;
+
+  _VirtualLyricEntry({
+    required this.type,
+    this.lyricIndex,
+    required this.startTime,
+    required this.key,
+  });
+}
+
 class PlayerFluidCloudLyricsPanel extends StatefulWidget {
   final List<LyricLine> lyrics;
   final int currentLyricIndex;
@@ -30,8 +46,8 @@ class PlayerFluidCloudLyricsPanel extends StatefulWidget {
 class _PlayerFluidCloudLyricsPanelState extends State<PlayerFluidCloudLyricsPanel>
     with TickerProviderStateMixin {
   
-  // 核心变量
-  final double _lineHeight = 100.0;
+  // 核心变量 (从 Service 获取)
+  double get _lineHeight => LyricStyleService().lineHeight;
   static const double _maxActiveScale = 1.15; // 最大活跃缩放比例
   // HTML 中是 80px，这里我们也用 80 逻辑像素
   
@@ -45,14 +61,21 @@ class _PlayerFluidCloudLyricsPanelState extends State<PlayerFluidCloudLyricsPane
   double? _lastViewportWidth;
   String? _lastFontFamily;
   bool? _lastShowTranslation;
+
+  late Ticker _ticker;
   
   @override
   void initState() {
     super.initState();
+    _ticker = createTicker((_) {
+      if (mounted) setState(() {});
+    });
+    _ticker.start();
   }
 
   @override
   void dispose() {
+    _ticker.dispose();
     _dragResetTimer?.cancel();
     super.dispose();
   }
@@ -97,58 +120,108 @@ class _PlayerFluidCloudLyricsPanelState extends State<PlayerFluidCloudLyricsPane
           builder: (context, constraints) {
             final viewportHeight = constraints.maxHeight;
             final viewportWidth = constraints.maxWidth;
+            final currentPos = PlayerService().position;
+
+            // 1. 构建虚拟项列表 (动态触发)
+            final List<_VirtualLyricEntry> virtualEntries = [];
             
+            // 检查前奏 dots：只有在距离第一句歌词开始 <= 5s 时才真正“加载”进入队列
+            if (widget.lyrics.isNotEmpty) {
+              final firstTime = widget.lyrics[0].startTime;
+              final timeToFirst = (firstTime - currentPos).inSeconds;
+              // 如果距离首句还早（>5s），则不加载 dots 项。
+              // 如果进入了 5s 倒计时，或者已经超过首句（用于支持 passed dots 的停留），则加载。
+              if (timeToFirst <= 5) {
+                 virtualEntries.add(_VirtualLyricEntry(
+                   type: _VirtualEntryType.dots,
+                   startTime: Duration.zero,
+                   key: 'dots-intro',
+                 ));
+              }
+            }
+
+            for (int i = 0; i < widget.lyrics.length; i++) {
+              virtualEntries.add(_VirtualLyricEntry(
+                type: _VirtualEntryType.lyric,
+                lyricIndex: i,
+                startTime: widget.lyrics[i].startTime,
+                key: 'lyric-$i-${widget.lyrics[i].startTime.inMilliseconds}',
+              ));
+
+              // 检查间奏 dots：同样是动态触发
+              if (i < widget.lyrics.length - 1) {
+                final currentLine = widget.lyrics[i];
+                final nextLine = widget.lyrics[i+1];
+                final gap = (nextLine.startTime - currentLine.startTime).inSeconds;
+                
+                // 计算当前行结束时间
+                Duration lineEndTime = currentLine.startTime + const Duration(seconds: 3); // 默认兜底 3s
+                if (currentLine.words != null && currentLine.words!.isNotEmpty) {
+                  lineEndTime = currentLine.words!.last.startTime + currentLine.words!.last.duration;
+                } else if (currentLine.lineDuration != null) {
+                   lineEndTime = currentLine.startTime + currentLine.lineDuration!;
+                }
+
+                // 只有当播放进度已经到达或超过当前句子的“结束点”，且间奏够长，才插入 dots 项
+                if (gap >= 10 && currentPos >= lineEndTime) {
+                  virtualEntries.add(_VirtualLyricEntry(
+                    type: _VirtualEntryType.dots,
+                    startTime: lineEndTime,
+                    key: 'dots-interlude-$i',
+                  ));
+                }
+              }
+            }
+
+            // 2. 找到当前活跃虚拟项索引
+            int activeVirtualIndex = 0;
+            for (int i = virtualEntries.length - 1; i >= 0; i--) {
+              if (currentPos >= virtualEntries[i].startTime) {
+                activeVirtualIndex = i;
+                break;
+              }
+            }
+
             // 根据对齐设置动态计算中心点偏移
-            // 居中对齐：50%; 顶部对齐：25% (稍微靠上但不至于刷到最顶部)
             final centerY = lyricStyle.currentAlignment == LyricAlignment.center 
                 ? viewportHeight * 0.5 
                 : viewportHeight * 0.25;
             
             // 可视区域计算
-            final visibleBuffer = 6; 
-            final visibleLines = (viewportHeight / _lineHeight).ceil(); // 估算
-            final minIndex = max(0, widget.currentLyricIndex - visibleBuffer - (visibleLines ~/ 2));
-            final maxIndex = min(widget.lyrics.length - 1, widget.currentLyricIndex + visibleBuffer + (visibleLines ~/ 2));
+            final visibleBuffer = 8; 
+            final minIdx = max(0, activeVirtualIndex - visibleBuffer);
+            final maxIdx = min(virtualEntries.length - 1, activeVirtualIndex + visibleBuffer + 4);
 
-            // [New] 动态高度计算
-            // 1. 计算每个可见 Item 的高度
-            final Map<int, double> heights = {};
-            // 🔥 关键重构：为了应对活跃行 1.15x 的放大，基础布局宽度需要收缩
-            // 使得 基础宽度 * 1.15 = 视口宽度。这样放大后文字刚好贴边不溢出。
             final layoutWidth = viewportWidth / _maxActiveScale;
-            final textMaxWidth = layoutWidth - 80; // horizontal padding 40 * 2
-            
-            for (int i = minIndex; i <= maxIndex; i++) {
-              heights[i] = _measureLyricItemHeight(i, textMaxWidth);
+            final textMaxWidth = layoutWidth - 80;
+
+            // 3. 计算高度和偏移
+            final Map<int, double> heights = {};
+            for (int i = minIdx; i <= maxIdx; i++) {
+              heights[i] = _measureVirtualEntryHeight(virtualEntries[i], textMaxWidth);
             }
 
-            // 2. 计算偏移量 (相对于 activeIndex 中心)
             final Map<int, double> offsets = {};
-            offsets[widget.currentLyricIndex] = 0;
+            offsets[activeVirtualIndex] = 0;
 
-            // 🔥 关键重构：完全自适应偏移量计算
-            // 每一行在垂直布局中占用的空间 = 其原始高度 * 对应的缩放比例
-            
             double currentOffset = 0;
-            // 活跃行的半高度（已缩放）
-            double prevHalfHeight = ((heights[widget.currentLyricIndex] ?? _lineHeight) * 1.15) / 2;
+            double prevHalfHeight = (heights[activeVirtualIndex]! * (virtualEntries[activeVirtualIndex].type == _VirtualEntryType.dots ? 1.0 : 1.15)) / 2;
             
-            for (int i = widget.currentLyricIndex + 1; i <= maxIndex; i++) {
-              final h = heights[i] ?? _lineHeight;
-              final s = _getScaleSync(i - widget.currentLyricIndex); // 获取目标行的最终缩放比例
+            for (int i = activeVirtualIndex + 1; i <= maxIdx; i++) {
+              final h = heights[i]!;
+              final s = _getScaleSync(i - activeVirtualIndex);
               final scaledHalfHeight = (h * s) / 2;
               currentOffset += prevHalfHeight + scaledHalfHeight; 
               offsets[i] = currentOffset;
               prevHalfHeight = scaledHalfHeight;
             }
 
-            // 向上累加 (active - 1, active - 2 ...)
             currentOffset = 0;
-            double nextHalfHeight = ((heights[widget.currentLyricIndex] ?? _lineHeight) * 1.15) / 2;
+            double nextHalfHeight = (heights[activeVirtualIndex]! * (virtualEntries[activeVirtualIndex].type == _VirtualEntryType.dots ? 1.0 : 1.15)) / 2;
             
-            for (int i = widget.currentLyricIndex - 1; i >= minIndex; i--) {
-              final h = heights[i] ?? _lineHeight;
-              final s = _getScaleSync(i - widget.currentLyricIndex);
+            for (int i = activeVirtualIndex - 1; i >= minIdx; i--) {
+              final h = heights[i]!;
+              final s = _getScaleSync(i - activeVirtualIndex);
               final scaledHalfHeight = (h * s) / 2;
               currentOffset -= (nextHalfHeight + scaledHalfHeight);
               offsets[i] = currentOffset;
@@ -156,8 +229,16 @@ class _PlayerFluidCloudLyricsPanelState extends State<PlayerFluidCloudLyricsPane
             }
 
             List<Widget> children = [];
-            for (int i = minIndex; i <= maxIndex; i++) {
-              children.add(_buildLyricItem(i, centerY, offsets[i] ?? 0.0, heights[i] ?? _lineHeight, layoutWidth));
+            for (int i = minIdx; i <= maxIdx; i++) {
+               children.add(_buildVirtualItem(
+                 virtualEntries[i], 
+                 i, 
+                 activeVirtualIndex, 
+                 centerY, 
+                 offsets[i] ?? 0.0, 
+                 heights[i]!, 
+                 layoutWidth
+               ));
             }
 
             return GestureDetector(
@@ -176,6 +257,11 @@ class _PlayerFluidCloudLyricsPanelState extends State<PlayerFluidCloudLyricsPane
     );
   }
 
+  double _measureVirtualEntryHeight(_VirtualLyricEntry entry, double maxWidth) {
+    if (entry.type == _VirtualEntryType.dots) return 40.0;
+    return _measureLyricItemHeight(entry.lyricIndex!, maxWidth);
+  }
+
   /// 估算歌词项高度
   double _measureLyricItemHeight(int index, double maxWidth) {
     if (index < 0 || index >= widget.lyrics.length) return _lineHeight;
@@ -191,7 +277,7 @@ class _PlayerFluidCloudLyricsPanelState extends State<PlayerFluidCloudLyricsPane
       return _heightCache[cacheKey]!;
     }
 
-    final fontSize = 32.0; // 与 _buildInnerContent 保持一致
+    final fontSize = LyricStyleService().fontSize; 
 
     // 测量原文高度 (maxLines: 2)
     final textPainter = TextPainter(
@@ -233,9 +319,6 @@ class _PlayerFluidCloudLyricsPanelState extends State<PlayerFluidCloudLyricsPane
       h += transPainter.height; // 使用真实高度
     }
     
-    // 增加最后的一点安全余量 (底部额外留白)
-    h += 8.0; 
-    
     // 保证最小高度，避免空行太窄
     final result = max(h, _lineHeight);
     
@@ -255,63 +338,68 @@ class _PlayerFluidCloudLyricsPanelState extends State<PlayerFluidCloudLyricsPane
     return 0.7;
   }
 
-  Widget _buildLyricItem(int index, double centerYOffset, double relativeOffset, double itemHeight, double layoutWidth) {
-    final activeIndex = widget.currentLyricIndex;
+  Widget _buildVirtualItem(_VirtualLyricEntry item, int index, int activeIndex, double centerYOffset, double relativeOffset, double itemHeight, double layoutWidth) {
     final diff = index - activeIndex;
-    
-    // 1. 基础位移 (改为使用预计算的相对 Dynamic Offset)
-    final double baseTranslation = relativeOffset;
-    
-    // 2. 正弦偏移：保持原有的“果冻”弹性算法
-    // Math.sin(diff * 0.8) * 20
-    final double sineOffset = sin(diff * 0.8) * 20.0;
-    
-    // 4. 缩放逻辑
+    final currentPos = PlayerService().position;
+
+    // 1. 缩放逻辑
     double targetScale = _getScaleSync(diff);
+    if (item.type == _VirtualEntryType.dots) targetScale = 1.0;
 
-    // 5. 最终Y坐标
-    // centerYOffset 是屏幕中心
-    // baseTranslation 是该 Item 中心相对于屏幕中心的偏移
-    // sineOffset 是动画偏移
-    // 最后要减去 (itemHeight * targetScale) / 2 因为 Positioned top 是左上角
-    double targetY = centerYOffset + baseTranslation + sineOffset - (itemHeight * targetScale / 2);
-
-    // 叠加拖拽偏移
-    if (_isDragging) {
-       targetY += _dragOffset;
-    }
+    // 2. 最终Y坐标
+    double baseTranslation = relativeOffset;
+    double sineOffset = sin(diff * 0.8) * 20.0;
     
-    // 6. 透明度逻辑
-    // const opacity = Math.abs(diff) > 4 ? 0 : 1 - Math.abs(diff) * 0.2;
+    // 【核心亮点】占位点原地消失逻辑
+    // 如果是占位点，并且已经过期 (diff < 0)
+    if (item.type == _VirtualEntryType.dots && diff < 0) {
+       // 固定在中心位置附近停留消失，不跟随向上滚动
+       baseTranslation = 0; 
+       sineOffset = 0;
+    }
+
+    double targetY = centerYOffset + baseTranslation + sineOffset - (itemHeight * targetScale / 2);
+    if (_isDragging) targetY += _dragOffset;
+    
+    // 3. 透明度逻辑
     double targetOpacity;
     if (diff.abs() > 4) {
       targetOpacity = 0.0;
     } else {
       targetOpacity = 1.0 - diff.abs() * 0.2;
     }
+
+    // 过期占位符强制 0 透明度 (因为它们不再占用空间)
+    if (item.type == _VirtualEntryType.dots && diff < 0) targetOpacity = 0.0;
+    
+    // 前奏占位符：只有在距离第一句 > 0 且 <= 5s 时才显示初现
+    if (item.key == 'dots-intro') {
+      final firstTime = widget.lyrics[0].startTime;
+      final timeUntilFirst = (firstTime - currentPos).inMilliseconds / 1000.0;
+      if (timeUntilFirst <= 0 || timeUntilFirst > 5.0) targetOpacity = 0.0;
+    }
+
     targetOpacity = targetOpacity.clamp(0.0, 1.0).toDouble();
 
-    // 6. 延迟逻辑
-    // transitionDelay = ${Math.abs(diff) * 0.05}s
     final int delayMs = (diff.abs() * 50).toInt();
 
-    // 7. 模糊逻辑
-    // active: 0, near (diff=1): 1px, others: 4px
-    double targetBlur = 4.0;
+    final blurSigma = LyricStyleService().blurSigma;
+    double targetBlur = blurSigma;
     if (diff == 0) targetBlur = 0.0;
-    else if (diff.abs() == 1) targetBlur = 1.0;
+    else if (diff.abs() == 1) targetBlur = blurSigma * 0.25;
+    if (item.type == _VirtualEntryType.dots && diff < 0) targetBlur = blurSigma;
 
     final bool isActive = (diff == 0);
 
     return _ElasticLyricLine(
-      key: ValueKey(index), // 保持 Key 稳定以复用 State
-      text: widget.lyrics[index].text,
-      translation: widget.lyrics[index].translation,
-      lyric: widget.lyrics[index], 
+      key: ValueKey(item.key),
+      text: item.type == _VirtualEntryType.lyric ? widget.lyrics[item.lyricIndex!].text : '',
+      translation: item.type == _VirtualEntryType.lyric ? widget.lyrics[item.lyricIndex!].translation : null,
+      lyric: item.type == _VirtualEntryType.lyric ? widget.lyrics[item.lyricIndex!] : LyricLine(startTime: item.startTime, text: ''),
       lyrics: widget.lyrics,     
       index: index,             
       lineHeight: _lineHeight,
-      viewportWidth: layoutWidth, // [Refactor] 这里传递其实是缩减后的基础布局宽度
+      viewportWidth: layoutWidth,
       targetY: targetY,
       targetScale: targetScale,
       targetOpacity: targetOpacity,
@@ -320,6 +408,7 @@ class _PlayerFluidCloudLyricsPanelState extends State<PlayerFluidCloudLyricsPane
       delay: Duration(milliseconds: delayMs),
       isDragging: _isDragging,
       showTranslation: widget.showTranslation,
+      isDots: item.type == _VirtualEntryType.dots,
     );
   }
 
@@ -352,6 +441,7 @@ class _ElasticLyricLine extends StatefulWidget {
   final Duration delay;
   final bool isDragging;
   final bool showTranslation;
+  final bool isDots;
 
   const _ElasticLyricLine({
     Key? key,
@@ -370,6 +460,7 @@ class _ElasticLyricLine extends StatefulWidget {
     required this.delay,
     required this.isDragging,
     required this.showTranslation,
+    this.isDots = false,
   }) : super(key: key);
 
   @override
@@ -390,6 +481,35 @@ class _ElasticLyricLineState extends State<_ElasticLyricLine> with TickerProvide
   Animation<double>? _blurAnim;
   
   Timer? _delayTimer;
+
+  // --- 涟漪效果相关 ---
+  final List<_RippleInfo> _ripples = [];
+  
+  void _addRipple(Offset localPosition) {
+    // 占位点不需要涟漪效果
+    if (widget.isDots) return;
+    
+    final ripple = _RippleInfo(
+      position: localPosition,
+      controller: AnimationController(
+        vsync: this,
+        duration: const Duration(milliseconds: 800),
+      ),
+    );
+    
+    setState(() {
+      _ripples.add(ripple);
+    });
+
+    ripple.controller.forward().then((_) {
+      if (mounted) {
+        setState(() {
+          _ripples.remove(ripple);
+        });
+      }
+      ripple.controller.dispose();
+    });
+  }
 
   // HTML CSS: transition: transform 0.8s cubic-bezier(0.34, 1.56, 0.64, 1)
   // 这是带回弹的曲线
@@ -427,6 +547,10 @@ class _ElasticLyricLineState extends State<_ElasticLyricLine> with TickerProvide
   void dispose() {
     _controller?.dispose();
     _delayTimer?.cancel();
+    // 清理所有涟漪动画控制器
+    for (final ripple in _ripples) {
+      ripple.controller.dispose();
+    }
     super.dispose();
   }
 
@@ -496,20 +620,60 @@ class _ElasticLyricLineState extends State<_ElasticLyricLine> with TickerProvide
       top: _y,
       left: 0,
       width: widget.viewportWidth, // [Refactor] 显式设置宽度为缩减后的 layoutWidth
-      // height: widget.lineHeight, // Remove strict height constraint
-      child: Transform.scale(
-        scale: _scale,
-        alignment: Alignment.centerLeft, // HTML: transform-origin: left center
-        child: Opacity(
-          opacity: _opacity,
-          child: _OptionalBlur(
-            blur: _blur,
-            child: Container(
-              // 关键约束：限制渲染宽度与测量宽度一致
-              constraints: BoxConstraints(maxWidth: widget.viewportWidth),
-              padding: const EdgeInsets.symmetric(horizontal: 40), // HTML: padding: 0 40px
-              alignment: Alignment.centerLeft, // HTML: display: flex; align-items: center
-              child: _buildInnerContent(),
+      child: RepaintBoundary(
+        child: GestureDetector(
+          // 使用 opaque 拦截点击事件，防止冒泡到外部 Layout 触发控制栏显隐
+          behavior: HitTestBehavior.opaque,
+          onTapDown: (details) {
+            _addRipple(details.localPosition);
+          },
+          onTap: () {
+            // 占位点不需要跳转
+            if (widget.isDots) return;
+            // 跳转到歌词开始时间
+            PlayerService().seek(widget.lyric.startTime);
+          },
+          child: Transform.scale(
+            scale: _scale,
+            alignment: Alignment.centerLeft, // HTML: transform-origin: left center
+            child: Opacity(
+              opacity: _opacity,
+              child: _OptionalBlur(
+                blur: _blur,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 12), // 卡片外边距
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(12), // 仿 Apple Music 圆角
+                    child: AnimatedBuilder(
+                      animation: Listenable.merge(_ripples.map((r) => r.controller).toList()),
+                      builder: (context, child) {
+                        // 根据涟漪进度计算背景透明度
+                        double bgOpacity = 0.0;
+                        if (_ripples.isNotEmpty) {
+                          final maxProgress = _ripples.map((r) => r.controller.value).reduce((a, b) => a > b ? a : b);
+                          bgOpacity = 0.12 * (1.0 - maxProgress);
+                        }
+
+                        return Container(
+                          // 关键约束：限制渲染宽度与测量宽度一致
+                          constraints: BoxConstraints(maxWidth: widget.viewportWidth),
+                          padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 10), // 卡片内边距
+                          color: Colors.white.withOpacity(bgOpacity),
+                          alignment: Alignment.centerLeft, // HTML: display: flex; align-items: center
+                          child: Stack(
+                            alignment: Alignment.centerLeft,
+                            children: [
+                              _buildInnerContent(),
+                              // 涟漪层 (已在 ClipRRect 内部)
+                              ..._ripples.map((ripple) => _buildRipple(ripple)),
+                            ],
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                ),
+              ),
             ),
           ),
         ),
@@ -517,12 +681,25 @@ class _ElasticLyricLineState extends State<_ElasticLyricLine> with TickerProvide
     );
   }
 
+  Widget _buildRipple(_RippleInfo ripple) {
+    return AnimatedBuilder(
+      animation: ripple.controller,
+      builder: (context, child) {
+        return CustomPaint(
+          painter: _RipplePainter(
+            progress: ripple.controller.value,
+            center: ripple.position,
+          ),
+        );
+      },
+    );
+  }
   Widget _buildInnerContent() {
+    if (widget.isDots) {
+      return const _CountdownDots();
+    }
     final fontFamily = LyricFontService().currentFontFamily ?? 'Microsoft YaHei';
-    
-    // HTML font-size: 2.4rem.
-    // 我们使用固定大小，或者根据需求调整。原 Flutter 代码是 32。
-    final double textFontSize = 32.0;
+    final double textFontSize = LyricStyleService().fontSize;
 
     // 颜色:
     // HTML .lyric-line.active -> rgba(255, 255, 255, 1)
@@ -587,7 +764,7 @@ class _ElasticLyricLineState extends State<_ElasticLyricLine> with TickerProvide
               widget.translation!,
               style: TextStyle(
                 fontFamily: fontFamily,
-                fontSize: 18,
+              fontSize: textFontSize * 0.56, // 译文约原文 56% 大小
                 fontWeight: FontWeight.w600,
                 color: Colors.white.withOpacity(0.3),
                 height: 1.4, // 增加行高防止译文本身换行时拥挤
@@ -598,19 +775,6 @@ class _ElasticLyricLineState extends State<_ElasticLyricLine> with TickerProvide
       );
     }
     
-    // 如果是第一行，且活跃，显示倒计时点 (Features)
-    if (widget.index == 0 && !widget.isDragging) {
-       return Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-           _CountdownDots(lyrics: widget.lyrics, countdownThreshold: 5.0),
-           textWidget, 
-        ]
-       );
-    }
-
     return textWidget;
   }
 }
@@ -886,8 +1050,7 @@ class _WordFillWidgetState extends State<_WordFillWidget> with TickerProviderSta
   bool? _isAsciiCached;
 
   static const double fadeRatio = 0.3;
-  // 上浮的最大偏移量 (像素)
-  static const double maxFloatOffset = -3.0; // 从 -5.0 缩小到 -3.0
+  static const double maxFloatOffset = -1.5; // 从 -3.0 缩小 50% 到 -1.5
 
   @override
   void initState() {
@@ -1173,152 +1336,118 @@ class _LineClipper extends CustomClipper<Rect> {
   @override bool shouldReclip(_LineClipper oldClipper) => oldClipper.progress != progress;
 }
 
-/// 倒计时点组件 - Apple Music 风格 (保留)
+/// 倒计时点组件 - Apple Music 风格 (三点呼吸动画)
 class _CountdownDots extends StatefulWidget {
-  final List<LyricLine> lyrics;
-  final double countdownThreshold;
-  const _CountdownDots({required this.lyrics, required this.countdownThreshold});
+  const _CountdownDots();
   @override State<_CountdownDots> createState() => _CountdownDotsState();
 }
 
 class _CountdownDotsState extends State<_CountdownDots> with TickerProviderStateMixin {
-  late Ticker _ticker;
-  double _progress = 0.0;
-  bool _isVisible = false;
-  bool _wasVisible = false;
-  late AnimationController _appearController;
-  late Animation<double> _appearAnimation;
-  
-  static const int _dotCount = 3;
+  late AnimationController _breatheController;
 
   @override
   void initState() {
     super.initState();
-    _appearController = AnimationController(duration: const Duration(milliseconds: 400), vsync: this);
-    _appearAnimation = CurvedAnimation(parent: _appearController, curve: Curves.easeOutBack, reverseCurve: Curves.easeInBack);
-    _ticker = createTicker(_onTick);
-    _ticker.start();
+    _breatheController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1500),
+    )..repeat();
   }
 
   @override
   void dispose() {
-    _ticker.dispose();
-    _appearController.dispose();
+    _breatheController.dispose();
     super.dispose();
-  }
-
-  void _onTick(Duration elapsed) {
-    if (widget.lyrics.isEmpty) return;
-    final firstLyricTime = widget.lyrics.first.startTime;
-    final currentPos = PlayerService().position;
-    final timeUntilFirstLyric = (firstLyricTime - currentPos).inMilliseconds / 1000.0;
-    final isPlaying = PlayerService().isPlaying;
-    final shouldShow = isPlaying && currentPos.inMilliseconds > 0 && timeUntilFirstLyric > 0 && timeUntilFirstLyric <= widget.countdownThreshold;
-
-    if (shouldShow) {
-      final newProgress = 1.0 - (timeUntilFirstLyric / widget.countdownThreshold);
-      if (!_wasVisible) {
-        _wasVisible = true;
-        _appearController.forward();
-      }
-      if (!_isVisible || (newProgress - _progress).abs() > 0.01) {
-        setState(() {
-          _isVisible = true;
-          _progress = newProgress.clamp(0.0, 1.0);
-        });
-      }
-    } else if (_isVisible || _wasVisible) {
-      if (_wasVisible) {
-        _wasVisible = false;
-        _appearController.reverse();
-      }
-      setState(() {
-        _isVisible = false;
-        _progress = 0.0;
-      });
-    }
   }
 
   @override
   Widget build(BuildContext context) {
+    return SizedBox(
+      height: 20,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: List.generate(3, (index) {
+          return _BreathDot(
+            index: index,
+            controller: _breatheController,
+          );
+        }),
+      ),
+    );
+  }
+}
+
+class _BreathDot extends StatelessWidget {
+  final int index;
+  final AnimationController controller;
+
+  const _BreathDot({required this.index, required this.controller});
+
+  @override
+  Widget build(BuildContext context) {
     return AnimatedBuilder(
-      animation: _appearAnimation,
+      animation: controller,
       builder: (context, child) {
-        if (_appearAnimation.value <= 0.01 && !_isVisible) return const SizedBox.shrink();
+        // 计算每个点的延迟进度 (0.0 到 1.0)
+        double progress = (controller.value - (index * 0.2)) % 1.0;
+        if (progress < 0) progress += 1.0;
+
+        // 呼吸曲线：0 -> 1 -> 0
+        final double value = sin(progress * pi);
         
-        return RepaintBoundary(
-          child: SizedBox(
-            height: 20,
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: List.generate(_dotCount, (index) {
-                final dotStartProgress = index / _dotCount;
-                final dotEndProgress = (index + 1) / _dotCount;
-                double dotProgress = 0.0;
-                if (_progress > dotStartProgress) {
-                   dotProgress = (_progress - dotStartProgress) / (dotEndProgress - dotStartProgress);
-                   if (_progress >= dotEndProgress) dotProgress = 1.0;
-                }
-                
-                final staggerDelay = index * 0.15;
-                double appearScale = 0.0;
-                if (_appearAnimation.value >= staggerDelay) {
-                  appearScale = ((_appearAnimation.value - staggerDelay) / (1.0 - staggerDelay)).clamp(0.0, 1.0);
-                }
-                
-                return Padding(
-                  padding: const EdgeInsets.only(right: 16.0),
-                  child: Transform.scale(
-                    scale: _easeOutBack(appearScale),
-                    child: _CountdownDot(
-                      size: 12.0,
-                      fillProgress: dotProgress,
-                      appearProgress: appearScale,
-                    ),
-                  ),
-                );
-              }),
+        // 样式：Scale 0.8 -> 1.2, Opacity 0.4 -> 1.0
+        final double scale = 0.8 + (0.4 * value);
+        final double opacity = 0.4 + (0.6 * value);
+
+        return Padding(
+          padding: const EdgeInsets.only(right: 8.0),
+          child: Opacity(
+            opacity: opacity,
+            child: Transform.scale(
+              scale: scale,
+              child: Container(
+                width: 10,
+                height: 10,
+                decoration: const BoxDecoration(
+                  color: Colors.white,
+                  shape: BoxShape.circle,
+                ),
+              ),
             ),
           ),
         );
       },
     );
   }
-  double _easeOutBack(double t) {
-    if (t <= 0) return 0; if (t >= 1) return 1;
-    const c1 = 1.70158; const c3 = c1 + 1;
-    return 1 + c3 * (t - 1) * (t - 1) * (t - 1) + c1 * (t - 1) * (t - 1);
-  }
 }
 
-class _CountdownDot extends StatelessWidget {
-  final double size;
-  final double fillProgress;
-  final double appearProgress;
-  const _CountdownDot({required this.size, required this.fillProgress, required this.appearProgress});
-  
+/// 涟漪信息类
+class _RippleInfo {
+  final Offset position;
+  final AnimationController controller;
+  _RippleInfo({required this.position, required this.controller});
+}
+
+/// 涟漪绘制器 - 仿 Apple Music 风格
+class _RipplePainter extends CustomPainter {
+  final double progress;
+  final Offset center;
+
+  _RipplePainter({required this.progress, required this.center});
+
   @override
-  Widget build(BuildContext context) {
-    final innerSize = (size - 4) * (1 - (1 - fillProgress) * (1 - fillProgress) * (1 - fillProgress) * (1 - fillProgress));
-    final borderOpacity = 0.4 + (0.2 * appearProgress);
-    final glowIntensity = fillProgress > 0.3 ? (fillProgress - 0.3) / 0.7 : 0.0;
-    
-    return Container(
-      width: size, height: size,
-      decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        border: Border.all(color: Colors.white.withOpacity(borderOpacity), width: 1.5),
-      ),
-      child: Center(
-        child: Container(
-          width: innerSize, height: innerSize,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            color: Colors.white.withOpacity(0.9),
-            boxShadow: glowIntensity > 0 ? [BoxShadow(color: Colors.white.withOpacity(0.4 * glowIntensity), blurRadius: 8 * glowIntensity)] : null,
-          ),
-        ),
-      ),
-    );
+  void paint(Canvas canvas, Size size) {
+    // 极快扩张，平滑淡出
+    final double radius = 300.0 * Curves.easeOutCubic.transform(progress);
+    final double opacity = (1.0 - Curves.easeOut.transform(progress)) * 0.25;
+
+    final paint = Paint()
+      ..color = Colors.white.withOpacity(opacity)
+      ..style = PaintingStyle.fill;
+
+    canvas.drawCircle(center, radius, paint);
   }
+
+  @override
+  bool shouldRepaint(_RipplePainter oldDelegate) => oldDelegate.progress != progress;
 }

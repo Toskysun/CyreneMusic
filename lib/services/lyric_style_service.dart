@@ -27,15 +27,19 @@ class LyricStyleService extends ChangeNotifier {
 
   static const String _storageKey = 'lyric_style';
   static const String _alignmentStorageKey = 'lyric_alignment';
-  static const String _fontSizeMultiplierKey = 'lyric_font_size_multiplier';
-  static const String _fadeLinesKey = 'lyric_fade_lines';
+  static const String _fontSizeKey = 'lyric_font_size';
+  static const String _lineHeightKey = 'lyric_line_height';
   static const String _blurSigmaKey = 'lyric_blur_sigma';
+  static const String _autoLineHeightKey = 'lyric_auto_line_height';
   
   LyricStyle _currentStyle = LyricStyle.defaultStyle;
   LyricAlignment _currentAlignment = LyricAlignment.center;
-  double _lyricFontSizeMultiplier = 1.0;
-  int _lyricBlurLines = 4;
-  double _lyricBlurSigma = 4.0;
+  
+  // 歌词配置项
+  double _fontSize = 32.0;
+  double _lineHeight = 100.0;
+  double _blurSigma = 4.0;
+  bool _autoLineHeight = true; // 是否开启字号间距自适应
 
   /// 获取当前歌词样式
   LyricStyle get currentStyle => _currentStyle;
@@ -43,14 +47,17 @@ class LyricStyleService extends ChangeNotifier {
   /// 获取当前歌词对齐方式
   LyricAlignment get currentAlignment => _currentAlignment;
 
-  /// 获取歌词字号倍率
-  double get lyricFontSizeMultiplier => _lyricFontSizeMultiplier;
+  /// 获取字号
+  double get fontSize => _fontSize;
 
-  /// 获取歌词渐隐范围（行数）
-  int get lyricBlurLines => _lyricBlurLines;
+  /// 获取行高
+  double get lineHeight => _lineHeight;
 
-  /// 获取歌词视觉模糊强度
-  double get lyricBlurSigma => _lyricBlurSigma;
+  /// 获取模糊强度
+  double get blurSigma => _blurSigma;
+
+  /// 是否自适应行高
+  bool get autoLineHeight => _autoLineHeight;
 
   /// 初始化服务
   Future<void> initialize() async {
@@ -78,14 +85,11 @@ class LyricStyleService extends ChangeNotifier {
         _currentAlignment = LyricAlignment.center;
       }
 
-      // 加载字号倍率
-      _lyricFontSizeMultiplier = prefs.getDouble(_fontSizeMultiplierKey) ?? 1.0;
-      
-      // 加载渐隐行数
-      _lyricBlurLines = prefs.getInt(_fadeLinesKey) ?? 4;
-      
-      // 加载模糊强度
-      _lyricBlurSigma = prefs.getDouble(_blurSigmaKey) ?? 4.0;
+      // 加载配置
+      _fontSize = prefs.getDouble(_fontSizeKey) ?? 32.0;
+      _lineHeight = prefs.getDouble(_lineHeightKey) ?? 100.0;
+      _blurSigma = prefs.getDouble(_blurSigmaKey) ?? 4.0;
+      _autoLineHeight = prefs.getBool(_autoLineHeightKey) ?? true;
       
       notifyListeners();
     } catch (e) {
@@ -127,49 +131,65 @@ class LyricStyleService extends ChangeNotifier {
     }
   }
 
-  /// 设置歌词字号倍率
-  Future<void> setFontSizeMultiplier(double multiplier) async {
-    if ((_lyricFontSizeMultiplier - multiplier).abs() < 0.01) return;
+  /// 设置字号
+  Future<void> setFontSize(double size) async {
+    if ((_fontSize - size).abs() < 0.1) return;
+    _fontSize = size;
     
-    _lyricFontSizeMultiplier = multiplier;
+    // 自适应逻辑：如果开启，则自动按比例调整行高
+    if (_autoLineHeight) {
+      _lineHeight = size * (100.0 / 32.0); // 保持原有比例
+    }
+    
     notifyListeners();
-    
     try {
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setDouble(_fontSizeMultiplierKey, multiplier);
-    } catch (e) {
-      print('❌ [LyricStyleService] 保存歌词字号倍率失败: $e');
-    }
+      await prefs.setDouble(_fontSizeKey, _fontSize);
+      if (_autoLineHeight) {
+        await prefs.setDouble(_lineHeightKey, _lineHeight);
+      }
+    } catch (e) {}
   }
 
-  /// 设置歌词渐隐范围
-  Future<void> setBlurLines(int lines) async {
-    if (_lyricBlurLines == lines) return;
-    
-    _lyricBlurLines = lines;
+  /// 设置行高
+  Future<void> setLineHeight(double height) async {
+    if ((_lineHeight - height).abs() < 0.1) return;
+    _lineHeight = height;
     notifyListeners();
-    
     try {
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setInt(_fadeLinesKey, lines);
-    } catch (e) {
-      print('❌ [LyricStyleService] 保存歌词渐隐范围失败: $e');
-    }
+      await prefs.setDouble(_lineHeightKey, height);
+    } catch (e) {}
   }
 
-  /// 设置歌词模糊强度
+  /// 设置模糊强度
   Future<void> setBlurSigma(double sigma) async {
-    if ((_lyricBlurSigma - sigma).abs() < 0.1) return;
-    
-    _lyricBlurSigma = sigma;
+    if ((_blurSigma - sigma).abs() < 0.1) return;
+    _blurSigma = sigma;
     notifyListeners();
-    
     try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setDouble(_blurSigmaKey, sigma);
-    } catch (e) {
-      print('❌ [LyricStyleService] 保存歌词模糊强度失败: $e');
+    } catch (e) {}
+  }
+
+  /// 设置自适应间距
+  Future<void> setAutoLineHeight(bool auto) async {
+    if (_autoLineHeight == auto) return;
+    _autoLineHeight = auto;
+    
+    if (auto) {
+      _lineHeight = _fontSize * (100.0 / 32.0);
     }
+    
+    notifyListeners();
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool(_autoLineHeightKey, auto);
+      if (auto) {
+        await prefs.setDouble(_lineHeightKey, _lineHeight);
+      }
+    } catch (e) {}
   }
 
   /// 获取样式的显示名称
