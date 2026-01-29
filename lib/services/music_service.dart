@@ -866,7 +866,9 @@ class MusicService extends ChangeNotifier {
 
   /// 🎵 TuneHub 音源：获取歌曲详情
   /// 
-  /// TuneHub API 格式: GET ${baseUrl}/api/?type=info&source=${source}&id=${songId}
+  /// TuneHub v3 API 格式: POST ${baseUrl}/v1/parse
+  /// 请求头: X-API-Key: {apiKey}
+  /// 请求体: { platform, ids, quality }
   /// 响应格式: { code: 200, data: { id, name, artist, album, pic, url, lrc } }
   Future<SongDetail?> _fetchSongDetailFromTuneHub({
     required dynamic songId,
@@ -874,8 +876,8 @@ class MusicService extends ChangeNotifier {
     required MusicSource source,
     required AudioSourceService audioSourceService,
   }) async {
-    print('🎵 [MusicService] 使用 TuneHub 音源获取歌曲: $songId');
-    DeveloperModeService().addLog('🎵 [MusicService] 使用 TuneHub 音源');
+    print('🎵 [MusicService] 使用 TuneHub v3 音源获取歌曲: $songId');
+    DeveloperModeService().addLog('🎵 [MusicService] 使用 TuneHub v3 音源');
 
     // 检查来源是否被 TuneHub 音源支持
     if (!audioSourceService.isTuneHubSourceSupported(source)) {
@@ -885,17 +887,19 @@ class MusicService extends ChangeNotifier {
     }
 
     try {
-      // 构建 TuneHub 音源请求 URL（使用 type=info 获取完整信息）
-      final infoUrl = audioSourceService.buildTuneHubInfoUrl(source, songId);
+      // 构建 TuneHub v3 API 请求
+      final parseUrl = audioSourceService.tuneHubV3ParseUrl;
+      final headers = audioSourceService.getTuneHubV3Headers();
+      final body = audioSourceService.buildTuneHubV3ParseBody(source, songId, quality);
 
-      print('🌐 [MusicService] TuneHub 音源请求: GET $infoUrl');
-      DeveloperModeService().addLog('🌐 [Network] GET $infoUrl');
+      print('🌐 [MusicService] TuneHub v3 音源请求: POST $parseUrl');
+      print('   📦 Body: $body');
+      DeveloperModeService().addLog('🌐 [Network] POST $parseUrl');
 
-      final response = await http.get(
-        Uri.parse(infoUrl),
-        headers: {
-          'Content-Type': 'application/json',
-        },
+      final response = await http.post(
+        Uri.parse(parseUrl),
+        headers: headers,
+        body: json.encode(body),
       ).timeout(
         const Duration(seconds: 15),
         onTimeout: () {
@@ -904,7 +908,7 @@ class MusicService extends ChangeNotifier {
         },
       );
 
-      print('🎵 [MusicService] TuneHub 音源响应状态码: ${response.statusCode}');
+      print('🎵 [MusicService] TuneHub v3 音源响应状态码: ${response.statusCode}');
       DeveloperModeService().addLog('📥 [Network] 状态码: ${response.statusCode}');
 
       if (response.statusCode == 200) {
@@ -916,144 +920,96 @@ class MusicService extends ChangeNotifier {
 
         final data = json.decode(responseBody) as Map<String, dynamic>;
         final code = data['code'];
+        final success = data['success'] as bool? ?? false;
 
-        // TuneHub 响应码处理
-        if (code == 200) {
-          final songData = data['data'] as Map<String, dynamic>?;
-          if (songData == null) {
-            print('❌ [MusicService] TuneHub 音源返回空数据');
+        // TuneHub v3 响应码处理：code == 0 或 success == true 表示成功
+        if (code == 0 || success) {
+          // v3 格式：data.data 是数组
+          final outerData = data['data'] as Map<String, dynamic>?;
+          final dataList = outerData?['data'] as List<dynamic>?;
+          
+          if (dataList == null || dataList.isEmpty) {
+            print('❌ [MusicService] TuneHub v3 音源返回空数据');
             DeveloperModeService().addLog('❌ [MusicService] 返回空数据');
             return null;
           }
 
-          // 获取播放 URL（优先使用 info 接口返回的 url）
+          // 获取第一个结果
+          final songData = dataList[0] as Map<String, dynamic>;
+          
+          // 检查单曲是否成功
+          final itemSuccess = songData['success'] as bool? ?? false;
+          if (!itemSuccess) {
+            final errorMsg = songData['error'] as String? ?? '获取失败';
+            print('❌ [MusicService] TuneHub v3 单曲获取失败: $errorMsg');
+            DeveloperModeService().addLog('❌ [MusicService] 错误: $errorMsg');
+            throw Exception(errorMsg);
+          }
+
+          // 获取播放 URL（v3 直接返回完整 URL）
           String audioUrl = songData['url'] as String? ?? '';
           
-          // TuneHub 的 info 接口返回的 url 可能是重定向 API 链接（包含 type=url）
-          // 需要检查并跟随重定向获取最终的音频文件 URL
-          // 判断条件：URL 为空，或者 URL 包含 'type=url' 或 'type=pic'（API 重定向链接）
-          final bool needsRedirect = audioUrl.isEmpty || 
-              audioUrl.contains('type=url') || 
-              audioUrl.contains('/api/');
+          // 获取歌曲信息（v3 格式在 info 对象中）
+          final info = songData['info'] as Map<String, dynamic>? ?? {};
+          final songName = info['name'] as String? ?? '';
+          final artistName = info['artist'] as String? ?? '';
+          final albumName = info['album'] as String? ?? '';
           
-          if (needsRedirect) {
-            // 构建带音质参数的 URL（info 返回的 url 可能没有音质参数）
-            final redirectUrl = audioSourceService.buildTuneHubMusicUrl(source, songId, quality);
-            print('🔗 [MusicService] TuneHub 需要跟随重定向获取音频 URL: $redirectUrl');
-            
-            try {
-              // 使用 http.Client 手动跟随重定向获取最终 URL
-              final client = http.Client();
-              final request = http.Request('GET', Uri.parse(redirectUrl));
-              request.followRedirects = false; // 禁用自动重定向
-              
-              final streamedResponse = await client.send(request).timeout(const Duration(seconds: 10));
-              
-              if (streamedResponse.statusCode == 302 || streamedResponse.statusCode == 301) {
-                // 获取重定向后的 Location 头
-                final location = streamedResponse.headers['location'] ?? '';
-                if (location.isNotEmpty) {
-                  audioUrl = location;
-                  print('✅ [MusicService] TuneHub 重定向成功，最终 URL: ${audioUrl.length > 50 ? "${audioUrl.substring(0, 50)}..." : audioUrl}');
-                } else {
-                  print('❌ [MusicService] TuneHub 重定向但 Location 为空');
-                }
-              } else if (streamedResponse.statusCode == 200) {
-                // 某些情况下可能直接返回音频流，使用原始 URL
-                audioUrl = redirectUrl;
-                print('ℹ️ [MusicService] TuneHub 直接返回音频流，使用原始 URL');
-              } else {
-                print('❌ [MusicService] TuneHub 获取音频 URL 失败: HTTP ${streamedResponse.statusCode}');
-              }
-              
-              client.close();
-            } catch (e) {
-              print('❌ [MusicService] TuneHub 跟随重定向失败: $e');
-              // 重定向失败时不使用 API URL，因为播放器无法处理
-            }
-          }
-
-          // 获取歌词
-          // 注意：TuneHub 的 info 接口返回的 lrc 字段可能是 URL 而不是歌词内容
+          // 封面图片（v3 使用 cover 字段）
+          final coverUrl = songData['cover'] as String? ?? '';
+          
+          // 🎵 使用后端歌词 API 获取歌词（与洛雪音源保持一致）
           String lyricText = '';
-          final lrcData = songData['lrc'];
-          
-          if (lrcData is String && lrcData.isNotEmpty) {
-            // 检查是否是 URL（包含 http 或 type=lrc）
-            if (lrcData.startsWith('http') || lrcData.contains('type=lrc')) {
-              // lrcData 是 URL，需要请求获取歌词内容
-              print('📝 [MusicService] TuneHub lrc 是 URL，需要请求获取歌词: $lrcData');
-              try {
-                final lrcResponse = await http.get(
-                  Uri.parse(lrcData),
-                ).timeout(const Duration(seconds: 10));
-                
-                if (lrcResponse.statusCode == 200) {
-                  lyricText = utf8.decode(lrcResponse.bodyBytes);
-                  print('✅ [MusicService] TuneHub 歌词获取成功: ${lyricText.length} 字符');
-                } else {
-                  print('⚠️ [MusicService] TuneHub 歌词请求失败: HTTP ${lrcResponse.statusCode}');
-                }
-              } catch (e) {
-                print('⚠️ [MusicService] TuneHub 歌词请求异常: $e');
-              }
-            } else {
-              // lrcData 是歌词内容本身
-              lyricText = lrcData;
-              print('📝 [MusicService] TuneHub 歌词来自 info 响应: ${lyricText.length} 字符');
+          String tlyricText = '';
+          try {
+            final lyricData = await _fetchLyricFromBackend(source, songId);
+            if (lyricData != null) {
+              lyricText = lyricData['lyric'] ?? '';
+              tlyricText = lyricData['tlyric'] ?? '';
+              print('📝 [MusicService] TuneHub v3 成功从后端获取歌词: ${lyricText.length} 字符');
             }
-          } else {
-            // lrcData 为空，尝试单独获取歌词
-            try {
-              final lrcUrl = audioSourceService.buildTuneHubLyricUrl(source, songId);
-              print('📝 [MusicService] 获取 TuneHub 歌词: $lrcUrl');
-              final lrcResponse = await http.get(
-                Uri.parse(lrcUrl),
-              ).timeout(const Duration(seconds: 10));
-              
-              if (lrcResponse.statusCode == 200) {
-                lyricText = utf8.decode(lrcResponse.bodyBytes);
-                print('✅ [MusicService] TuneHub 歌词获取成功: ${lyricText.length} 字符');
-              }
-            } catch (e) {
-              print('⚠️ [MusicService] TuneHub 歌词获取失败: $e');
-            }
+          } catch (e) {
+            print('⚠️ [MusicService] TuneHub v3 获取歌词失败（不影响播放）: $e');
           }
+          
+          // 获取实际音质信息
+          final actualQuality = songData['actualQuality'] as String? ?? audioSourceService.getTuneHubQuality(quality);
 
-          print('✅ [MusicService] TuneHub 音源获取成功');
-          print('   🎵 歌曲: ${songData['name']}');
-          print('   🎤 艺术家: ${songData['artist']}');
+          print('✅ [MusicService] TuneHub v3 音源获取成功');
+          print('   🎵 歌曲: $songName');
+          print('   🎤 艺术家: $artistName');
+          print('   💿 专辑: $albumName');
           print('   🔗 URL: ${audioUrl.length > 50 ? "${audioUrl.substring(0, 50)}..." : audioUrl}');
-          DeveloperModeService().addLog('✅ [MusicService] TuneHub 获取成功');
+          DeveloperModeService().addLog('✅ [MusicService] TuneHub v3 获取成功');
 
           return SongDetail(
             id: songId,
-            name: songData['name'] as String? ?? '',
-            pic: songData['pic'] as String? ?? '',
-            arName: songData['artist'] as String? ?? '',
-            alName: songData['album'] as String? ?? '',
-            level: audioSourceService.getTuneHubQuality(quality),
+            name: songName,
+            pic: coverUrl,
+            arName: artistName,
+            alName: albumName,
+            level: actualQuality,
             size: '0',
             url: audioUrl,
             lyric: lyricText,
-            tlyric: '', // TuneHub 不提供翻译歌词
+            tlyric: tlyricText,
             source: source,
           );
         } else {
           // 处理 TuneHub 音源错误码
           final errorMsg = data['message'] as String? ?? '未知错误 (code: $code)';
-          print('❌ [MusicService] TuneHub 音源错误: $errorMsg');
+          print('❌ [MusicService] TuneHub v3 音源错误: $errorMsg');
           DeveloperModeService().addLog('❌ [MusicService] 错误: $errorMsg');
           throw Exception(errorMsg);
         }
       } else {
-        print('❌ [MusicService] TuneHub 音源请求失败: HTTP ${response.statusCode}');
+        print('❌ [MusicService] TuneHub v3 音源请求失败: HTTP ${response.statusCode}');
         DeveloperModeService().addLog('❌ [Network] HTTP ${response.statusCode}');
         return null;
       }
     } catch (e) {
       if (e is UnsupportedError) rethrow;
-      print('❌ [MusicService] TuneHub 音源异常: $e');
+      print('❌ [MusicService] TuneHub v3 音源异常: $e');
       DeveloperModeService().addLog('❌ [MusicService] 异常: $e');
       return null;
     }

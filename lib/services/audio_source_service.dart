@@ -571,4 +571,35 @@ class AudioSourceService extends ChangeNotifier {
     if (sourceCode == null) throw UnsupportedError('TuneHub 音源不支持 ${source.name}');
     return '$baseUrl/api/?type=lrc&source=$sourceCode&id=$songId';
   }
+
+  // ==================== TuneHub v3 API ====================
+
+  /// TuneHub v3 解析端点 URL
+  String get tuneHubV3ParseUrl => '$baseUrl/v1/parse';
+
+  /// 获取 TuneHub v3 请求头（包含 API Key 认证）
+  Map<String, String> getTuneHubV3Headers() {
+    final config = activeSource;
+    return {
+      'Content-Type': 'application/json',
+      if (config?.apiKey.isNotEmpty == true) 
+        'X-API-Key': config!.apiKey,
+    };
+  }
+
+  /// 构建 TuneHub v3 解析请求参数
+  Map<String, dynamic> buildTuneHubV3ParseBody(
+    MusicSource source, 
+    dynamic songId, 
+    AudioQuality quality,
+  ) {
+    final platform = getTuneHubSourceCode(source);
+    if (platform == null) throw UnsupportedError('TuneHub 音源不支持 ${source.name}');
+    
+    return {
+      'platform': platform,
+      'ids': songId.toString(),
+      'quality': getTuneHubQuality(quality),
+    };
+  }
 }

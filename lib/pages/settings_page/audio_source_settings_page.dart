@@ -1000,6 +1000,7 @@ class _AddAudioSourceDialogState extends State<AddAudioSourceDialog> {
   final TextEditingController _nameController = TextEditingController();
   final TextEditingController _lxScriptUrlController = TextEditingController();
   final TextEditingController _lxApiKeyController = TextEditingController();
+  final TextEditingController _tuneHubApiKeyController = TextEditingController();
   
   // Services
   final LxMusicSourceParser _lxParser = LxMusicSourceParser();
@@ -1028,6 +1029,8 @@ class _AddAudioSourceDialogState extends State<AddAudioSourceDialog> {
       if (config.type == AudioSourceType.lxmusic) {
         _lxScriptUrlController.text = config.scriptSource;
         _lxApiKeyController.text = config.apiKey;
+      } else if (config.type == AudioSourceType.tunehub) {
+        _tuneHubApiKeyController.text = config.apiKey;
       }
     } else {
       _selectedType = AudioSourceType.lxmusic;
@@ -1040,6 +1043,7 @@ class _AddAudioSourceDialogState extends State<AddAudioSourceDialog> {
     _nameController.dispose();
     _lxScriptUrlController.dispose();
     _lxApiKeyController.dispose();
+    _tuneHubApiKeyController.dispose();
     super.dispose();
   }
 
@@ -1165,6 +1169,8 @@ class _AddAudioSourceDialogState extends State<AddAudioSourceDialog> {
       return;
     }
 
+    final apiKey = _tuneHubApiKeyController.text.trim();
+
     setState(() => _isProcessing = true);
     
     try {
@@ -1174,6 +1180,7 @@ class _AddAudioSourceDialogState extends State<AddAudioSourceDialog> {
           final newConfig = widget.existingConfig!.copyWith(
             name: _nameController.text.isEmpty ? 'TuneHub' : _nameController.text,
             url: url,
+            apiKey: apiKey,
           );
           _audioSourceService.updateSource(newConfig);
         } else {
@@ -1182,6 +1189,7 @@ class _AddAudioSourceDialogState extends State<AddAudioSourceDialog> {
             type: AudioSourceType.tunehub,
             name: _nameController.text.isEmpty ? 'TuneHub' : _nameController.text,
             url: url,
+            apiKey: apiKey,
           ));
         }
          Navigator.of(context).pop();
@@ -1317,6 +1325,18 @@ class _AddAudioSourceDialogState extends State<AddAudioSourceDialog> {
                  label: 'API 地址',
                  child: fluent.TextBox(controller: _urlController, placeholder: 'http://...'),
                ),
+               // TuneHub v3 需要 API Key
+               if (_selectedType == AudioSourceType.tunehub) ...[
+                 const SizedBox(height: 8),
+                 fluent.InfoLabel(
+                   label: 'API Key',
+                   child: fluent.TextBox(
+                     controller: _tuneHubApiKeyController, 
+                     placeholder: 'th_your_api_key_here',
+                     obscureText: true,
+                   ),
+                 ),
+               ],
             ],
 
             if (_statusMessage != null) ...[
