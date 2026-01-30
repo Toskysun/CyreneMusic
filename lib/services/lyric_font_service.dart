@@ -32,7 +32,7 @@ class LyricFontService extends ChangeNotifier {
   static const String _keyCustomFontPath = 'lyric_custom_font_path';
   static const String _keyCustomFontFamily = 'lyric_custom_font_family';
 
-  // 预设字体列表
+  // 预设字体列表 (全平台)
   static const List<PresetFont> presetFonts = [
     PresetFont(
       id: 'system',
@@ -40,6 +40,7 @@ class LyricFontService extends ChangeNotifier {
       fontFamily: null,
       description: '使用系统默认字体',
     ),
+    // === Windows 字体 ===
     PresetFont(
       id: 'microsoft_yahei',
       name: '微软雅黑',
@@ -50,25 +51,25 @@ class LyricFontService extends ChangeNotifier {
       id: 'simhei',
       name: '黑体',
       fontFamily: 'SimHei',
-      description: '经典中文黑体',
+      description: 'Windows 经典中文黑体',
     ),
     PresetFont(
       id: 'simsun',
       name: '宋体',
       fontFamily: 'SimSun',
-      description: '经典中文宋体',
+      description: 'Windows 经典中文宋体',
     ),
     PresetFont(
       id: 'kaiti',
       name: '楷体',
       fontFamily: 'KaiTi',
-      description: '优雅的楷书风格',
+      description: 'Windows 优雅楷书风格',
     ),
     PresetFont(
       id: 'fangsong',
       name: '仿宋',
       fontFamily: 'FangSong',
-      description: '仿宋体风格',
+      description: 'Windows 仿宋体风格',
     ),
     PresetFont(
       id: 'dengxian',
@@ -76,29 +77,80 @@ class LyricFontService extends ChangeNotifier {
       fontFamily: 'DengXian',
       description: 'Windows 10/11 现代字体',
     ),
+    // === Android 字体 ===
     PresetFont(
-      id: 'consolas',
-      name: 'Consolas',
-      fontFamily: 'Consolas',
-      description: '等宽编程字体',
+      id: 'noto_sans_sc',
+      name: 'Noto Sans SC',
+      fontFamily: 'Noto Sans SC',
+      description: 'Android 系统中文字体',
     ),
     PresetFont(
-      id: 'segoe_ui',
-      name: 'Segoe UI',
-      fontFamily: 'Segoe UI',
-      description: 'Windows 系统 UI 字体',
+      id: 'roboto',
+      name: 'Roboto',
+      fontFamily: 'Roboto',
+      description: 'Android 默认 UI 字体',
     ),
+    PresetFont(
+      id: 'sans_serif',
+      name: 'Sans Serif',
+      fontFamily: 'sans-serif',
+      description: 'Android 无衬线字体',
+    ),
+    PresetFont(
+      id: 'serif',
+      name: 'Serif',
+      fontFamily: 'serif',
+      description: 'Android 衬线字体',
+    ),
+    PresetFont(
+      id: 'monospace',
+      name: 'Monospace',
+      fontFamily: 'monospace',
+      description: 'Android 等宽字体',
+    ),
+    // === iOS 字体 ===
+    PresetFont(
+      id: 'pingfang_sc',
+      name: '苹方简体',
+      fontFamily: 'PingFang SC',
+      description: 'iOS 系统中文字体',
+    ),
+    PresetFont(
+      id: 'sf_pro',
+      name: 'SF Pro',
+      fontFamily: '.SF Pro Text',
+      description: 'iOS 系统 UI 字体',
+    ),
+    PresetFont(
+      id: 'heiti_sc',
+      name: '黑体-简',
+      fontFamily: 'Heiti SC',
+      description: 'iOS 经典中文黑体',
+    ),
+    PresetFont(
+      id: 'songti_sc',
+      name: '宋体-简',
+      fontFamily: 'Songti SC',
+      description: 'iOS 经典中文宋体',
+    ),
+    PresetFont(
+      id: 'stkaiti',
+      name: '华文楷体',
+      fontFamily: 'STKaiti',
+      description: 'iOS 楷书风格',
+    ),
+    // === 通用字体 ===
     PresetFont(
       id: 'arial',
       name: 'Arial',
       fontFamily: 'Arial',
-      description: '经典无衬线英文字体',
+      description: '跨平台无衬线字体',
     ),
     PresetFont(
       id: 'times_new_roman',
       name: 'Times New Roman',
       fontFamily: 'Times New Roman',
-      description: '经典衬线英文字体',
+      description: '跨平台衬线字体',
     ),
     PresetFont(
       id: 'georgia',
@@ -106,7 +158,53 @@ class LyricFontService extends ChangeNotifier {
       fontFamily: 'Georgia',
       description: '优雅的衬线字体',
     ),
+    PresetFont(
+      id: 'consolas',
+      name: 'Consolas',
+      fontFamily: 'Consolas',
+      description: '等宽编程字体',
+    ),
   ];
+
+  /// 根据当前平台返回推荐的字体列表
+  static List<PresetFont> get platformFonts {
+    // 系统默认字体始终在最前
+    final List<PresetFont> result = [presetFonts.first];
+    
+    if (Platform.isWindows) {
+      // Windows 平台：Windows 字体 + 通用字体
+      result.addAll(presetFonts.where((f) => 
+        f.id.startsWith('microsoft') || 
+        f.id == 'simhei' || f.id == 'simsun' || 
+        f.id == 'kaiti' || f.id == 'fangsong' || 
+        f.id == 'dengxian' ||
+        f.id == 'arial' || f.id == 'times_new_roman' || 
+        f.id == 'georgia' || f.id == 'consolas'
+      ));
+    } else if (Platform.isAndroid) {
+      // Android 平台：Android 字体 + 通用字体
+      result.addAll(presetFonts.where((f) => 
+        f.id == 'noto_sans_sc' || f.id == 'roboto' ||
+        f.id == 'sans_serif' || f.id == 'serif' || f.id == 'monospace' ||
+        f.id == 'arial' || f.id == 'georgia'
+      ));
+    } else if (Platform.isIOS || Platform.isMacOS) {
+      // iOS/macOS 平台：iOS 字体 + 通用字体
+      result.addAll(presetFonts.where((f) => 
+        f.id == 'pingfang_sc' || f.id == 'sf_pro' ||
+        f.id == 'heiti_sc' || f.id == 'songti_sc' || f.id == 'stkaiti' ||
+        f.id == 'arial' || f.id == 'times_new_roman' || f.id == 'georgia'
+      ));
+    } else {
+      // 其他平台：通用字体
+      result.addAll(presetFonts.where((f) => 
+        f.id == 'arial' || f.id == 'times_new_roman' || 
+        f.id == 'georgia' || f.id == 'consolas'
+      ));
+    }
+    
+    return result;
+  }
 
   // 当前设置
   String _fontType = 'preset'; // 'preset' 或 'custom'

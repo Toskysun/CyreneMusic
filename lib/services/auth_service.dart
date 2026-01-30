@@ -33,6 +33,17 @@ class User {
     this.sponsorSince,
   });
 
+  /// 获取用于显示的邮箱
+  /// 
+  /// 如果是 Linux DO 邮箱（通常由于过长且不具辨识度），则不显示
+  String? get displayEmail {
+    if (email.toLowerCase().contains('linux.do')) {
+      return null;
+    }
+    return email;
+  }
+
+
   factory User.fromJson(Map<String, dynamic> json) {
     return User(
       id: json['id'] as int,

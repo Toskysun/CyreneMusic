@@ -302,6 +302,7 @@ class _MobilePlayerBackgroundState extends State<MobilePlayerBackground> {
 
   /// 构建动态 Mesh Gradient 背景（Apple Music 风格）
   /// [addBlur] 是否添加模糊层（流体云样式下使用）
+  /// 注意：MeshGradient 自身已带有高斯模糊效果，移除额外的 BackdropFilter 以优化性能
   Widget _buildDynamicMeshBackground(SongDetail? song, Track? track, {bool addBlur = false}) {
     final greyColor = Colors.grey[900] ?? const Color(0xFF212121);
     
@@ -328,26 +329,23 @@ class _MobilePlayerBackgroundState extends State<MobilePlayerBackground> {
           animate: true,
         );
         
-        // 播放器背景始终保持固定模糊度
-        const double blurSigma = 30.0;
-        
+        // 性能优化：MeshGradient 自身已带有高斯模糊效果
+        // 移除额外的 BackdropFilter 以减少 GPU 开销
+        // 流体云样式下只添加轻微的半透明遮罩增强可读性
         if (!addBlur) {
           return RepaintBoundary(child: meshBackground);
         }
         
-        // 流体云样式下添加固定模糊层
+        // 流体云样式下添加轻微遮罩（无模糊），增强文字可读性
         return RepaintBoundary(
           child: Stack(
             children: [
-              // Mesh Gradient 背景
+              // Mesh Gradient 背景（自带模糊效果）
               Positioned.fill(child: meshBackground),
-              // 模糊层
+              // 轻微半透明遮罩（无模糊）
               Positioned.fill(
-                child: BackdropFilter(
-                  filter: ImageFilter.blur(sigmaX: blurSigma, sigmaY: blurSigma),
-                  child: Container(
-                    color: Colors.black.withOpacity(0.1),
-                  ),
+                child: Container(
+                  color: Colors.black.withOpacity(0.15),
                 ),
               ),
             ],

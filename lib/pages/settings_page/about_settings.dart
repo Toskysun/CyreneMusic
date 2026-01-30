@@ -9,13 +9,18 @@ import '../../models/version_info.dart';
 import '../../services/auto_update_service.dart';
 import '../../services/url_service.dart';
 import '../../services/version_service.dart';
+import '../../services/developer_mode_service.dart';
 import '../../utils/theme_manager.dart';
 import '../../widgets/material/material_settings_widgets.dart';
+import '../../utils/toast_utils.dart';
 
 
-/// 关于设置组件
+/// 关于设置组件（设置页面入口）
 class AboutSettings extends StatefulWidget {
-  const AboutSettings({super.key});
+  /// 点击关于入口时的回调（用于打开二级页面）
+  final VoidCallback? onTap;
+
+  const AboutSettings({super.key, this.onTap});
 
   @override
   State<AboutSettings> createState() => _AboutSettingsState();
@@ -51,6 +56,50 @@ class _AboutSettingsState extends State<AboutSettings> {
   Widget build(BuildContext context) {
     final isFluent = fluent_ui.FluentTheme.maybeOf(context) != null;
     final isCupertino = ThemeManager().isCupertinoFramework;
+
+    // Fluent UI 保持原有完整展示
+    if (isFluent) {
+      return _buildFluentUI(context);
+    }
+
+    // Material/Cupertino 显示简化入口
+    if (isCupertino) {
+      return _buildCupertinoEntry(context);
+    }
+
+    return _buildMaterialEntry(context);
+  }
+
+  /// 构建 Material UI 简化入口
+  Widget _buildMaterialEntry(BuildContext context) {
+    return MD3SettingsSection(
+      children: [
+        MD3SettingsTile(
+          leading: const Icon(Icons.info_outline),
+          title: '关于',
+          subtitle: 'v${_versionService.currentVersion}',
+          trailing: const Icon(Icons.chevron_right),
+          onTap: widget.onTap,
+          onLongPress: () => DeveloperModeService().onVersionClicked(), // 额外支持长按触发
+        ),
+      ],
+    );
+  }
+
+  /// 构建 Cupertino 简化入口
+  Widget _buildCupertinoEntry(BuildContext context) {
+    return CupertinoSettingsTile(
+      icon: CupertinoIcons.info,
+      iconColor: CupertinoColors.systemBlue,
+      title: '关于',
+      subtitle: 'v${_versionService.currentVersion}',
+      showChevron: true,
+      onTap: widget.onTap,
+    );
+  }
+
+  /// 构建 Fluent UI 版本（保持原有完整展示）
+  Widget _buildFluentUI(BuildContext context) {
     final latestVersion = _versionService.latestVersion;
     final hasUpdate = _versionService.hasUpdate;
     final autoSupported = _autoUpdateService.isPlatformSupported;
@@ -60,9 +109,9 @@ class _AboutSettingsState extends State<AboutSettings> {
         (_autoUpdateService.statusMessage.isNotEmpty &&
             _autoUpdateService.statusMessage != '未开始');
 
-    if (isFluent) {
-      return FluentSettingsGroup(
-        title: '关于',
+
+    return FluentSettingsGroup(
+      title: '关于',
         children: [
           FluentSettingsTile(
             icon: Icons.info_outline,
@@ -120,140 +169,6 @@ class _AboutSettingsState extends State<AboutSettings> {
                 ],
               ),
             ),
-        ],
-      );
-    }
-
-    if (isCupertino) {
-      return _buildCupertinoUI(context, hasUpdate, latestVersion, autoSupported, showStatus);
-    }
-
-    return MD3SettingsSection(
-      children: [
-        MD3SettingsTile(
-          leading: const Icon(Icons.info_outline),
-          title: '版本信息',
-          subtitle: 'v${_versionService.currentVersion}',
-          trailing: const Icon(Icons.chevron_right),
-          onTap: () => _showAboutDialog(context),
-        ),
-        MD3SettingsTile(
-          leading: const Icon(Icons.system_update_outlined),
-          title: '检查更新',
-          subtitle: '查看是否有新版本',
-          trailing: const Icon(Icons.chevron_right),
-          onTap: () => _checkForUpdate(context),
-        ),
-        MD3SwitchTile(
-          leading: const Icon(Icons.autorenew_outlined),
-          title: '自动更新',
-          subtitle: autoSupported
-              ? '开启后检测到新版本将自动下载并安装'
-              : '当前平台暂不支持自动更新（仅 Windows 和 Android）',
-          value: autoSupported && _autoUpdateService.isEnabled,
-          enabled: autoSupported,
-          onChanged: (value) => _toggleAutoUpdate(context, value),
-        ),
-        if (autoSupported)
-          MD3SettingsTile(
-            leading: const Icon(Icons.flash_on_outlined),
-            title: '一键更新',
-            subtitle: hasUpdate && latestVersion != null
-                ? '发现新版本 ${latestVersion.version}，点击立即更新'
-                : '需先检查更新，若有新版本可快速安装',
-            trailing: FilledButton.icon(
-              onPressed: () => _triggerQuickUpdate(context),
-              icon: const Icon(Icons.system_update_alt, size: 18),
-              label: const Text('开始更新'),
-            ),
-            onTap: () => _triggerQuickUpdate(context),
-          ),
-        if (showStatus)
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-            child: Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: _autoUpdateService.lastError != null
-                    ? Theme.of(context).colorScheme.errorContainer.withOpacity(0.5)
-                    : Theme.of(context).colorScheme.surfaceContainerHighest.withOpacity(0.5),
-                borderRadius: BorderRadius.circular(16),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Icon(
-                        _autoUpdateService.lastError != null
-                            ? Icons.error_outline
-                            : _autoUpdateService.requiresRestart
-                                ? Icons.restart_alt
-                                : Icons.info_outlined,
-                        size: 20,
-                        color: _autoUpdateService.lastError != null
-                            ? Theme.of(context).colorScheme.error
-                            : Theme.of(context).colorScheme.primary,
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Text(
-                          _autoUpdateService.statusMessage,
-                          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                            color: _autoUpdateService.lastError != null
-                                ? Theme.of(context).colorScheme.error
-                                : null,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  if (_autoUpdateService.isUpdating) ...[
-                    const SizedBox(height: 12),
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(8),
-                      child: LinearProgressIndicator(
-                        value: _autoUpdateService.progress > 0 &&
-                                _autoUpdateService.progress < 1
-                            ? _autoUpdateService.progress
-                            : null,
-                        minHeight: 6,
-                      ),
-                    ),
-                  ],
-                  if (_autoUpdateService.requiresRestart) ...[
-                    const SizedBox(height: 12),
-                    Text(
-                      '更新已完成，请退出并重新启动应用以应用最新版本。',
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        fontWeight: FontWeight.bold,
-                        color: Theme.of(context).colorScheme.primary,
-                      ),
-                    ),
-                  ],
-                  if (_autoUpdateService.lastSuccessAt != null) ...[
-                    const SizedBox(height: 8),
-                    Text(
-                      '最后更新: ${_formatDateTime(_autoUpdateService.lastSuccessAt!)}',
-                      style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                        color: Theme.of(context).colorScheme.onSurfaceVariant,
-                      ),
-                    ),
-                  ],
-                  if (_autoUpdateService.lastError != null) ...[
-                    const SizedBox(height: 8),
-                    Text(
-                      '错误详情: ${_autoUpdateService.lastError}',
-                      style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                        color: Theme.of(context).colorScheme.error,
-                      ),
-                    ),
-                  ],
-                ],
-              ),
-            ),
-          ),
       ],
     );
   }
@@ -328,44 +243,14 @@ class _AboutSettingsState extends State<AboutSettings> {
       if (versionInfo != null && _versionService.hasUpdate) {
         _showUpdateDialog(context, versionInfo);
       } else {
-        final messenger = ScaffoldMessenger.maybeOf(context);
-        if (messenger != null) {
-          messenger.showSnackBar(
-            SnackBar(
-              content: Row(
-                children: const [
-                  Icon(Icons.check_circle, color: Colors.white),
-                  SizedBox(width: 12),
-                  Expanded(child: Text('当前已是最新版本')),
-                ],
-              ),
-              backgroundColor: Colors.green,
-              duration: const Duration(seconds: 2),
-            ),
-          );
-        }
+        ToastUtils.show('当前已是最新版本');
       }
     } catch (e) {
       if (!mounted) return;
 
       Navigator.of(context).pop();
 
-      final messenger = ScaffoldMessenger.maybeOf(context);
-      if (messenger != null) {
-        messenger.showSnackBar(
-          SnackBar(
-            content: Row(
-              children: [
-                const Icon(Icons.error_outline, color: Colors.white),
-                const SizedBox(width: 12),
-                Expanded(child: Text('检查更新失败: $e')),
-              ],
-            ),
-            backgroundColor: Colors.red,
-            duration: const Duration(seconds: 3),
-          ),
-        );
-      }
+      ToastUtils.error('检查更新失败: $e');
     }
   }
 
@@ -375,6 +260,7 @@ class _AboutSettingsState extends State<AboutSettings> {
       context: context,
       barrierDismissible: false,
       builder: (context) => const fluent_ui.ContentDialog(
+        title: Text('检查更新'),
         content: SizedBox(height: 56, child: Center(child: fluent_ui.ProgressRing())),
       ),
     );
@@ -387,51 +273,63 @@ class _AboutSettingsState extends State<AboutSettings> {
       if (versionInfo != null && _versionService.hasUpdate) {
         _showUpdateDialogFluent(context, versionInfo);
       } else {
-        final messenger = ScaffoldMessenger.maybeOf(context);
-        if (messenger != null) {
-          messenger.showSnackBar(
-            const SnackBar(
-              content: Text('当前已是最新版本'),
-              backgroundColor: Colors.green,
-              duration: Duration(seconds: 2),
+        // 使用 Fluent UI 对话框显示已是最新版本
+        fluent_ui.showDialog(
+          context: context,
+          builder: (context) => fluent_ui.ContentDialog(
+            title: const Text('检查更新'),
+            content: const Padding(
+              padding: EdgeInsets.symmetric(vertical: 16),
+              child: Row(
+                children: [
+                  Icon(Icons.check_circle, color: Colors.green, size: 24),
+                  SizedBox(width: 12),
+                  Text('当前已是最新版本'),
+                ],
+              ),
             ),
-          );
-        }
+            actions: [
+              fluent_ui.FilledButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('好的'),
+              ),
+            ],
+          ),
+        );
       }
     } catch (e) {
       if (!mounted) return;
       Navigator.of(context).pop();
-      final messenger = ScaffoldMessenger.maybeOf(context);
-      if (messenger != null) {
-        messenger.showSnackBar(
-          SnackBar(
-            content: Row(
+      // 使用 Fluent UI 对话框显示错误
+      fluent_ui.showDialog(
+        context: context,
+        builder: (context) => fluent_ui.ContentDialog(
+          title: const Text('检查更新失败'),
+          content: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 16),
+            child: Row(
               children: [
-                const Icon(Icons.error_outline, color: Colors.white),
+                const Icon(Icons.error_outline, color: Colors.red, size: 24),
                 const SizedBox(width: 12),
-                Expanded(child: Text('检查更新失败: $e')),
+                Expanded(child: Text('$e')),
               ],
             ),
-            backgroundColor: Colors.red,
-            duration: const Duration(seconds: 3),
           ),
-        );
-      }
+          actions: [
+            fluent_ui.Button(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('关闭'),
+            ),
+          ],
+        ),
+      );
     }
   }
 
   Future<void> _toggleAutoUpdate(BuildContext context, bool value) async {
     await _autoUpdateService.setEnabled(value);
     if (!mounted) return;
-    final messenger = ScaffoldMessenger.maybeOf(context);
-    if (messenger != null) {
-      messenger.showSnackBar(
-        SnackBar(
-          content: Text(value ? '已开启自动更新' : '已关闭自动更新'),
-          duration: const Duration(seconds: 2),
-        ),
-      );
-    }
+    ToastUtils.show(value ? '已开启自动更新' : '已关闭自动更新');
   }
 
   Future<void> _triggerQuickUpdate(BuildContext context) async {
@@ -442,22 +340,7 @@ class _AboutSettingsState extends State<AboutSettings> {
       if (!mounted) return;
 
       if (versionInfo == null || !_versionService.hasUpdate) {
-        final messenger = ScaffoldMessenger.maybeOf(context);
-        if (messenger != null) {
-          messenger.showSnackBar(
-            SnackBar(
-              content: Row(
-                children: const [
-                  Icon(Icons.check_circle, color: Colors.white),
-                  SizedBox(width: 12),
-                  Expanded(child: Text('当前已是最新版本')),
-                ],
-              ),
-              backgroundColor: Colors.green,
-              duration: const Duration(seconds: 2),
-            ),
-          );
-        }
+        ToastUtils.show('当前已是最新版本');
         return;
       }
     }
@@ -474,21 +357,7 @@ class _AboutSettingsState extends State<AboutSettings> {
 
     if (!mounted) return;
 
-    final messenger = ScaffoldMessenger.maybeOf(context);
-    if (messenger != null) {
-      messenger.showSnackBar(
-        SnackBar(
-          content: Row(
-            children: const [
-              Icon(Icons.system_update_alt, color: Colors.white),
-              SizedBox(width: 12),
-              Expanded(child: Text('已开始下载更新，请稍候查看状态')),
-            ],
-          ),
-          duration: const Duration(seconds: 3),
-        ),
-      );
-    }
+    ToastUtils.show('已开始下载更新，请稍候查看状态');
   }
 
   Future<void> _triggerQuickUpdateFluent(BuildContext context) async {

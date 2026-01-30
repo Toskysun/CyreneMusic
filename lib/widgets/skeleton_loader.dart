@@ -92,76 +92,82 @@ class ForYouSkeleton extends StatelessWidget {
   }
 
   Widget _buildMobileSkeleton(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        // 问候语骨架
-        const _GreetingHeaderSkeleton(),
-        const SizedBox(height: 16),
-        // 每日推荐卡片骨架
-        SkeletonLoader(
-          width: double.infinity,
-          height: 180,
-          borderRadius: BorderRadius.circular(16),
-        ),
-        const SizedBox(height: 24),
-        // 私人FM 区域标题骨架
-        const _SectionTitleSkeleton(),
-        const SizedBox(height: 12),
-        // 私人FM 列表骨架
-        SizedBox(
-          height: 120,
-          child: ListView.separated(
-            scrollDirection: Axis.horizontal,
-            physics: const NeverScrollableScrollPhysics(),
-            itemCount: 3,
-            separatorBuilder: (_, __) => const SizedBox(width: 12),
-            itemBuilder: (context, index) => SkeletonLoader(
-              width: 100,
-              height: 120,
-              borderRadius: BorderRadius.circular(12),
+    return SingleChildScrollView(
+      physics: const NeverScrollableScrollPhysics(),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // 问候语骨架
+          const _GreetingHeaderSkeleton(),
+          const SizedBox(height: 16),
+          // 每日推荐卡片骨架
+          SkeletonLoader(
+            width: double.infinity,
+            height: 180,
+            borderRadius: BorderRadius.circular(16),
+          ),
+          const SizedBox(height: 24),
+          // 私人FM 区域标题骨架
+          const _SectionTitleSkeleton(),
+          const SizedBox(height: 12),
+          // 私人FM 列表骨架
+          SizedBox(
+            height: 120,
+            child: ListView.separated(
+              scrollDirection: Axis.horizontal,
+              physics: const NeverScrollableScrollPhysics(),
+              itemCount: 3,
+              separatorBuilder: (_, __) => const SizedBox(width: 12),
+              itemBuilder: (context, index) => SkeletonLoader(
+                width: 100,
+                height: 120,
+                borderRadius: BorderRadius.circular(12),
+              ),
             ),
           ),
-        ),
-        const SizedBox(height: 24),
-        // 歌单网格骨架
-        const _SectionTitleSkeleton(),
-        const SizedBox(height: 12),
-        const _PlaylistGridSkeleton(itemCount: 4),
-      ],
+          const SizedBox(height: 24),
+          // 歌单网格骨架
+          const _SectionTitleSkeleton(),
+          const SizedBox(height: 12),
+          const _PlaylistGridSkeleton(itemCount: 4),
+        ],
+      ),
     );
   }
 
   Widget _buildDesktopSkeleton(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        // 问候语骨架
-        const _GreetingHeaderSkeleton(),
-        const SizedBox(height: 16),
-        // Hero 双卡区域骨架
-        const _HeroSectionSkeleton(),
-        const SizedBox(height: 28),
-        // 每日推荐歌单骨架
-        const _SectionTitleSkeleton(),
-        const SizedBox(height: 12),
-        const _BentoPlaylistGridSkeleton(),
-        const SizedBox(height: 28),
-        // 专属歌单骨架
-        const _SectionTitleSkeleton(),
-        const SizedBox(height: 12),
-        const _HorizontalCarouselSkeleton(),
-        const SizedBox(height: 28),
-        // 雷达歌单骨架
-        const _SectionTitleSkeleton(),
-        const SizedBox(height: 12),
-        const _MixedSizeGridSkeleton(),
-        const SizedBox(height: 28),
-        // 发现新歌骨架
-        const _SectionTitleSkeleton(),
-        const SizedBox(height: 12),
-        const _NewsongCardsSkeleton(),
-      ],
+    return SingleChildScrollView(
+      physics: const NeverScrollableScrollPhysics(),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // 问候语骨架
+          const _GreetingHeaderSkeleton(),
+          const SizedBox(height: 16),
+          // Hero 双卡区域骨架
+          const _HeroSectionSkeleton(),
+          const SizedBox(height: 28),
+          // 每日推荐歌单骨架
+          const _SectionTitleSkeleton(),
+          const SizedBox(height: 12),
+          const _BentoPlaylistGridSkeleton(),
+          const SizedBox(height: 28),
+          // 专属歌单骨架
+          const _SectionTitleSkeleton(),
+          const SizedBox(height: 12),
+          const _HorizontalCarouselSkeleton(),
+          const SizedBox(height: 28),
+          // 雷达歌单骨架
+          const _SectionTitleSkeleton(),
+          const SizedBox(height: 12),
+          const _MixedSizeGridSkeleton(),
+          const SizedBox(height: 28),
+          // 发现新歌骨架
+          const _SectionTitleSkeleton(),
+          const SizedBox(height: 12),
+          const _NewsongCardsSkeleton(),
+        ],
+      ),
     );
   }
 }

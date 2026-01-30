@@ -56,6 +56,7 @@ class MD3SettingsTile extends StatelessWidget {
   final String? subtitle;
   final Widget? trailing;
   final VoidCallback? onTap;
+  final VoidCallback? onLongPress;
   final bool enabled;
 
   const MD3SettingsTile({
@@ -65,6 +66,7 @@ class MD3SettingsTile extends StatelessWidget {
     this.subtitle,
     this.trailing,
     this.onTap,
+    this.onLongPress,
     this.enabled = true,
   });
 
@@ -108,6 +110,7 @@ class MD3SettingsTile extends StatelessWidget {
             )
           : null,
       onTap: enabled ? onTap : null,
+      onLongPress: enabled ? onLongPress : null,
       contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
       minVerticalPadding: 16,
       enabled: enabled,

@@ -1108,9 +1108,9 @@ class _LyricFontPickerDialog extends StatelessWidget {
           final fontService = LyricFontService();
           return ListView.builder(
             shrinkWrap: true,
-            itemCount: LyricFontService.presetFonts.length,
+            itemCount: LyricFontService.platformFonts.length,
             itemBuilder: (context, index) {
-              final font = LyricFontService.presetFonts[index];
+              final font = LyricFontService.platformFonts[index];
               final isSelected = fontService.fontType == 'preset' && 
                   fontService.presetFontId == font.id;
               
@@ -1174,7 +1174,7 @@ class _LyricFontPickerDialog extends StatelessWidget {
         title: const Text('选择歌词字体'),
         message: const Text('选择一个字体来显示歌词'),
         actions: [
-          ...LyricFontService.presetFonts.map((font) {
+          ...LyricFontService.platformFonts.map((font) {
             final fontService = LyricFontService();
             final isSelected = fontService.fontType == 'preset' && 
                 fontService.presetFontId == font.id;
@@ -1271,9 +1271,9 @@ class _LyricFontPickerDialog extends StatelessWidget {
                   return ListView.builder(
                     shrinkWrap: true,
                     padding: const EdgeInsets.symmetric(vertical: 8),
-                    itemCount: LyricFontService.presetFonts.length,
+                    itemCount: LyricFontService.platformFonts.length,
                     itemBuilder: (context, index) {
-                      final font = LyricFontService.presetFonts[index];
+                      final font = LyricFontService.platformFonts[index];
                       final isSelected = fontService.fontType == 'preset' && 
                           fontService.presetFontId == font.id;
                       

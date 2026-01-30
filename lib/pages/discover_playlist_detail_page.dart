@@ -109,6 +109,7 @@ class _DiscoverPlaylistDetailContentState
   String? _error;
   final ScrollController _scrollController = ScrollController();
   final Map<String, ImageProvider> _coverProviderCache = {};
+  bool _descExpanded = false;
 
   String _coverKey(Track track) => '${track.source.name}_${track.id}';
 
@@ -1176,7 +1177,6 @@ class _DiscoverPlaylistDetailContentState
                 background: Stack(
                   fit: StackFit.expand,
                   children: [
-                    // 其实这里可以放一张模糊的背景图，但为了简洁我们先保持背景色
                     Padding(
                       padding: const EdgeInsets.fromLTRB(16, 90, 16, 16),
                       child: _buildMaterialExpressiveHeader(detail, cs, isDark),
@@ -1185,14 +1185,14 @@ class _DiscoverPlaylistDetailContentState
                 ),
               ),
             ),
-            // 歌单描述
+            // 歌单描述与标签 (修复溢出)
+            _buildMaterialExpressiveDescriptionSliver(detail, cs, isDark),
 
-
-            // 歌曲统计栏（不包含播放按钮）
+            // 歌曲统计栏
             SliverToBoxAdapter(
               child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: _buildMaterialExpressiveStatsBar(tracks.length, cs),
+                padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+                child: _buildMaterialExpressiveStatsBar(context, tracks.length, tracks, cs),
               ),
             ),
             // 歌曲列表
@@ -1368,50 +1368,6 @@ class _DiscoverPlaylistDetailContentState
                     ),
                   ],
                 ),
-                const SizedBox(height: 12),
-                // 标签
-                if (detail.tags.isNotEmpty)
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: detail.tags
-                        .take(3)
-                        .map(
-                          (t) => Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 12,
-                              vertical: 6,
-                            ),
-                            decoration: BoxDecoration(
-                              color: cs.primaryContainer,
-                              borderRadius: BorderRadius.circular(16),
-                            ),
-                            child: Text(
-                              t,
-                              style: TextStyle(
-                                color: cs.onPrimaryContainer,
-                                fontSize: 12,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                          ),
-                        )
-                        .toList(),
-                  ),
-                // 描述
-                if (detail.description.isNotEmpty) ...[
-                  const SizedBox(height: 12),
-                  Text(
-                    detail.description,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontSize: 13,
-                      color: cs.onSurface.withOpacity(0.6),
-                      height: 1.4,
-                    ),
-                  ),
-                ],
                 const SizedBox(height: 16),
                 // 同步按钮
                 FilledButton.icon(
@@ -1437,10 +1393,108 @@ class _DiscoverPlaylistDetailContentState
     );
   }
 
-  /// 歌曲统计栏（不包含播放按钮）
-  Widget _buildMaterialExpressiveStatsBar(int trackCount, ColorScheme cs) {
+  /// 详情描述（解决溢出的关键：将不确定长度的内容移出固定高度的 AppBar）
+  Widget _buildMaterialExpressiveDescriptionSliver(
+    NeteasePlaylistDetail detail,
+    ColorScheme cs,
+    bool isDark,
+  ) {
+    if (detail.tags.isEmpty && detail.description.isEmpty) {
+      return const SliverToBoxAdapter(child: SizedBox.shrink());
+    }
+
+    return SliverToBoxAdapter(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        child: Container(
+          padding: const EdgeInsets.all(20),
+          decoration: BoxDecoration(
+            color: cs.surfaceContainerHigh.withOpacity(0.5),
+            borderRadius: BorderRadius.circular(24),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (detail.tags.isNotEmpty) ...[
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: detail.tags
+                      .map(
+                        (t) => Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 5,
+                          ),
+                          decoration: BoxDecoration(
+                            color: cs.primaryContainer.withOpacity(0.6),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Text(
+                            t,
+                            style: TextStyle(
+                              color: cs.onPrimaryContainer,
+                              fontSize: 11,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                      )
+                      .toList(),
+                ),
+                if (detail.description.isNotEmpty) const SizedBox(height: 12),
+              ],
+              if (detail.description.isNotEmpty) ...[
+                Text(
+                  detail.description,
+                  maxLines: _descExpanded ? null : 2,
+                  overflow: _descExpanded ? TextOverflow.visible : TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: cs.onSurface.withOpacity(0.7),
+                    height: 1.5,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: InkWell(
+                    onTap: () {
+                      setState(() {
+                        _descExpanded = !_descExpanded;
+                      });
+                    },
+                    borderRadius: BorderRadius.circular(8),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      child: Text(
+                        _descExpanded ? '收起' : '更多',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                          color: cs.primary,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// 歌曲统计栏（包含快捷播放）
+  Widget _buildMaterialExpressiveStatsBar(
+    BuildContext context,
+    int trackCount,
+    List<Track> allTracks,
+    ColorScheme cs,
+  ) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
       decoration: BoxDecoration(
         color: cs.surfaceContainerHigh,
         borderRadius: BorderRadius.circular(24),
@@ -1455,32 +1509,56 @@ class _DiscoverPlaylistDetailContentState
             ),
             child: Icon(
               Icons.music_note,
-              size: 22,
+              size: 20,
               color: cs.onPrimaryContainer,
             ),
           ),
           const SizedBox(width: 16),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                '共 $trackCount 首歌曲',
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.w700,
-                  color: cs.onSurface,
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  '共 $trackCount 首',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w800,
+                    color: cs.onSurface,
+                  ),
                 ),
-              ),
-              const SizedBox(height: 2),
-              Text(
-                '点击歌曲开始播放',
-                style: TextStyle(
-                  fontSize: 13,
-                  color: cs.onSurface.withOpacity(0.6),
+                Text(
+                  '点击即刻聆听',
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: cs.onSurface.withOpacity(0.5),
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
+          if (trackCount > 0)
+            FilledButton.icon(
+              onPressed: () async {
+                final ok = await _checkLoginStatus();
+                if (!ok) return;
+                PlaylistQueueService().setQueue(
+                  allTracks,
+                  0,
+                  QueueSource.playlist,
+                  coverProviders: _coverProviderCache,
+                );
+                await PlayerService().playTrack(allTracks.first);
+              },
+              icon: const Icon(Icons.play_arrow_rounded, size: 20),
+              label: const Text('播放全部'),
+              style: FilledButton.styleFrom(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16),
+                ),
+              ),
+            ),
         ],
       ),
     );

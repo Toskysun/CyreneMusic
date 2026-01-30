@@ -46,6 +46,7 @@ import '../services/global_back_handler_service.dart';
 import 'home_page/toplist_detail.dart';
 import 'home_page/charts_tab.dart';
 import '../widgets/cupertino/cupertino_home_widgets.dart';
+import '../widgets/skeleton_loader.dart';
 
 /// 首页 - 展示音乐和视频内容
 class HomePage extends StatefulWidget {
@@ -78,6 +79,7 @@ class _HomePageState extends State<HomePage>
   int _lastHandledSearchRequestId = 0;
   int _forYouReloadToken = 0;
   bool _reverseTransition = false; // 用于控制滑动动画方向
+  bool _isBindingsLoading = false; // 是否正在加载绑定状态
 
   @override
   bool get wantKeepAlive => true; // 保持页面状态
@@ -114,6 +116,7 @@ class _HomePageState extends State<HomePage>
     _prepareGuessYouLikeFuture();
 
     // 首次加载第三方绑定状态
+    _isBindingsLoading = AuthService().isLoggedIn;
     _loadBindings();
 
     // 监听来自主布局的搜索请求
@@ -163,16 +166,23 @@ class _HomePageState extends State<HomePage>
         if (mounted) {
           setState(() {
             _isNeteaseBound = false;
+            _isBindingsLoading = false;
             _homeTabIndex = 1; // 回到“推荐”
           });
         }
         return;
       }
+
+      if (mounted) {
+        setState(() {
+          _isBindingsLoading = true;
+        });
+      }
+
       final resp = await NeteaseLoginService().fetchBindings();
       final data = resp['data'] as Map<String, dynamic>?;
-      final netease = data != null
-          ? data['netease'] as Map<String, dynamic>?
-          : null;
+      final netease =
+          data != null ? data['netease'] as Map<String, dynamic>? : null;
       final bound = (netease != null) && (netease['bound'] == true);
       if (mounted) {
         setState(() {
@@ -187,6 +197,12 @@ class _HomePageState extends State<HomePage>
         setState(() {
           _isNeteaseBound = false;
           _homeTabIndex = 1;
+        });
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isBindingsLoading = false;
         });
       }
     }
@@ -1765,7 +1781,16 @@ class _HomePageState extends State<HomePage>
   Widget _buildHomeContentSliver(BuildContext context, bool showTabs) {
     // 未登录状态下直接显示登录提示（通过 HomeForYouTab）
     final isLoggedIn = AuthService().isLoggedIn;
-    
+
+    if (_isBindingsLoading) {
+      return SliverFillRemaining(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 24),
+          child: ForYouSkeleton(),
+        ),
+      );
+    }
+
     return SliverPadding(
       padding: const EdgeInsets.all(24.0),
       sliver: SliverList(

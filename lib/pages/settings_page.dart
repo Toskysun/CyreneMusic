@@ -25,14 +25,18 @@ import 'settings_page/appearance_settings_page.dart';
 import 'settings_page/third_party_accounts_page.dart';
 import 'settings_page/lyric_settings_page.dart';
 import 'settings_page/audio_source_settings_page.dart';
+import 'settings_page/about_settings_page.dart';
+import 'support_page.dart';
+import '../widgets/material/material_settings_widgets.dart';
+import '../widgets/fluent_settings_card.dart';
 
-/// 设置页面子页面枚举
 enum SettingsSubPage {
   none,
   appearance,
   thirdPartyAccounts,
   lyric,
   audioSource,
+  about,
 }
 
 /// 设置页面
@@ -209,6 +213,9 @@ class _SettingsPageState extends State<SettingsPage> {
       case SettingsSubPage.audioSource:
         content = AudioSourceSettingsContent(onBack: () => Navigator.pop(context), embed: true);
         title = '音源设置';
+      case SettingsSubPage.about:
+        content = AboutSettingsContent(onBack: () => Navigator.pop(context), embed: true);
+        title = '关于';
       case SettingsSubPage.none:
         return const SizedBox.shrink();
     }
@@ -320,6 +327,10 @@ class _SettingsPageState extends State<SettingsPage> {
                     UserCard(),
                     const SizedBox(height: 12),
                     
+                    // 赞助与支持
+                    _buildSupportTile(context),
+                    const SizedBox(height: 12),
+                    
                     // 第三方账号管理（需随登录状态刷新，不能使用 const）
                     ThirdPartyAccounts(onTap: () => openSubPage(SettingsSubPage.thirdPartyAccounts)),
                     const SizedBox(height: 12),
@@ -349,7 +360,7 @@ class _SettingsPageState extends State<SettingsPage> {
                     const SizedBox(height: 12),
                     
                     // 关于
-                    const AboutSettings(),
+                    AboutSettings(onTap: () => openSubPage(SettingsSubPage.about)),
                     const SizedBox(height: 12),
                     const SizedBox(height: 40),
                   ],
@@ -359,7 +370,37 @@ class _SettingsPageState extends State<SettingsPage> {
     );
   }
   
-  /// 获取页面标题
+  /// 构建赞助与支持卡片 (Material Design)
+  Widget _buildSupportTile(BuildContext context) {
+    return MD3SettingsSection(
+      children: [
+        MD3SettingsTile(
+          leading: const Icon(Icons.favorite_outline),
+          title: '赞助与支持',
+          subtitle: '您的支持是我们持续维护与改进的动力',
+          trailing: const Icon(Icons.chevron_right),
+          onTap: () => _openSupportPage(context),
+        ),
+      ],
+    );
+  }
+  
+  /// 构建赞助与支持卡片 (Fluent UI)
+  Widget _buildFluentSupportTile(BuildContext context) {
+    return FluentSettingsGroup(
+      title: '支持',
+      children: [
+        FluentSettingsTile(
+          icon: fluent_ui.FluentIcons.heart,
+          title: '赞助与支持',
+          subtitle: '您的支持是我们持续维护与改进的动力',
+          trailing: const Icon(fluent_ui.FluentIcons.chevron_right, size: 12),
+          onTap: () => _openSupportPage(context),
+        ),
+      ],
+    );
+  }
+  
   String _getPageTitle() {
     switch (_currentSubPage) {
       case SettingsSubPage.appearance:
@@ -370,12 +411,13 @@ class _SettingsPageState extends State<SettingsPage> {
         return '歌词设置';
       case SettingsSubPage.audioSource:
         return '音源设置';
+      case SettingsSubPage.about:
+        return '关于';
       case SettingsSubPage.none:
         return '设置';
     }
   }
 
-  /// 构建 Material UI 子页面
   Widget _buildMaterialSubPage(BuildContext context, ColorScheme colorScheme) {
     switch (_currentSubPage) {
       case SettingsSubPage.appearance:
@@ -386,6 +428,8 @@ class _SettingsPageState extends State<SettingsPage> {
         return LyricSettingsContent(onBack: closeSubPage, embed: true);
       case SettingsSubPage.audioSource:
         return AudioSourceSettingsContent(onBack: closeSubPage, embed: true);
+      case SettingsSubPage.about:
+        return AboutSettingsContent(onBack: closeSubPage, embed: true);
       case SettingsSubPage.none:
         return const SizedBox.shrink();
     }
@@ -427,6 +471,26 @@ class _SettingsPageState extends State<SettingsPage> {
               
               // 用户卡片 - iOS 26 风格
               _buildCupertinoUserSection(context, isDark),
+              
+              const SizedBox(height: 24),
+              
+              // 赞助与支持
+              _buildCupertinoSettingsGroup(
+                context,
+                isDark: isDark,
+                header: null,
+                children: [
+                  _buildCupertinoSettingsItem(
+                    context,
+                    isDark: isDark,
+                    icon: CupertinoIcons.heart_fill,
+                    iconColor: const Color(0xFFFF2D55),
+                    title: '赞助与支持',
+                    subtitle: '您的支持是我们持续改进的动力',
+                    onTap: () => _openSupportPage(context),
+                  ),
+                ],
+              ),
               
               const SizedBox(height: 24),
               
@@ -516,13 +580,12 @@ class _SettingsPageState extends State<SettingsPage> {
               
               const SizedBox(height: 24),
               
-              // 关于分组
               _buildCupertinoSettingsGroup(
                 context,
                 isDark: isDark,
                 header: '关于',
-                children: const [
-                  AboutSettings(),
+                children: [
+                  AboutSettings(onTap: () => openSubPage(SettingsSubPage.about)),
                 ],
               ),
               
@@ -685,7 +748,25 @@ class _SettingsPageState extends State<SettingsPage> {
     );
   }
   
-  /// 构建 Cupertino UI 子页面
+  /// 打开支持页面
+  void _openSupportPage(BuildContext context) {
+    final isCupertinoUI = (Platform.isIOS || Platform.isAndroid) && ThemeManager().isCupertinoFramework;
+    
+    if (isCupertinoUI) {
+      Navigator.of(context).push(
+        CupertinoPageRoute(
+          builder: (context) => const SupportPage(),
+        ),
+      );
+    } else {
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (context) => const SupportPage(),
+        ),
+      );
+    }
+  }
+  
   Widget _buildCupertinoSubPage(BuildContext context) {
     switch (_currentSubPage) {
       case SettingsSubPage.appearance:
@@ -696,6 +777,8 @@ class _SettingsPageState extends State<SettingsPage> {
         return LyricSettingsContent(onBack: closeSubPage, embed: true);
       case SettingsSubPage.audioSource:
         return AudioSourceSettingsContent(onBack: closeSubPage, embed: true);
+      case SettingsSubPage.about:
+        return AboutSettingsContent(onBack: closeSubPage, embed: true);
       case SettingsSubPage.none:
         return const SizedBox.shrink();
     }
@@ -743,6 +826,10 @@ class _SettingsPageState extends State<SettingsPage> {
                     UserCard(),
                     const SizedBox(height: 16),
                     
+                    // 赞助与支持
+                    _buildFluentSupportTile(context),
+                    const SizedBox(height: 16),
+                    
                     // 第三方账号管理
                     ThirdPartyAccounts(onTap: () => openSubPage(SettingsSubPage.thirdPartyAccounts)),
                     const SizedBox(height: 16),
@@ -782,7 +869,6 @@ class _SettingsPageState extends State<SettingsPage> {
     );
   }
   
-  /// 构建 Fluent UI 头部（面包屑）
   Widget _buildFluentHeader(BuildContext context) {
     switch (_currentSubPage) {
       case SettingsSubPage.appearance:
@@ -793,6 +879,8 @@ class _SettingsPageState extends State<SettingsPage> {
         return LyricSettingsContent(onBack: closeSubPage).buildFluentBreadcrumb(context);
       case SettingsSubPage.audioSource:
         return AudioSourceSettingsContent(onBack: closeSubPage).buildFluentBreadcrumb(context);
+      case SettingsSubPage.about:
+        return AboutSettingsContent(onBack: closeSubPage).buildFluentBreadcrumb(context);
       case SettingsSubPage.none:
         return const Text('设置');
     }
@@ -809,6 +897,8 @@ class _SettingsPageState extends State<SettingsPage> {
         return LyricSettingsContent(onBack: closeSubPage, embed: true);
       case SettingsSubPage.audioSource:
         return AudioSourceSettingsContent(onBack: closeSubPage, embed: true);
+      case SettingsSubPage.about:
+        return AboutSettingsContent(onBack: closeSubPage, embed: true);
       case SettingsSubPage.none:
         return const SizedBox.shrink();
     }

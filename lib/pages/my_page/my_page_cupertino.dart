@@ -110,8 +110,11 @@ extension MyPageCupertinoUI on _MyPageState {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(user.username, style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: isDark ? CupertinoColors.white : CupertinoColors.black)),
-                const SizedBox(height: 4),
-                Text(user.email, style: TextStyle(fontSize: 14, color: CupertinoColors.systemGrey)),
+                if (user.displayEmail != null) ...[
+                  const SizedBox(height: 4),
+                  Text(user.displayEmail!, style: TextStyle(fontSize: 14, color: CupertinoColors.systemGrey)),
+                ],
+
               ],
             ),
           ),

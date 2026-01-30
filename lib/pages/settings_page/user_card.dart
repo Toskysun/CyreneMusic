@@ -1375,27 +1375,30 @@ class _UserCardState extends State<UserCard> {
                               ],
                             ],
                           ),
-                          const SizedBox(height: 4),
-                          // 邮箱
-                          Row(
-                            children: [
-                              Icon(
-                                Icons.email_outlined,
-                                size: 14,
-                                color: colorScheme.onSurfaceVariant,
-                              ),
-                              const SizedBox(width: 4),
-                              Expanded(
-                                child: Text(
-                                  user.email,
-                                  style: theme.textTheme.bodySmall?.copyWith(
-                                    color: colorScheme.onSurfaceVariant,
-                                  ),
-                                  overflow: TextOverflow.ellipsis,
+                          if (user.displayEmail != null) ...[
+                            const SizedBox(height: 4),
+                            // 邮箱
+                            Row(
+                              children: [
+                                Icon(
+                                  Icons.email_outlined,
+                                  size: 14,
+                                  color: colorScheme.onSurfaceVariant,
                                 ),
-                              ),
-                            ],
-                          ),
+                                const SizedBox(width: 4),
+                                Expanded(
+                                  child: Text(
+                                    user.displayEmail!,
+                                    style: theme.textTheme.bodySmall?.copyWith(
+                                      color: colorScheme.onSurfaceVariant,
+                                    ),
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+
                           const SizedBox(height: 2),
                           // IP 归属地
                           Row(
@@ -1673,17 +1676,20 @@ class _UserCardState extends State<UserCard> {
                       ],
                     ],
                   ),
-                  const SizedBox(height: 4),
-                  Text(
-                    user.email,
-                    style: TextStyle(
-                      fontSize: 15,
-                      color: CupertinoColors.secondaryLabel.resolveFrom(context),
-                      decoration: TextDecoration.none,
+                  if (user.displayEmail != null) ...[
+                    const SizedBox(height: 4),
+                    Text(
+                      user.displayEmail!,
+                      style: TextStyle(
+                        fontSize: 15,
+                        color: CupertinoColors.secondaryLabel.resolveFrom(context),
+                        decoration: TextDecoration.none,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                     ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
+                  ],
+
                 ],
               ),
             ),
@@ -1965,24 +1971,27 @@ class _UserCardState extends State<UserCard> {
                           ],
                         ],
                       ),
-                      const SizedBox(height: 4),
-                      // 邮箱
-                      Row(
-                        children: [
-                          const Icon(
-                            fluent_ui.FluentIcons.mail,
-                            size: 14,
-                          ),
-                          const SizedBox(width: 4),
-                          Expanded(
-                            child: Text(
-                              user.email,
-                              style: fluent_ui.FluentTheme.of(context).typography.caption,
-                              overflow: TextOverflow.ellipsis,
+                      if (user.displayEmail != null) ...[
+                        const SizedBox(height: 4),
+                        // 邮箱
+                        Row(
+                          children: [
+                            const Icon(
+                              fluent_ui.FluentIcons.mail,
+                              size: 14,
                             ),
-                          ),
-                        ],
-                      ),
+                            const SizedBox(width: 4),
+                            Expanded(
+                              child: Text(
+                                user.displayEmail!,
+                                style: fluent_ui.FluentTheme.of(context).typography.caption,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+
                       const SizedBox(height: 2),
                       // IP 归属地
                       Row(

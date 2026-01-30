@@ -1373,7 +1373,7 @@ class _AppearanceSettingsContentState extends State<AppearanceSettingsContent> {
                     style: fluent_ui.FluentTheme.of(context).typography.subtitle,
                   ),
                   const SizedBox(height: 8),
-                  ...LyricFontService.presetFonts.map((font) {
+                  ...LyricFontService.platformFonts.map((font) {
                     final isSelected = LyricFontService().fontType == 'preset' && 
                                        LyricFontService().presetFontId == font.id;
                     return Padding(
@@ -1486,7 +1486,7 @@ class _AppearanceSettingsContentState extends State<AppearanceSettingsContent> {
                       ),
                     ),
                     const SizedBox(height: 8),
-                    ...LyricFontService.presetFonts.map((font) {
+                    ...LyricFontService.platformFonts.map((font) {
                       final isSelected = LyricFontService().fontType == 'preset' && 
                                          LyricFontService().presetFontId == font.id;
                       return RadioListTile<String>(
@@ -1653,7 +1653,7 @@ class _AppearanceSettingsContentState extends State<AppearanceSettingsContent> {
                               ),
                             ),
                           ),
-                          ...LyricFontService.presetFonts.map((font) {
+                          ...LyricFontService.platformFonts.map((font) {
                             final isSelected = LyricFontService().fontType == 'preset' && 
                                                LyricFontService().presetFontId == font.id;
                             return CupertinoListTile(

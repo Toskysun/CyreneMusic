@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../../services/sleep_timer_service.dart';
+import '../mobile_player_dialogs.dart';
 
 /// 睡眠定时器设置区域 - Material Design Expressive 风格
 /// 胶囊形时间按钮 + 环形进度指示器
@@ -219,7 +220,20 @@ class SleepTimerSection extends StatelessWidget {
           colorScheme: colorScheme,
           isDark: isDark,
         );
-      }).toList(),
+      }).toList()..add(
+        _buildTimePill(
+          context: context,
+          minutes: 0,
+          label: '自定义',
+          icon: Icons.edit_calendar_rounded,
+          onTap: () {
+            MobilePlayerDialogs.showSleepTimer(context);
+          },
+          colorScheme: colorScheme,
+          isDark: isDark,
+          isCustom: true,
+        ),
+      ),
     );
   }
 
@@ -230,6 +244,9 @@ class SleepTimerSection extends StatelessWidget {
     required VoidCallback onTap,
     required ColorScheme colorScheme,
     required bool isDark,
+    String? label,
+    IconData? icon,
+    bool isCustom = false,
   }) {
     return Material(
       color: Colors.transparent,
@@ -241,14 +258,21 @@ class SleepTimerSection extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
           decoration: BoxDecoration(
             gradient: LinearGradient(
-              colors: [
-                colorScheme.surfaceContainerHigh,
-                colorScheme.surfaceContainerHigh.withOpacity(0.7),
-              ],
+              colors: isCustom
+                  ? [
+                      colorScheme.tertiaryContainer.withOpacity(0.8),
+                      colorScheme.tertiaryContainer.withOpacity(0.5),
+                    ]
+                  : [
+                      colorScheme.surfaceContainerHigh,
+                      colorScheme.surfaceContainerHigh.withOpacity(0.7),
+                    ],
             ),
             borderRadius: BorderRadius.circular(20),
             border: Border.all(
-              color: colorScheme.outlineVariant.withOpacity(0.3),
+              color: isCustom
+                  ? colorScheme.tertiary.withOpacity(0.3)
+                  : colorScheme.outlineVariant.withOpacity(0.3),
               width: 1,
             ),
           ),
@@ -256,15 +280,15 @@ class SleepTimerSection extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             children: [
               Icon(
-                Icons.timer_outlined,
-                color: colorScheme.primary,
+                icon ?? Icons.timer_outlined,
+                color: isCustom ? colorScheme.tertiary : colorScheme.primary,
                 size: 16,
               ),
               const SizedBox(width: 6),
               Text(
-                '$minutes分钟',
+                label ?? '$minutes分钟',
                 style: TextStyle(
-                  color: colorScheme.onSurface,
+                  color: isCustom ? colorScheme.onTertiaryContainer : colorScheme.onSurface,
                   fontSize: 14,
                   fontWeight: FontWeight.w600,
                 ),

@@ -146,14 +146,17 @@ extension MyPageMaterialUI on _MyPageState {
                             color: colorScheme.onSurface,
                           ),
                         ),
-                        const SizedBox(height: 4),
-                        Text(
-                          user?.email ?? '',
-                          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                            color: colorScheme.onSurfaceVariant,
-                            letterSpacing: 0.5,
+                        if (user?.displayEmail != null) ...[
+                          const SizedBox(height: 4),
+                          Text(
+                            user!.displayEmail!,
+                            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                              color: colorScheme.onSurfaceVariant,
+                              letterSpacing: 0.5,
+                            ),
                           ),
-                        ),
+                        ],
+
                       ],
                     ),
                   ),

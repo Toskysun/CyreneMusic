@@ -2,6 +2,7 @@ import 'dart:io' show Platform;
 import 'dart:math' as math;
 import 'dart:ui' as ui;
 import 'dart:async';
+import 'dart:typed_data';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
@@ -33,6 +34,12 @@ class MeshGradientBackground extends StatefulWidget {
 class _MeshGradientBackgroundState extends State<MeshGradientBackground>
     with TickerProviderStateMixin {
   late Ticker _ticker;
+  
+  // 性能优化：使用 ValueNotifier 替代 setState，避免整个 Widget 树重建
+  final ValueNotifier<_MeshPaintData> _paintDataNotifier = ValueNotifier(
+    _MeshPaintData(time: 0.0, colors: [], bassIntensity: 0.0),
+  );
+  
   double _time = 0.0;
   
   // 用于色彩平滑过渡的控制器
@@ -148,24 +155,30 @@ class _MeshGradientBackgroundState extends State<MeshGradientBackground>
     // 根据重低音强度增加额外的时间偏移，产生动态加速感
     _extraTime += _bassIntensity * 0.03;
     
-    setState(() {
-      _time = (elapsed.inMilliseconds / 1000.0 * widget.speed) + _extraTime;
-      
-      // 更新当前色彩（平滑过渡）
-      if (_colorController.isAnimating) {
-        final t = Curves.easeInOut.transform(_colorController.value);
-        _currentColors = List.generate(_targetColors.length, (i) {
-          final startColor = i < _previousColors.length ? _previousColors[i] : _previousColors.last;
-          return Color.lerp(startColor, _targetColors[i], t)!;
-        });
-      }
-    });
+    _time = (elapsed.inMilliseconds / 1000.0 * widget.speed) + _extraTime;
+    
+    // 更新当前色彩（平滑过渡）
+    if (_colorController.isAnimating) {
+      final t = Curves.easeInOut.transform(_colorController.value);
+      _currentColors = List.generate(_targetColors.length, (i) {
+        final startColor = i < _previousColors.length ? _previousColors[i] : _previousColors.last;
+        return Color.lerp(startColor, _targetColors[i], t)!;
+      });
+    }
+    
+    // 性能优化：使用 ValueNotifier 通知重绘，而不是通过 setState 触发整个 Widget 树重建
+    _paintDataNotifier.value = _MeshPaintData(
+      time: _time,
+      colors: List.from(_currentColors),
+      bassIntensity: _bassIntensity,
+    );
   }
 
   @override
   void dispose() {
     _ticker.dispose();
     _colorController.dispose();
+    _paintDataNotifier.dispose();
     _rhythmSubscription?.cancel();
     // 注意：这里不全局停止 RhythmService，因为可能有多个背景引用，或者全局生命周期管理
     super.dispose();
@@ -176,18 +189,23 @@ class _MeshGradientBackgroundState extends State<MeshGradientBackground>
     return RepaintBoundary(
       child: Stack(
         children: [
-          // 核心绘制层
-          CustomPaint(
-            painter: _MeshGradientPainter(
-              colors: _currentColors,
-              time: _time,
-              backgroundColor: widget.backgroundColor,
-              bassIntensity: _bassIntensity,
-            ),
-            size: Size.infinite,
+          // 核心绘制层 - 使用 ValueListenableBuilder 优化重绘
+          ValueListenableBuilder<_MeshPaintData>(
+            valueListenable: _paintDataNotifier,
+            builder: (context, data, child) {
+              return CustomPaint(
+                painter: _MeshGradientPainter(
+                  colors: data.colors.isEmpty ? _currentColors : data.colors,
+                  time: data.time,
+                  backgroundColor: widget.backgroundColor,
+                  bassIntensity: data.bassIntensity,
+                ),
+                size: Size.infinite,
+              );
+            },
           ),
-          // 质感杂色层 (Grain/Noise)
-          const Positioned.fill(child: _GrainTexture()),
+          // 质感杂色层 (Grain/Noise) - 使用缓存优化
+          const Positioned.fill(child: _CachedGrainTexture()),
         ],
       ),
     );
@@ -392,40 +410,110 @@ class _BlobConfig {
   });
 }
 
-/// 增加质感的杂色层
-class _GrainTexture extends StatelessWidget {
-  const _GrainTexture();
+/// 性能优化：ValueNotifier 用于传递绘制数据，避免 setState 触发整个 Widget 树重建
+class _MeshPaintData {
+  final double time;
+  final List<Color> colors;
+  final double bassIntensity;
+  
+  _MeshPaintData({
+    required this.time,
+    required this.colors,
+    required this.bassIntensity,
+  });
+}
+
+/// 性能优化：缓存噪点图像的杂色层
+/// 只在首次绘制时生成噪点，之后复用缓存的图像
+class _CachedGrainTexture extends StatefulWidget {
+  const _CachedGrainTexture();
+
+  @override
+  State<_CachedGrainTexture> createState() => _CachedGrainTextureState();
+}
+
+class _CachedGrainTextureState extends State<_CachedGrainTexture> {
+  // 静态缓存，所有实例共享
+  static ui.Image? _cachedGrainImage;
+  static Size? _cachedSize;
+  static bool _isGenerating = false;
 
   @override
   Widget build(BuildContext context) {
-    return Opacity(
-      opacity: 0.04, // 非常微弱
-      child: CustomPaint(
-        painter: _GrainPainter(),
-      ),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final size = Size(constraints.maxWidth, constraints.maxHeight);
+        
+        // 检查是否需要重新生成缓存（尺寸变化）
+        if (_cachedGrainImage == null || 
+            _cachedSize == null ||
+            (_cachedSize!.width < size.width || _cachedSize!.height < size.height)) {
+          _generateGrainImage(size);
+        }
+        
+        if (_cachedGrainImage != null) {
+          return Opacity(
+            opacity: 0.04,
+            child: RawImage(
+              image: _cachedGrainImage,
+              fit: BoxFit.cover,
+              width: size.width,
+              height: size.height,
+            ),
+          );
+        }
+        
+        // 生成中显示空白
+        return const SizedBox.shrink();
+      },
     );
   }
-}
 
-class _GrainPainter extends CustomPainter {
-  @override
-  void paint(Canvas canvas, Size size) {
-    final random = math.Random(123); // 固定种子
-    final paint = Paint()
-      ..color = Colors.white.withOpacity(0.08)
-      ..style = PaintingStyle.fill;
+  void _generateGrainImage(Size size) async {
+    if (_isGenerating) return;
+    _isGenerating = true;
     
-    // 增加点数并减小尺寸，让噪点更细腻
-    for (int i = 0; i < 2000; i++) {
-      final x = random.nextDouble() * size.width;
-      final y = random.nextDouble() * size.height;
-      final dotSize = 0.5 + random.nextDouble() * 0.8;
-      canvas.drawRect(Rect.fromLTWH(x, y, dotSize, dotSize), paint);
+    try {
+      // 使用固定的较大尺寸生成噪点图，避免频繁重新生成
+      final targetSize = Size(
+        math.max(size.width, 1920).ceilToDouble(),
+        math.max(size.height, 1080).ceilToDouble(),
+      );
+      
+      final recorder = ui.PictureRecorder();
+      final canvas = Canvas(recorder);
+      
+      final random = math.Random(123); // 固定种子确保一致性
+      final paint = Paint()
+        ..color = Colors.white.withOpacity(0.08)
+        ..style = PaintingStyle.fill;
+      
+      // 根据尺寸调整噪点数量
+      final pointCount = ((targetSize.width * targetSize.height) / 1000).clamp(1000, 3000).toInt();
+      
+      for (int i = 0; i < pointCount; i++) {
+        final x = random.nextDouble() * targetSize.width;
+        final y = random.nextDouble() * targetSize.height;
+        final dotSize = 0.5 + random.nextDouble() * 0.8;
+        canvas.drawRect(Rect.fromLTWH(x, y, dotSize, dotSize), paint);
+      }
+      
+      final picture = recorder.endRecording();
+      final image = await picture.toImage(
+        targetSize.width.toInt(),
+        targetSize.height.toInt(),
+      );
+      
+      _cachedGrainImage = image;
+      _cachedSize = targetSize;
+      
+      if (mounted) {
+        setState(() {});
+      }
+    } finally {
+      _isGenerating = false;
     }
   }
-
-  @override
-  bool shouldRepaint(CustomPainter oldDelegate) => false;
 }
 
 class DynamicBackgroundColorExtractor {

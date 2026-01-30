@@ -343,18 +343,11 @@ class MobileDailyRecommendCard extends StatelessWidget {
         final EdgeInsets contentPadding = const EdgeInsets.symmetric(horizontal: 20, vertical: 24);
         
         if (isNarrow) {
-          final double gridSize = (constraints.maxWidth * 0.35).clamp(100.0, 140.0);
           return Padding(
             padding: contentPadding,
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
-                SizedBox(
-                  width: gridSize,
-                  height: gridSize,
-                  child: _buildCoverGrid(context, coverImages),
-                ),
-                const SizedBox(width: 20),
                 Expanded(
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
@@ -403,6 +396,12 @@ class MobileDailyRecommendCard extends StatelessWidget {
                     ],
                   ),
                 ),
+                const SizedBox(width: 20),
+                SizedBox(
+                  width: 100,
+                  height: 120,
+                  child: _buildTiltedCovers(context, coverImages, isNarrow: true),
+                ),
               ],
             ),
           );
@@ -413,12 +412,6 @@ class MobileDailyRecommendCard extends StatelessWidget {
           padding: contentPadding,
           child: Row(
             children: [
-              SizedBox(
-                width: 152,
-                height: 152,
-                child: _buildCoverGrid(context, coverImages),
-              ),
-              const SizedBox(width: 32),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -454,22 +447,36 @@ class MobileDailyRecommendCard extends StatelessWidget {
                       ),
                     ),
                     const Spacer(),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(
-                          '查看全部',
-                          style: TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.bold,
-                            color: cs.primary,
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: cs.primary.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            '查看全部',
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.bold,
+                              color: cs.primary,
+                            ),
                           ),
-                        ),
-                        Icon(Icons.arrow_forward_ios, size: 14, color: cs.primary),
-                      ],
+                          const SizedBox(width: 8),
+                          Icon(Icons.arrow_forward_ios, size: 12, color: cs.primary),
+                        ],
+                      ),
                     ),
                   ],
                 ),
+              ),
+              const SizedBox(width: 32),
+              SizedBox(
+                width: 160,
+                height: 160,
+                child: _buildTiltedCovers(context, coverImages),
               ),
             ],
           ),
@@ -478,68 +485,103 @@ class MobileDailyRecommendCard extends StatelessWidget {
     );
   }
   
-  /// 构建封面网格 (Android 16 风格：更圆润的大圆角)
-  Widget _buildCoverGrid(BuildContext context, List<String> coverImages) {
+  /// 构建倾斜堆叠封面 (Fluent UI Inspired)
+  Widget _buildTiltedCovers(BuildContext context, List<String> coverImages, {bool isNarrow = false}) {
     final cs = Theme.of(context).colorScheme;
-    final covers = List<String>.from(coverImages);
-    
-    while (covers.length < 4) {
-      covers.add('');
+    final displayCovers = coverImages.take(3).toList();
+    while (displayCovers.length < 3) {
+      displayCovers.add('');
     }
+
+    final double size = isNarrow ? 80 : 120;
     
-    return Container(
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(24),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.1),
-            blurRadius: 10,
-            spreadRadius: -2,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(24),
-        child: GridView.builder(
-          padding: EdgeInsets.zero,
-          physics: const NeverScrollableScrollPhysics(),
-          shrinkWrap: true,
-          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-            crossAxisCount: 2,
-            crossAxisSpacing: 2,
-            mainAxisSpacing: 2,
-          ),
-          itemCount: 4,
-          itemBuilder: (context, index) {
-            final url = covers[index];
-            return url.isEmpty
-                ? Container(
-                    color: cs.surfaceContainerHighest,
-                    child: Icon(
-                      Icons.music_note,
-                      size: 20,
-                      color: cs.onSurface.withOpacity(0.3),
-                    ),
-                  )
-                : CachedNetworkImage(
-                    imageUrl: url,
-                    fit: BoxFit.cover,
-                    placeholder: (context, url) => Container(
-                      color: cs.surfaceContainerHighest,
-                    ),
-                    errorWidget: (context, url, error) => Container(
+    return Stack(
+      alignment: Alignment.center,
+      children: [
+        // 最底层封面 (向左倾斜)
+        _buildSingleTiltedCover(
+          displayCovers[2], 
+          cs, 
+          size: size * 0.85, 
+          angle: -0.2, 
+          offset: const Offset(-20, -10),
+          opacity: 0.5,
+        ),
+        // 中间层封面 (向右倾斜)
+        _buildSingleTiltedCover(
+          displayCovers[1], 
+          cs, 
+          size: size * 0.92, 
+          angle: 0.15, 
+          offset: const Offset(15, 0),
+          opacity: 0.8,
+        ),
+        // 最上层封面 (正面)
+        _buildSingleTiltedCover(
+          displayCovers[0], 
+          cs, 
+          size: size, 
+          angle: 0, 
+          offset: Offset.zero,
+          opacity: 1.0,
+          hasShadow: true,
+        ),
+      ],
+    );
+  }
+
+  Widget _buildSingleTiltedCover(
+    String url, 
+    ColorScheme cs, {
+    required double size, 
+    required double angle, 
+    required Offset offset,
+    required double opacity,
+    bool hasShadow = false,
+  }) {
+    return Transform.translate(
+      offset: offset,
+      child: Transform.rotate(
+        angle: angle,
+        child: Opacity(
+          opacity: opacity,
+          child: Container(
+            width: size,
+            height: size,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(isNarrow ? 12 : 16),
+              boxShadow: hasShadow ? [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.2),
+                  blurRadius: 15,
+                  offset: const Offset(0, 8),
+                ),
+              ] : [],
+            ),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(isNarrow ? 12 : 16),
+              child: url.isEmpty
+                  ? Container(
                       color: cs.surfaceContainerHighest,
                       child: Icon(
-                        Icons.broken_image,
-                        size: 20,
+                        Icons.music_note,
+                        size: size * 0.4,
                         color: cs.onSurface.withOpacity(0.3),
                       ),
+                    )
+                  : CachedNetworkImage(
+                      imageUrl: url,
+                      fit: BoxFit.cover,
+                      placeholder: (context, url) => Container(
+                        color: cs.surfaceContainerHighest,
+                      ),
                     ),
-                  );
-          },
+            ),
+          ),
         ),
       ),
     );
   }
+
+  bool get isNarrow => false; // Dummy getter for the helper method if needed, but actually passed as params
 }
