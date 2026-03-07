@@ -181,14 +181,18 @@ class PersistentStorageService extends ChangeNotifier {
     }
 
     try {
+      if (_prefs.getString(key) == value) return true;
+      // 先移除已存在的键，防止类型冲突导致写入失败
+      await _prefs.remove(key);
       final result = await _prefs.setString(key, value);
       if (result) {
         _backupData[key] = value;
         await _createBackup();
+        notifyListeners();
       }
       return result;
     } catch (e) {
-      print('❌ [PersistentStorage] setString 失败: $e');
+      print('❌ [PersistentStorage] setString 失败 ($key): $e');
       return false;
     }
   }
@@ -201,14 +205,17 @@ class PersistentStorageService extends ChangeNotifier {
     }
 
     try {
+      if (_prefs.getInt(key) == value) return true;
+      await _prefs.remove(key);
       final result = await _prefs.setInt(key, value);
       if (result) {
         _backupData[key] = value;
         await _createBackup();
+        notifyListeners();
       }
       return result;
     } catch (e) {
-      print('❌ [PersistentStorage] setInt 失败: $e');
+      print('❌ [PersistentStorage] setInt 失败 ($key): $e');
       return false;
     }
   }
@@ -221,14 +228,17 @@ class PersistentStorageService extends ChangeNotifier {
     }
 
     try {
+      if (_prefs.getBool(key) == value) return true;
+      await _prefs.remove(key);
       final result = await _prefs.setBool(key, value);
       if (result) {
         _backupData[key] = value;
         await _createBackup();
+        notifyListeners();
       }
       return result;
     } catch (e) {
-      print('❌ [PersistentStorage] setBool 失败: $e');
+      print('❌ [PersistentStorage] setBool 失败 ($key): $e');
       return false;
     }
   }
@@ -241,10 +251,12 @@ class PersistentStorageService extends ChangeNotifier {
     }
 
     try {
+      if (_prefs.getDouble(key) == value) return true;
       final result = await _prefs.setDouble(key, value);
       if (result) {
         _backupData[key] = value;
         await _createBackup();
+        notifyListeners();
       }
       return result;
     } catch (e) {
@@ -281,10 +293,12 @@ class PersistentStorageService extends ChangeNotifier {
     }
 
     try {
+      if (!_prefs.containsKey(key)) return true;
       final result = await _prefs.remove(key);
       if (result) {
         _backupData.remove(key);
         await _createBackup();
+        notifyListeners();
       }
       return result;
     } catch (e) {
@@ -315,34 +329,64 @@ class PersistentStorageService extends ChangeNotifier {
 
   // ============== 读取方法 ==============
 
-  /// 获取字符串值
+  /// 获取字符串值（类型安全）
   String? getString(String key) {
     if (!_isInitialized) return null;
-    return _prefs.getString(key);
+    try {
+      return _prefs.getString(key);
+    } catch (e) {
+      print('⚠️ [PersistentStorage] getString 类型冲突 ($key)，已尝试清除: $e');
+      _prefs.remove(key);
+      return null;
+    }
   }
 
-  /// 获取整数值
+  /// 获取整数值（类型安全）
   int? getInt(String key) {
     if (!_isInitialized) return null;
-    return _prefs.getInt(key);
+    try {
+      return _prefs.getInt(key);
+    } catch (e) {
+      print('⚠️ [PersistentStorage] getInt 类型冲突 ($key)，已尝试清除: $e');
+      _prefs.remove(key);
+      return null;
+    }
   }
 
-  /// 获取布尔值
+  /// 获取布尔值（类型安全）
   bool? getBool(String key) {
     if (!_isInitialized) return null;
-    return _prefs.getBool(key);
+    try {
+      return _prefs.getBool(key);
+    } catch (e) {
+      print('⚠️ [PersistentStorage] getBool 类型冲突 ($key)，已尝试清除: $e');
+      _prefs.remove(key);
+      return null;
+    }
   }
 
-  /// 获取双精度浮点值
+  /// 获取双精度浮点值（类型安全）
   double? getDouble(String key) {
     if (!_isInitialized) return null;
-    return _prefs.getDouble(key);
+    try {
+      return _prefs.getDouble(key);
+    } catch (e) {
+      print('⚠️ [PersistentStorage] getDouble 类型冲突 ($key)，已尝试清除: $e');
+      _prefs.remove(key);
+      return null;
+    }
   }
 
-  /// 获取字符串列表
+  /// 获取字符串列表（类型安全）
   List<String>? getStringList(String key) {
     if (!_isInitialized) return null;
-    return _prefs.getStringList(key);
+    try {
+      return _prefs.getStringList(key);
+    } catch (e) {
+      print('⚠️ [PersistentStorage] getStringList 类型冲突 ($key)，已尝试清除: $e');
+      _prefs.remove(key);
+      return null;
+    }
   }
 
   /// 检查键是否存在
@@ -385,5 +429,11 @@ class PersistentStorageService extends ChangeNotifier {
 
   /// 设置是否启用本地模式
   Future<void> setEnableLocalMode(bool value) => setBool('enable_local_mode', value);
+
+  /// 是否启用 QQ 音乐代理播放（默认开启）
+  bool get enableQqProxy => getBool('enable_qq_music_proxy') ?? true;
+
+  /// 设置是否启用 QQ 音乐代理播放
+  Future<void> setEnableQqProxy(bool value) => setBool('enable_qq_music_proxy', value);
 }
 

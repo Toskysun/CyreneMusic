@@ -8,6 +8,7 @@ import 'package:path_provider/path_provider.dart';
 import '../models/track.dart';
 import '../models/song_detail.dart';
 import '../models/audio_source_config.dart';
+import 'url_service.dart';
 import 'lx_music_runtime_service.dart';
 
 /// 音源类型枚举
@@ -524,6 +525,17 @@ class AudioSourceService extends ChangeNotifier {
       'User-Agent': 'lx-music-request/1.0.0',
       if (lxApiKey.isNotEmpty) 'X-Request-Key': lxApiKey,
     };
+  }
+
+  /// 构建酷狗搜索 URL
+  /// 搜索始终使用后端 URL (UrlService)，但根据当前音源类型决定路由参数
+  String buildKugouSearchUrl(String keyword, {int limit = 20}) {
+    final backendBaseUrl = UrlService().baseUrl;
+    final query = 'keywords=${Uri.encodeComponent(keyword)}&limit=$limit';
+    if (sourceType == AudioSourceType.lxmusic) {
+      return '$backendBaseUrl/kugou/search?$query&version=old';
+    }
+    return '$backendBaseUrl/kugou/search?$query';
   }
 
   // ==================== API Endpoints ====================

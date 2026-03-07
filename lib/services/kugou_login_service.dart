@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'url_service.dart';
+import 'audio_source_service.dart';
 import 'auth_service.dart';
 
 /// 酷狗歌单信息
@@ -315,8 +316,9 @@ class KugouLoginService extends ChangeNotifier {
   /// [limit] - 返回结果数量限制，默认20
   /// 返回搜索结果列表，每个结果包含 emixsongid
   Future<List<KugouSearchResult>> searchKugou(String keyword, {int limit = 20}) async {
-    final url = Uri.parse('${UrlService().kugouSearchUrl}?keywords=${Uri.encodeComponent(keyword)}&limit=$limit');
-    final r = await http.get(url).timeout(const Duration(seconds: 10));
+    final url = AudioSourceService().buildKugouSearchUrl(keyword, limit: limit);
+    print('🔍 [KugouLoginService] 酷狗搜索 URL: $url');
+    final r = await http.get(Uri.parse(url)).timeout(const Duration(seconds: 10));
 
     if (r.statusCode != 200) {
       throw Exception('HTTP ${r.statusCode}');

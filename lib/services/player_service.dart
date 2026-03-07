@@ -1,9 +1,11 @@
 import 'dart:io';
+import 'dart:convert';
 import 'dart:math';
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart' show ImageProvider; // for cover provider
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import '../utils/image_utils.dart';
 import 'package:audioplayers/audioplayers.dart' as ap;
 import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
@@ -66,6 +68,8 @@ class PlayerService extends ChangeNotifier {
   async_lib.StreamSubscription<Duration>? _mediaKitPositionSub;
   async_lib.StreamSubscription<Duration?>? _mediaKitDurationSub;
   async_lib.StreamSubscription<bool>? _mediaKitCompletedSub;
+  async_lib.StreamSubscription<String>? _mediaKitErrorSub;
+  async_lib.StreamSubscription? _audioPlayerErrorSub;
   
   PlayerState _state = PlayerState.idle;
   SongDetail? _currentSong;
@@ -104,6 +108,9 @@ class PlayerService extends ChangeNotifier {
   static const List<int> kEqualizerFrequencies = [31, 63, 125, 250, 500, 1000, 2000, 4000, 8000, 16000];
   List<double> _equalizerGains = List.filled(10, 0.0);
   bool _equalizerEnabled = true;
+
+  // 状态恢复相关
+  bool _needsInitialLoad = false; // 标记是否需要执行恢复后的首次加载
   
   List<double> get equalizerGains => List.unmodifiable(_equalizerGains);
   bool get equalizerEnabled => _equalizerEnabled;
@@ -120,6 +127,12 @@ class PlayerService extends ChangeNotifier {
   double get volume => _volume; // 获取当前音量
   ImageProvider? get currentCoverImageProvider => _currentCoverImageProvider;
   String? get currentCoverUrl => _currentCoverUrl;
+  
+  /// 动态封面 URL (ValueNotifier)
+  final ValueNotifier<String?> dynamicCoverUrlNotifier = ValueNotifier<String?>(null);
+  
+  /// 副歌时间数据 (ValueNotifier)
+  final ValueNotifier<List<Map<String, int>>?> chorusTimesNotifier = ValueNotifier<List<Map<String, int>>?>(null);
   
   /// 是否因音源未配置导致播放失败
   bool get isAudioSourceNotConfigured => _isAudioSourceNotConfigured;
@@ -212,11 +225,12 @@ class PlayerService extends ChangeNotifier {
       print('✅ [PlayerService] 桌面歌词播放控制回调已设置');
     }
 
-    // 监听播放集与播放模式变化，触发预缓存
-    PlaybackModeService().addListener(_precacheNextCover);
-    PlaylistQueueService().addListener(_precacheNextCover);
-
     print('✅ [PlayerService] 预缓存监听器已设置');
+
+    // 恢复上次播放状态（✅ 新增）
+    // 注意：我们将核心轨道信息恢复改为同步逻辑（如果底层存储支持），
+    // 确保 UI 启动时就能探测到 currentTrack。
+    await _restorePlaybackState();
 
     print('🎵 [PlayerService] 播放器初始化完成');
   }
@@ -323,6 +337,13 @@ class PlayerService extends ChangeNotifier {
       notifyListeners();
     });
 
+    // 监听播放错误
+    _audioPlayerErrorSub = _audioPlayer!.onLog.listen((log) {
+      if (log.toLowerCase().contains('error')) {
+        _handlePlayerError(log);
+      }
+    });
+
     // 监听播放进度
     _audioPlayer!.onPositionChanged.listen((position) {
       _position = position;
@@ -350,8 +371,12 @@ class PlayerService extends ChangeNotifier {
     AudioQuality? quality,
     ImageProvider? coverProvider,
     bool fromPlaylist = false,
+    Duration? initialPosition,
   }) async {
     try {
+      // 记录不再需要初始加载
+      _needsInitialLoad = false;
+      
       // 🔧 关键修复：首次播放时才初始化播放器，避免启动时的杂音
       await _ensurePlayerInitialized();
       
@@ -369,7 +394,7 @@ class PlayerService extends ChangeNotifier {
           // ⚠️ 注意：不设置 _currentTrack，避免 UI 显示"正在播放"
           notifyListeners();
           
-          // 调用回调通知 UI 显示提示
+          // 调用回调通知 UI 显示弹窗
           if (onAudioSourceNotConfigured != null) {
             print('🔔 [PlayerService] 调用音源未配置回调');
             onAudioSourceNotConfigured!();
@@ -418,6 +443,28 @@ class PlayerService extends ChangeNotifier {
       _errorMessage = null;
       _isAudioSourceNotConfigured = false;  // 重置标志
       
+      // 🎬 重置动态封面
+      dynamicCoverUrlNotifier.value = null;
+      // 🎤 重置副歌时间
+      chorusTimesNotifier.value = null;
+
+      // 🎬 如果是网易云歌曲，尝试获取动态封面
+      if (track.source == MusicSource.netease) {
+        MusicService().fetchDynamicCover(track.id).then((videoUrl) {
+          if (videoUrl != null && _currentTrack?.id == track.id) {
+            dynamicCoverUrlNotifier.value = videoUrl;
+            print('🎬 [PlayerService] 动态封面已就绪: $videoUrl');
+          }
+        });
+        
+        MusicService().fetchChorusTime(track.id).then((chorusTimes) {
+          if (chorusTimes != null && _currentTrack?.id == track.id) {
+            chorusTimesNotifier.value = chorusTimes;
+            print('🎤 [PlayerService] 副歌时间已就绪: $chorusTimes');
+          }
+        });
+      }
+      
       // ✅ 关键逻辑：如果是手动点击（未提供预取的 coverProvider），则强制刷新一次封面
       final shouldForceUpdate = coverProvider == null;
       await _updateCoverImage(track.picUrl, notify: false, force: shouldForceUpdate);
@@ -425,8 +472,8 @@ class PlayerService extends ChangeNotifier {
       notifyListeners();
 
       _duration = Duration.zero;
-      _position = Duration.zero;
-      positionNotifier.value = Duration.zero;
+      _position = initialPosition ?? Duration.zero;
+      positionNotifier.value = _position;
       
       // 触发下一首封面预缓存
       _precacheNextCover();
@@ -486,10 +533,13 @@ class PlayerService extends ChangeNotifier {
           // 播放缓存文件
           if (_shouldUseMediaKit) {
              print('✅ [PlayerService/MediaKit] 从缓存播放: $cachedFilePath');
-             await _mediaKitPlayer!.open(mk.Media(cachedFilePath));
+             await _mediaKitPlayer!.open(mk.Media(cachedFilePath), play: false);
+             if (initialPosition != null && initialPosition.inMilliseconds > 0) {
+               await _mediaKitPlayer!.seek(initialPosition);
+             }
              await _mediaKitPlayer!.play();
           } else {
-             await _audioPlayer!.play(ap.DeviceFileSource(cachedFilePath));
+             await _audioPlayer!.play(ap.DeviceFileSource(cachedFilePath), position: initialPosition);
              print('✅ [PlayerService/AudioPlayer] 从缓存播放: $cachedFilePath');
           }
           print('📝 [PlayerService] 歌词已从缓存恢复 (长度: ${_currentSong!.lyric.length})');
@@ -592,10 +642,13 @@ class PlayerService extends ChangeNotifier {
 
         if (_shouldUseMediaKit) {
            print('✅ [PlayerService/MediaKit] 播放本地文件: $filePath');
-           await _mediaKitPlayer!.open(mk.Media(filePath));
+           await _mediaKitPlayer!.open(mk.Media(filePath), play: false);
+           if (initialPosition != null && initialPosition.inMilliseconds > 0) {
+             await _mediaKitPlayer!.seek(initialPosition);
+           }
            await _mediaKitPlayer!.play();
         } else {
-           await _audioPlayer!.play(ap.DeviceFileSource(filePath));
+           await _audioPlayer!.play(ap.DeviceFileSource(filePath), position: initialPosition);
            print('✅ [PlayerService/AudioPlayer] 播放本地文件: $filePath');
         }
         _extractThemeColorInBackground(track.picUrl);
@@ -618,7 +671,10 @@ class PlayerService extends ChangeNotifier {
 
         // 移动端弹出 Toast 提示
         if (Platform.isAndroid || Platform.isIOS) {
-          ToastUtils.error('获取 URL 失败: $_errorMessage');
+          ToastUtils.error(
+            '获取 URL 失败: $_errorMessage',
+            details: MusicService().lastRawResponse,
+          );
         }
         return;
       }
@@ -711,10 +767,13 @@ class PlayerService extends ChangeNotifier {
             
             // 流式播放
             if (_shouldUseMediaKit) {
-               await _mediaKitPlayer!.open(mk.Media(songDetail.url));
+               await _mediaKitPlayer!.open(mk.Media(songDetail.url), play: false);
+               if (initialPosition != null && initialPosition.inMilliseconds > 0) {
+                 await _mediaKitPlayer!.seek(initialPosition);
+               }
                await _mediaKitPlayer!.play();
             } else {
-               await _audioPlayer!.play(ap.UrlSource(songDetail.url));
+               await _audioPlayer!.play(ap.UrlSource(songDetail.url), position: initialPosition);
             }
             print('✅ [PlayerService] Apple Music 解密流播放成功');
             DeveloperModeService().addLog('✅ [PlayerService] Apple Music 解密流播放成功');
@@ -741,9 +800,29 @@ class PlayerService extends ChangeNotifier {
       }
 
       // 3. 播放音乐
-      if (track.source == MusicSource.qq ||
-          track.source == MusicSource.kugou ||
-          track.source == MusicSource.apple) {
+      final isOmniParse = AudioSourceService().sourceType == AudioSourceType.omniparse;
+      
+      // 判断是否需要代理播放
+      // 🕵️ 优化：Omniparse音源下的酷狗音乐不再需要代理，直接播放
+      bool shouldProxy = (track.source == MusicSource.kugou ||
+          track.source == MusicSource.apple);
+
+      if (track.source == MusicSource.qq) {
+        final qqProxyEnabled = PersistentStorageService().getBool('enable_qq_music_proxy') ?? true;
+        if (qqProxyEnabled) {
+          shouldProxy = true;
+        } else {
+          shouldProxy = false;
+          DeveloperModeService().addLog('🚀 [PlayerService] QQ音乐：用户已关闭本地代理，使用直连播放');
+        }
+      }
+      
+      if (isOmniParse && track.source == MusicSource.kugou) {
+        shouldProxy = false;
+        DeveloperModeService().addLog('🚀 [PlayerService] Omniparse 音源：酷狗音乐使用直连播放');
+      }
+
+      if (shouldProxy) {
         // 需要代理播放的平台
         DeveloperModeService().addLog('🎶 [PlayerService] 准备播放 ${track.getSourceName()} 音乐');
         final platform = track.source == MusicSource.qq
@@ -760,17 +839,24 @@ class PlayerService extends ChangeNotifier {
         if (useServerProxy) {
           // iOS：使用服务器代理流式播放，失败则下载后播放
           DeveloperModeService().addLog('📱 [PlayerService] iOS 使用服务器代理');
-          final serverProxyUrl = _getServerProxyUrl(songDetail.url, platform);
+          final serverProxyUrl = _getServerProxyUrl(
+            songDetail.url, 
+            platform, 
+            decryptionKey: songDetail.decryptionKey
+          );
           DeveloperModeService().addLog('🔗 [PlayerService] 服务器代理URL: ${serverProxyUrl.length > 80 ? '${serverProxyUrl.substring(0, 80)}...' : serverProxyUrl}');
           
           try {
             // 先尝试流式播放
             if (_shouldUseMediaKit) {
                await _seekToStart(); // MediaKit 有时不重置
-               await _mediaKitPlayer!.open(mk.Media(serverProxyUrl));
+               await _mediaKitPlayer!.open(mk.Media(serverProxyUrl), play: false);
+               if (initialPosition != null && initialPosition.inMilliseconds > 0) {
+                 await _mediaKitPlayer!.seek(initialPosition);
+               }
                await _mediaKitPlayer!.play();
             } else {
-               await _audioPlayer!.play(ap.UrlSource(serverProxyUrl));
+               await _audioPlayer!.play(ap.UrlSource(serverProxyUrl), position: initialPosition);
             }
             print('✅ [PlayerService] 通过服务器代理流式播放成功');
             DeveloperModeService().addLog('✅ [PlayerService] 通过服务器代理流式播放成功');
@@ -797,10 +883,13 @@ class PlayerService extends ChangeNotifier {
             try {
               if (_shouldUseMediaKit) {
                  await _seekToStart();
-                 await _mediaKitPlayer!.open(mk.Media(proxyUrl));
+                 await _mediaKitPlayer!.open(mk.Media(proxyUrl), play: false);
+                 if (initialPosition != null && initialPosition.inMilliseconds > 0) {
+                   await _mediaKitPlayer!.seek(initialPosition);
+                 }
                  await _mediaKitPlayer!.play();
               } else {
-                 await _audioPlayer!.play(ap.UrlSource(proxyUrl));
+                 await _audioPlayer!.play(ap.UrlSource(proxyUrl), position: initialPosition);
               }
               print('✅ [PlayerService] 通过本地代理开始流式播放');
               DeveloperModeService().addLog('✅ [PlayerService] 通过本地代理开始流式播放');
@@ -862,16 +951,49 @@ class PlayerService extends ChangeNotifier {
           }
         }
       } else {
-        // 网易云音乐直接播放
+        // 网易云音乐或其它（如 Spotify/Amazon）直接播放
         if (_shouldUseMediaKit) {
            await _seekToStart();
-           await _mediaKitPlayer!.open(mk.Media(songDetail.url));
+           
+           // Amazon Music 解密处理 (MediaKit)
+           if (songDetail.decryptionKey != null) {
+             final key = songDetail.decryptionKey!;
+             print('🔐 [PlayerService] 设置 MediaKit 解密密钥: $key');
+             DeveloperModeService().addLog('🔐 [PlayerService] 设置 MediaKit 解密密钥');
+             try {
+               await (_mediaKitPlayer!.platform as dynamic)?.setProperty('demuxer-lavf-o', 'decryption_key=$key');
+             } catch (e) {
+               print('⚠️ [PlayerService] 设置解密密钥失败: $e');
+             }
+           } else {
+             // 播放非加密流时确保清除之前的解密密钥设置
+             try {
+               await (_mediaKitPlayer!.platform as dynamic)?.setProperty('demuxer-lavf-o', 'decryption_key=');
+             } catch (_) {}
+           }
+           
+           await _mediaKitPlayer!.open(mk.Media(songDetail.url), play: false);
+           if (initialPosition != null && initialPosition.inMilliseconds > 0) {
+             await _mediaKitPlayer!.seek(initialPosition);
+           }
            await _mediaKitPlayer!.play();
         } else {
-           await _audioPlayer!.play(ap.UrlSource(songDetail.url));
+           // 非 MediaKit 平台 (iOS/Web)
+           if (songDetail.decryptionKey != null) {
+             // Amazon Music 加密流在 iOS 上必须通过后端代理播放
+             print('🔐 [PlayerService] Amazon 加密流在 iOS 上使用服务器代理解密');
+             final serverProxyUrl = _getServerProxyUrl(
+               songDetail.url, 
+               'amazon', 
+               decryptionKey: songDetail.decryptionKey
+             );
+             await _audioPlayer!.play(ap.UrlSource(serverProxyUrl), position: initialPosition);
+           } else {
+             await _audioPlayer!.play(ap.UrlSource(songDetail.url), position: initialPosition);
+           }
         }
         print('✅ [PlayerService] 开始播放: ${songDetail.url}');
-        DeveloperModeService().addLog('✅ [PlayerService] 开始播放网易云音乐');
+        DeveloperModeService().addLog('✅ [PlayerService] 开始播放网易云/Amazon音乐');
       }
 
       // 4. 异步缓存歌曲（不阻塞播放）
@@ -916,10 +1038,13 @@ class PlayerService extends ChangeNotifier {
   }
 
   /// 获取服务器代理 URL（用于移动端播放 QQ 音乐和酷狗音乐）
-  String _getServerProxyUrl(String originalUrl, String platform) {
+  String _getServerProxyUrl(String originalUrl, String platform, {String? decryptionKey}) {
     final baseUrl = UrlService().baseUrl;
-    final encodedUrl = Uri.encodeComponent(originalUrl);
-    return '$baseUrl/audio-proxy/stream?url=$encodedUrl&platform=$platform';
+    var proxyUrl = '$baseUrl/audio-proxy/stream?url=${Uri.encodeComponent(originalUrl)}&platform=$platform';
+    if (decryptionKey != null) {
+      proxyUrl += '&decryptionKey=${Uri.encodeComponent(decryptionKey)}';
+    }
+    return proxyUrl;
   }
 
   /// 通过服务器代理下载音频并播放（用于移动端 QQ 音乐和酷狗音乐）
@@ -1198,7 +1323,7 @@ class PlayerService extends ChangeNotifier {
       ImageProvider provider;
       if (isNetwork) {
         // 网络图片：使用 CachedNetworkImageProvider
-        provider = CachedNetworkImageProvider(imageUrl);
+        provider = CachedNetworkImageProvider(imageUrl, headers: getImageHeaders(imageUrl));
       } else {
         // 本地文件：使用 FileImage
         final file = File(imageUrl);
@@ -1234,7 +1359,7 @@ class PlayerService extends ChangeNotifier {
       
       if (isNetwork) {
         print('🖼️ [PlayerService] 预缓存下一首封面: ${nextTrack.name} -> $imageUrl');
-        final provider = CachedNetworkImageProvider(imageUrl);
+        final provider = CachedNetworkImageProvider(imageUrl, headers: getImageHeaders(imageUrl));
         
         // 检查是否需要预加载主题色
         final backgroundService = PlayerBackgroundService();
@@ -1378,7 +1503,7 @@ class PlayerService extends ChangeNotifier {
       final ImageProvider imageProvider;
       
       if (isNetwork) {
-        imageProvider = CachedNetworkImageProvider(imageUrl);
+        imageProvider = CachedNetworkImageProvider(imageUrl, headers: getImageHeaders(imageUrl));
       } else {
         final file = File(imageUrl);
         if (!await file.exists()) {
@@ -1439,7 +1564,7 @@ class PlayerService extends ChangeNotifier {
       // 💡 更好方案：使用我们刚才新建好的 extractColorsFromRegion。
       // 我们在内部先快速 Resolve 图片获取尺寸（这在主线程完成，但通常很快）
       final ImageProvider imageProvider = imageUrl.startsWith('http') 
-          ? CachedNetworkImageProvider(imageUrl) 
+          ? CachedNetworkImageProvider(imageUrl, headers: getImageHeaders(imageUrl)) 
           : FileImage(File(imageUrl));
       
       final async_lib.Completer<ui.Image> completer = async_lib.Completer();
@@ -1488,9 +1613,18 @@ class PlayerService extends ChangeNotifier {
   /// 继续播放
   Future<void> resume() async {
     try {
+      // ✅ 关键修复：由于状态恢复时未加载实际音源 URL，第一次点击播放时需要重新请求详情并从断点播放
+      // 我们通过 _needsInitialLoad 标志位来精准判断是否为恢复后的首次播放
+      if (_needsInitialLoad && _currentTrack != null) {
+        print('🔄 [PlayerService] 检测到恢复状态下的首次播放请求，触发全量播放以获取 URL');
+        await playTrack(_currentTrack!, initialPosition: _position);
+        return;
+      }
+
       if (_useMediaKit && _mediaKitPlayer != null) {
         await _mediaKitPlayer!.play();
       } else if (_audioPlayer != null) {
+        // 如果播放器处于某个可以 resume 的状态，则直接 resume
         await _audioPlayer!.resume();
       }
       _startListeningTimeTracking();
@@ -1701,6 +1835,10 @@ class PlayerService extends ChangeNotifier {
         _playNextFromHistory();
       }
     });
+
+    _mediaKitErrorSub = _mediaKitPlayer!.stream.error.listen((error) {
+      _handlePlayerError(error);
+    });
   }
 
   Future<void> _playAppleWithMediaKit(SongDetail songDetail) async {
@@ -1724,6 +1862,63 @@ class PlayerService extends ChangeNotifier {
     await _mediaKitPlayer!.setVolume(_volume * 100);
     await _mediaKitPlayer!.open(mk.Media(url));
     await _mediaKitPlayer!.play();
+  }
+
+  /// 处理播放器产生的错误
+  void _handlePlayerError(String error) {
+    print('❌ [PlayerService] 播放器错误: $error');
+    DeveloperModeService().addLog('❌ [PlayerService] 播放器错误: $error');
+    
+    final lastStatus = ProxyService().lastUpstreamStatus;
+    
+    // 检查是否符合 QQ 音乐自动降级条件 (支持 lxmusic 和 omniparse 音源)
+    // 触发条件: 上游代理返回 403，或者播放器直接抛出 "Failed to open"
+    final isQqMusic = _currentTrack != null && _currentTrack!.source == MusicSource.qq;
+    final isSupportedSource = AudioSourceService().sourceType == AudioSourceType.lxmusic || 
+                              AudioSourceService().sourceType == AudioSourceType.omniparse;
+    final isFallbackEligible = isQqMusic && isSupportedSource && 
+        (lastStatus == 403 || error.contains('Failed to open'));
+
+    if (isFallbackEligible) {
+        final currentLevel = _currentSong?.level ?? '';
+        final attemptedQuality = AudioQualityService.stringToQuality(currentLevel) ?? AudioQualityService().currentQuality;
+        
+        // 如果当前尝试的音质高于 320k (exhigh)，则触发自动降级重试
+        if (attemptedQuality.index > AudioQuality.exhigh.index) {
+          print('🔄 [PlayerService] 检测到 QQ 音乐播放受限或无法打开，准备自动降级至 320k 重试...');
+          DeveloperModeService().addLog('🔄 [PlayerService] 触发降级策略: ${attemptedQuality.displayName} -> 高品质(320k)');
+          
+          // 更新状态为加载中，避免 UI 显示错误提示
+          _state = PlayerState.loading;
+          notifyListeners();
+          
+          // 延迟一小段时间重试，确保清理工作完成并避免并发冲突
+          Future.delayed(const Duration(milliseconds: 500), () {
+            if (_currentTrack != null) {
+              ToastUtils.info('当前音质播放失败，正在尝试以高品质(320k)重试...');
+              playTrack(_currentTrack!, quality: AudioQuality.exhigh);
+            }
+          });
+          return;
+        }
+    }
+    
+    // 如果播放器报错时，代理服务正好记录到上游 404 或 403
+    if (lastStatus == 404) {
+      _errorMessage = '请求失败，请尝试降低音质';
+    } else if (lastStatus == 403) {
+      _errorMessage = '播放受限 (403)，请尝试切换音源或降低音质';
+    } else {
+      _errorMessage = '播放出错: $error';
+    }
+    
+    _state = PlayerState.error;
+    notifyListeners();
+    
+    // 弹出 Toast 提示
+    if (Platform.isAndroid || Platform.isIOS || Platform.isWindows) {
+      ToastUtils.error(_errorMessage!, details: error);
+    }
   }
 
   /// 切换播放/暂停
@@ -1824,23 +2019,139 @@ class PlayerService extends ChangeNotifier {
 
   /// 保存当前播放状态
   void _saveCurrentPlaybackState() {
-    if (_currentTrack == null || _state != PlayerState.playing) {
+    if (_currentTrack == null) {
       return;
     }
 
-    // 如果播放位置小于5秒，不保存（刚开始播放）
-    if (_position.inSeconds < 5) {
+    // 如果播放位置小于5秒，不保存（刚开始播放，除非是在暂停状态）
+    if (_position.inSeconds < 5 && _state == PlayerState.playing) {
       return;
     }
 
     // 检查是否是从播放队列播放的
     final isFromPlaylist = PlaylistQueueService().hasQueue;
 
+    // 1. 同时保存到云端（如果已登录）
     PlaybackStateService().savePlaybackState(
       track: _currentTrack!,
       position: _position,
       isFromPlaylist: isFromPlaylist,
     );
+
+    // 2. 核心：保存到本地持久化存储（✅ 新增，用于重启记忆）
+    try {
+      PersistentStorageService().setString('last_playback_track', json.encode(_currentTrack!.toJson()));
+      PersistentStorageService().setInt('last_playback_position', _position.inSeconds);
+      
+      // 同时保存播放队列
+      PlaylistQueueService().saveQueue();
+      
+      print('💾 [PlayerService] 播放状态已保存到本地: ${_currentTrack!.name} (${_position.inSeconds}s)');
+    } catch (e) {
+      print('❌ [PlayerService] 本地保存播放状态失败: $e');
+    }
+  }
+
+  /// 恢复上次的播放状态（仅加载数据，不自动播放）
+  Future<void> _restorePlaybackState() async {
+    try {
+      print('🔍 [PlayerService] 正在尝试恢复上次播放状态...');
+      
+      // 1. 尝试从本地恢复队列
+      PlaylistQueueService().restoreQueue();
+      
+      // 2. 尝试恢复当前轨道信息
+      final trackJson = PersistentStorageService().getString('last_playback_track');
+      if (trackJson != null && trackJson.isNotEmpty) {
+        final trackMap = json.decode(trackJson) as Map<String, dynamic>;
+        final track = Track.fromJson(trackMap);
+        
+        final positionSec = PersistentStorageService().getInt('last_playback_position') ?? 0;
+        
+        _currentTrack = track;
+        _position = Duration(seconds: positionSec);
+        positionNotifier.value = _position;
+        _state = PlayerState.paused; // 初始设为暂停状态，不自动播放
+        _needsInitialLoad = true;   // 标记需要首次加载音源
+        
+        // ✅ 关键优化：在等待后台加载详情前，先根据 track 信息构建一个基础的 _currentSong
+        // 这样 UI（迷你播放器）就能在第一帧识别到有内容并立即显示
+        _currentSong = SongDetail(
+          id: track.id,
+          name: track.name,
+          url: '', // 链接由后台加载更新
+          pic: track.picUrl,
+          arName: track.artists,
+          alName: track.album,
+          source: track.source,
+          level: 'standard',
+          size: '0',
+          lyric: '',
+          tlyric: '',
+        );
+
+        print('✅ [PlayerService] 已恢复上次轨道: ${track.name}, 位置: ${positionSec}s');
+        
+        // 异步后台加载详情（歌词、主题色、真实时长等），不等待
+        _loadCurrentSongDetailInBackground(track);
+        
+        notifyListeners();
+      } else {
+        print('ℹ️ [PlayerService] 未找到本地播放记录');
+      }
+    } catch (e) {
+      print('❌ [PlayerService] 恢复播放状态出错: $e');
+    }
+  }
+
+  /// 后台加载当前歌曲详情（用于恢复状态后的 UI 展示，不触发播放）
+  Future<void> _loadCurrentSongDetailInBackground(Track track) async {
+    try {
+      // 尝试从缓存获取
+      final isCached = CacheService().isCached(track);
+      if (isCached) {
+        final metadata = CacheService().getCachedMetadata(track);
+        final cachedFilePath = await CacheService().getCachedFilePath(track);
+        if (cachedFilePath != null && metadata != null) {
+          _currentSong = SongDetail(
+            id: track.id,
+            name: track.name,
+            url: cachedFilePath,
+            pic: metadata.picUrl,
+            arName: metadata.artists,
+            alName: metadata.album,
+            level: metadata.quality,
+            size: metadata.fileSize.toString(),
+            lyric: metadata.lyric,
+            tlyric: metadata.tlyric,
+            source: track.source,
+          );
+          _loadLyricsForFloatingDisplay();
+          _extractThemeColorInBackground(metadata.picUrl);
+          notifyListeners();
+          print('✅ [PlayerService] 已从缓存恢复歌曲详情');
+          return;
+        }
+      }
+
+      // 实时获取封面图（仅封面，不获取全部详情避免请求过多）
+      await _updateCoverImage(track.picUrl, notify: true);
+      
+      // 后台默默获取全部详情（主要是歌词）
+      final detail = await MusicService().fetchSongDetail(
+        songId: track.id,
+        source: track.source,
+      );
+      
+      if (detail != null && _currentTrack?.id == track.id) {
+        _currentSong = detail;
+        _loadLyricsForFloatingDisplay();
+        notifyListeners();
+        print('✅ [PlayerService] 已在后台完成歌曲详情加载');
+      }
+    } catch (e) {
+      print('⚠️ [PlayerService] 后台加载歌曲详情失败: $e');
+    }
   }
 
   /// 清理资源

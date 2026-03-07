@@ -279,8 +279,9 @@ class AudioQualityService extends ChangeNotifier {
   }
 
   /// 获取QQ音乐的音质键名
-  String getQQMusicQualityKey() {
-    switch (_currentQuality) {
+  String getQQMusicQualityKey([AudioQuality? quality]) {
+    final q = quality ?? _currentQuality;
+    switch (q) {
       case AudioQuality.standard:
         return '128';
       case AudioQuality.exhigh:
@@ -294,8 +295,8 @@ class AudioQualityService extends ChangeNotifier {
 
   /// 从QQ音乐的music_urls中选择最佳可用音质
   /// 优先选择用户设定的音质，如果不存在则降级选择
-  String? selectBestQQMusicUrl(Map<String, dynamic> musicUrls) {
-    final preferredKey = getQQMusicQualityKey();
+  String? selectBestQQMusicUrl(Map<String, dynamic> musicUrls, [AudioQuality? requestedQuality]) {
+    final preferredKey = getQQMusicQualityKey(requestedQuality);
     
     // 音质优先级（从高到低）
     final qualityPriority = ['flac', '320', '128'];

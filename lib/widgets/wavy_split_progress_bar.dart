@@ -10,6 +10,8 @@ class WavySplitProgressBar extends StatefulWidget {
   final double height;
   final double waveAmplitude;
   final double waveFrequency;
+  final List<Map<String, int>>? chorusTimes;
+  final double? durationMs;
 
   const WavySplitProgressBar({
     super.key,
@@ -21,6 +23,8 @@ class WavySplitProgressBar extends StatefulWidget {
     this.height = 40.0,
     this.waveAmplitude = 4.0,
     this.waveFrequency = 0.12, // 增加频率让波浪更多
+    this.chorusTimes,
+    this.durationMs,
   });
 
   @override
@@ -106,6 +110,8 @@ class _WavySplitProgressBarState extends State<WavySplitProgressBar>
                     inactiveColor: inactiveColor,
                     waveAmplitude: widget.waveAmplitude,
                     waveFrequency: widget.waveFrequency,
+                    chorusTimes: widget.chorusTimes,
+                    durationMs: widget.durationMs,
                   ),
                 );
               },
@@ -125,6 +131,8 @@ class _WavySplitPainter extends CustomPainter {
   final Color inactiveColor;
   final double waveAmplitude;
   final double waveFrequency;
+  final List<Map<String, int>>? chorusTimes;
+  final double? durationMs;
 
   _WavySplitPainter({
     required this.value,
@@ -134,6 +142,8 @@ class _WavySplitPainter extends CustomPainter {
     required this.inactiveColor,
     required this.waveAmplitude,
     required this.waveFrequency,
+    this.chorusTimes,
+    this.durationMs,
   });
 
   @override
@@ -149,6 +159,32 @@ class _WavySplitPainter extends CustomPainter {
       ..strokeCap = StrokeCap.round
       ..strokeJoin = StrokeJoin.round
       ..strokeWidth = trackHeight;
+
+    // 0. 绘制副歌高亮区间 (在所有轨道底部)
+    if (chorusTimes != null && chorusTimes!.isNotEmpty && durationMs != null && durationMs! > 0) {
+      final Paint chorusPaint = Paint()
+        ..color = Colors.white.withOpacity(0.5)
+        ..style = PaintingStyle.fill;
+        
+      for (final chorus in chorusTimes!) {
+        final startTimeMs = chorus['startTime']?.toDouble() ?? 0.0;
+        final endTimeMs = chorus['endTime']?.toDouble() ?? 0.0;
+        if (startTimeMs >= endTimeMs) continue;
+
+        final startFraction = (startTimeMs / durationMs!).clamp(0.0, 1.0);
+        final endFraction = (endTimeMs / durationMs!).clamp(0.0, 1.0);
+        
+        final startX = startFraction * size.width;
+        final endX = endFraction * size.width;
+        
+        final chorusRect = RRect.fromRectAndRadius(
+          Rect.fromLTRB(startX, centerY - trackHeight / 2, endX, centerY + trackHeight / 2),
+          const Radius.circular(3.0),
+        );
+
+        canvas.drawRRect(chorusRect, chorusPaint);
+      }
+    }
 
     // 1. 绘制已播放部分 (左侧)
     if (progressX > 0) {
@@ -201,6 +237,8 @@ class _WavySplitPainter extends CustomPainter {
         oldDelegate.phase != phase ||
         oldDelegate.amplitudeFactor != amplitudeFactor ||
         oldDelegate.activeColor != activeColor ||
-        oldDelegate.inactiveColor != inactiveColor;
+        oldDelegate.inactiveColor != inactiveColor ||
+        oldDelegate.chorusTimes != chorusTimes ||
+        oldDelegate.durationMs != durationMs;
   }
 }

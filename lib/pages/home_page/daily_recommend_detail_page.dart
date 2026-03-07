@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import '../../utils/image_utils.dart';
 import 'package:fluent_ui/fluent_ui.dart' as fluent;
 import 'dart:io';
 import 'package:flutter/services.dart';
@@ -546,6 +547,7 @@ class DailyRecommendDetailPage extends StatelessWidget {
                         borderRadius: BorderRadius.circular(14),
                         child: CachedNetworkImage(
                           imageUrl: picUrl,
+                          httpHeaders: getImageHeaders(picUrl),
                           width: 56,
                           height: 56,
                           fit: BoxFit.cover,
@@ -692,6 +694,7 @@ class DailyRecommendDetailPage extends StatelessWidget {
                 borderRadius: BorderRadius.circular(8),
                 child: CachedNetworkImage(
                   imageUrl: picUrl,
+                  httpHeaders: getImageHeaders(picUrl),
                   width: 56,
                   height: 56,
                   fit: BoxFit.cover,
@@ -1112,6 +1115,7 @@ class _FluentDailyRecommendPage extends StatelessWidget {
             )
           : CachedNetworkImage(
               imageUrl: picUrl,
+              httpHeaders: getImageHeaders(picUrl),
               width: 48,
               height: 48,
               fit: BoxFit.cover,

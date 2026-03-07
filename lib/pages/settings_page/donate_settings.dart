@@ -339,8 +339,8 @@ Future<_DonateFormResult?> _showDonateDialog(BuildContext context) async {
                             spacing: 10,
                             runSpacing: 10,
                             children: [
-                              _buildCupertinoAmountCard(context, 3.0, '来瓶可乐', amount == 3.0 && customCtrl.text.isEmpty, isDark, () => setState(() {
-                                amount = 3.0;
+                              _buildCupertinoAmountCard(context, 5.0, '来瓶可乐', amount == 5.0 && customCtrl.text.isEmpty, isDark, () => setState(() {
+                                amount = 5.0;
                                 customCtrl.clear();
                               })),
                               _buildCupertinoAmountCard(context, 6.0, '投喂面包', amount == 6.0 && customCtrl.text.isEmpty, isDark, () => setState(() {
@@ -470,12 +470,12 @@ Future<_DonateFormResult?> _showDonateDialog(BuildContext context) async {
                       runSpacing: 8,
                       children: [
                         GestureDetector(
-                          onTap: () => setState(() => amount = 3.0),
+                          onTap: () => setState(() => amount = 5.0),
                           child: Container(
                             decoration: BoxDecoration(
                               borderRadius: BorderRadius.circular(6),
                               border: Border.all(
-                                color: amount == 3.0 ? fluent_ui.Colors.blue : fluent_ui.Colors.transparent,
+                                color: amount == 5.0 ? fluent_ui.Colors.blue : fluent_ui.Colors.transparent,
                                 width: 1.5,
                               ),
                             ),
@@ -486,7 +486,7 @@ Future<_DonateFormResult?> _showDonateDialog(BuildContext context) async {
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    Text('¥3', style: typo.body?.copyWith(fontWeight: FontWeight.w600)),
+                                    Text('¥5', style: typo.body?.copyWith(fontWeight: FontWeight.w600)),
                                     const SizedBox(height: 2),
                                     Text('来瓶可乐', style: typo.caption),
                                   ],
@@ -644,12 +644,12 @@ Future<_DonateFormResult?> _showDonateDialog(BuildContext context) async {
                     runSpacing: 8,
                     children: [
                       InkWell(
-                        onTap: () => setState(() => amount = 3.0),
+                        onTap: () => setState(() => amount = 5.0),
                         child: Container(
                           decoration: BoxDecoration(
                             borderRadius: BorderRadius.circular(6),
                             border: Border.all(
-                              color: amount == 3.0 ? Theme.of(context).colorScheme.primary : Colors.transparent,
+                              color: amount == 5.0 ? Theme.of(context).colorScheme.primary : Colors.transparent,
                               width: 1.5,
                             ),
                           ),
@@ -662,7 +662,7 @@ Future<_DonateFormResult?> _showDonateDialog(BuildContext context) async {
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    Text('¥3', style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600)),
+                                    Text('¥5', style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600)),
                                     const SizedBox(height: 2),
                                     Text('来瓶可乐', style: Theme.of(context).textTheme.bodySmall),
                                   ],

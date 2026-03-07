@@ -21,6 +21,7 @@ import 'player_fluid_cloud_queue_panel.dart';
 import 'player_fluid_cloud_song_wiki_panel.dart';
 import '../mobile_player_components/mobile_player_settings_sheet.dart';
 import 'player_dialogs.dart';
+import '../../widgets/dynamic_cover_widget.dart';
 
 /// 流体云全屏布局
 /// 模仿 Apple Music 的左右分栏设计
@@ -464,30 +465,11 @@ class _PlayerFluidCloudLayoutState extends State<PlayerFluidCloudLayout>
         ),
         clipBehavior: Clip.antiAlias,
         // ✨ Apple Music 风格：使用 AnimatedSwitcher 实现封面渐变切换
-        child: AnimatedSwitcher(
-          duration: const Duration(milliseconds: 600),
-          switchInCurve: Curves.easeOut,
-          switchOutCurve: Curves.easeIn,
-          transitionBuilder: (Widget child, Animation<double> animation) {
-            return FadeTransition(
-              opacity: animation,
-              child: child,
-            );
-          },
-          child: imageUrl.isNotEmpty
-              ? RepaintBoundary(
-                  key: ValueKey(imageUrl),
-                  child: _buildCoverImage(imageUrl, preferProvider: coverProvider),
-                )
-              : Container(
-                  key: const ValueKey('placeholder'),
-                  color: Colors.grey[900],
-                  child: const Icon(
-                    Icons.music_note,
-                    size: 80,
-                    color: Colors.white54,
-                  ),
-                ),
+        // 这里为了更好地支持视频动态封面，使用 DynamicCoverWidget 内部的逻辑
+        child: DynamicCoverWidget(
+          imageUrl: imageUrl,
+          width: double.infinity,
+          height: double.infinity,
         ),
       ),
     );
@@ -542,50 +524,60 @@ class _PlayerFluidCloudLayoutState extends State<PlayerFluidCloudLayout>
                 const SizedBox(height: 30),
                 
                 // 进度条
-                AnimatedBuilder(
-                  animation: player.positionNotifier,
-                  builder: (context, _) {
-                    final position = player.positionNotifier.value.inMilliseconds.toDouble();
-                    final duration = player.duration.inMilliseconds.toDouble();
-                    final value = (duration > 0) ? (position / duration).clamp(0.0, 1.0) : 0.0;
-                    
-                    return Column(
-                      children: [
-                        SizedBox(
-                          height: 24,
-                          child: _AppleMusicSlider(
-                            value: value,
-                            onChanged: (v) {
-                              final pos = Duration(milliseconds: (v * duration).round());
-                              player.seek(pos);
-                            },
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                ValueListenableBuilder<List<Map<String, int>>?>(
+                  valueListenable: player.chorusTimesNotifier,
+                  builder: (context, chorusTimes, child) {
+                    return AnimatedBuilder(
+                      animation: player.positionNotifier,
+                      builder: (context, _) {
+                        final position = player.positionNotifier.value.inMilliseconds.toDouble();
+                        final durationMs = player.duration.inMilliseconds.toDouble();
+                        final safeDuration = durationMs > 0 ? durationMs : 1.0;
+                        final value = position.clamp(0.0, safeDuration);
+                        
+                        return Column(
                           children: [
-                            Text(
-                              _formatDuration(player.positionNotifier.value),
-                              style: TextStyle(
-                                color: Colors.white.withOpacity(0.6),
-                                fontSize: 12,
-                                fontWeight: FontWeight.bold,
-                                fontFamily: 'Consolas',
+                            SizedBox(
+                              height: 24,
+                              child: _AppleMusicSlider(
+                                value: value,
+                                onChanged: (v) {
+                                  final pos = Duration(milliseconds: v.round());
+                                  player.seek(pos);
+                                },
+                                max: safeDuration,
+                                activeColor: Colors.white,
+                                inactiveColor: const Color(0x1FFFFFFF),
+                                chorusTimes: chorusTimes,
                               ),
                             ),
-                            Text(
-                              _formatDuration(player.duration),
-                              style: TextStyle(
-                                color: Colors.white.withOpacity(0.6),
-                                fontSize: 12,
-                                fontWeight: FontWeight.bold,
-                                fontFamily: 'Consolas',
-                              ),
+                            const SizedBox(height: 4),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Text(
+                                  _formatDuration(player.positionNotifier.value),
+                                  style: TextStyle(
+                                    color: Colors.white.withOpacity(0.6),
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.bold,
+                                    fontFamily: 'Consolas',
+                                  ),
+                                ),
+                                Text(
+                                  _formatDuration(player.duration),
+                                  style: TextStyle(
+                                    color: Colors.white.withOpacity(0.6),
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.bold,
+                                    fontFamily: 'Consolas',
+                                  ),
+                                ),
+                              ],
                             ),
                           ],
-                        ),
-                      ],
+                        );
+                      },
                     );
                   },
                 ),
@@ -687,50 +679,60 @@ class _PlayerFluidCloudLayoutState extends State<PlayerFluidCloudLayout>
               const SizedBox(height: 24), // 缩小间距 (30 -> 24)
               
               // 3. 进度条 - Apple Music 风格 (Hover 显现滑块)
-              AnimatedBuilder(
-                animation: player.positionNotifier,
-                builder: (context, _) {
-                  final position = player.positionNotifier.value.inMilliseconds.toDouble();
-                  final duration = player.duration.inMilliseconds.toDouble();
-                  final value = (duration > 0) ? (position / duration).clamp(0.0, 1.0) : 0.0;
-                  
-                  return Column(
-                    children: [
-                      _AppleMusicSlider(
-                        value: value,
-                        onChanged: (v) {
-                          final pos = Duration(milliseconds: (v * duration).round());
-                          player.seek(pos);
-                        },
-                      ),
-                      const SizedBox(height: 4),
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 0),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Text(
-                              _formatDuration(player.positionNotifier.value),
-                              style: TextStyle(
-                                color: Colors.white.withOpacity(0.6), 
-                                fontSize: 12,
-                                fontWeight: FontWeight.bold,
-                                fontFamily: 'Consolas',
-                              ),
+              ValueListenableBuilder<List<Map<String, int>>?>(
+                valueListenable: player.chorusTimesNotifier,
+                builder: (context, chorusTimes, child) {
+                  return AnimatedBuilder(
+                    animation: player.positionNotifier,
+                    builder: (context, _) {
+                      final position = player.positionNotifier.value.inMilliseconds.toDouble();
+                      final durationMs = player.duration.inMilliseconds.toDouble();
+                      final safeDuration = durationMs > 0 ? durationMs : 1.0;
+                      final value = position.clamp(0.0, safeDuration);
+                      
+                      return Column(
+                        children: [
+                          _AppleMusicSlider(
+                            value: value,
+                            onChanged: (v) {
+                              final pos = Duration(milliseconds: v.round());
+                              player.seek(pos);
+                            },
+                            max: safeDuration,
+                            activeColor: Colors.white,
+                            inactiveColor: const Color(0x1FFFFFFF),
+                            chorusTimes: chorusTimes,
+                          ),
+                          const SizedBox(height: 4),
+                          Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 0),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Text(
+                                  _formatDuration(player.positionNotifier.value),
+                                  style: TextStyle(
+                                    color: Colors.white.withOpacity(0.6), 
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.bold,
+                                    fontFamily: 'Consolas',
+                                  ),
+                                ),
+                                Text(
+                                  _formatDuration(player.duration),
+                                  style: TextStyle(
+                                    color: Colors.white.withOpacity(0.6), 
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.bold,
+                                    fontFamily: 'Consolas',
+                                  ),
+                                ),
+                              ],
                             ),
-                            Text(
-                              _formatDuration(player.duration),
-                              style: TextStyle(
-                                color: Colors.white.withOpacity(0.6), 
-                                fontSize: 12,
-                                fontWeight: FontWeight.bold,
-                                fontFamily: 'Consolas',
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
+                          ),
+                        ],
+                      );
+                    }
                   );
                 }
               ),
@@ -816,6 +818,8 @@ class _PlayerFluidCloudLayoutState extends State<PlayerFluidCloudLayout>
                 onChanged: (v) {
                   player.setVolume(v);
                 },
+                activeColor: Colors.white,
+                inactiveColor: const Color(0x3FFFFFFF),
               ),
             ),
             
@@ -1349,19 +1353,21 @@ class _FavoriteButtonState extends State<_FavoriteButton> {
 /// 3. 使用圆形滑块，略微放大动画
 class _AppleMusicSlider extends StatefulWidget {
   final double value;
-  final ValueChanged<double>? onChanged;
   final double min;
   final double max;
+  final ValueChanged<double>? onChanged;
   final Color activeColor;
   final Color inactiveColor;
+  final List<Map<String, int>>? chorusTimes;
 
   const _AppleMusicSlider({
     required this.value,
-    required this.onChanged,
     this.min = 0.0,
-    this.max = 1.0,
-    this.activeColor = Colors.white,
-    this.inactiveColor = const Color(0x1FFFFFFF), // 约 12% 不透明度
+    required this.max,
+    required this.onChanged,
+    required this.activeColor,
+    required this.inactiveColor,
+    this.chorusTimes,
   });
 
   @override
@@ -1418,7 +1424,10 @@ class _AppleMusicSliderState extends State<_AppleMusicSlider> with SingleTickerP
           return SliderTheme(
             data: SliderThemeData(
               trackHeight: 6, 
-              trackShape: const RoundedRectSliderTrackShape(),
+              trackShape: _ChorusSliderTrackShape(
+                chorusTimes: widget.chorusTimes,
+                durationMs: widget.max,
+              ),
               thumbShape: _AppleMusicThumbShape(scale: _thumbScaleAnimation.value),
               overlayShape: SliderComponentShape.noOverlay,
               activeTrackColor: currentActiveColor,
@@ -1437,6 +1446,83 @@ class _AppleMusicSliderState extends State<_AppleMusicSlider> with SingleTickerP
         }
       ),
     );
+  }
+}
+
+/// 自定义轨道，支持渲染副歌高亮区间
+class _ChorusSliderTrackShape extends RoundedRectSliderTrackShape {
+  final List<Map<String, int>>? chorusTimes;
+  final double durationMs;
+
+  const _ChorusSliderTrackShape({
+    this.chorusTimes,
+    required this.durationMs,
+  });
+
+  @override
+  void paint(
+    PaintingContext context,
+    Offset offset, {
+    required RenderBox parentBox,
+    required SliderThemeData sliderTheme,
+    required Animation<double> enableAnimation,
+    required TextDirection textDirection,
+    required Offset thumbCenter,
+    Offset? secondaryOffset,
+    bool isDiscrete = false,
+    bool isEnabled = false,
+    double additionalActiveTrackHeight = 2.0,
+  }) {
+    // 1. 绘制原始的背景轨和已播放轨
+    super.paint(
+      context,
+      offset,
+      parentBox: parentBox,
+      sliderTheme: sliderTheme,
+      enableAnimation: enableAnimation,
+      textDirection: textDirection,
+      thumbCenter: thumbCenter,
+      secondaryOffset: secondaryOffset,
+      isDiscrete: isDiscrete,
+      isEnabled: isEnabled,
+      additionalActiveTrackHeight: additionalActiveTrackHeight,
+    );
+
+    if (durationMs <= 0 || chorusTimes == null || chorusTimes!.isEmpty) return;
+
+    // 2. 在上方绘制副歌高亮区间
+    final Rect trackRect = getPreferredRect(
+      parentBox: parentBox,
+      offset: offset,
+      sliderTheme: sliderTheme,
+      isEnabled: isEnabled,
+      isDiscrete: isDiscrete,
+    );
+    
+    final Paint chorusPaint = Paint()
+      ..color = Colors.white.withOpacity(0.5)
+      ..style = PaintingStyle.fill;
+      
+    final double trackWidth = trackRect.width;
+
+    for (final chorus in chorusTimes!) {
+      final startTimeMs = chorus['startTime']?.toDouble() ?? 0.0;
+      final endTimeMs = chorus['endTime']?.toDouble() ?? 0.0;
+      if (startTimeMs >= endTimeMs) continue;
+
+      final startFraction = (startTimeMs / durationMs).clamp(0.0, 1.0);
+      final endFraction = (endTimeMs / durationMs).clamp(0.0, 1.0);
+      
+      final startX = trackRect.left + startFraction * trackWidth;
+      final endX = trackRect.left + endFraction * trackWidth;
+      
+      final chorusRect = RRect.fromRectAndRadius(
+        Rect.fromLTRB(startX, trackRect.top, endX, trackRect.bottom),
+        const Radius.circular(3.0),
+      );
+
+      context.canvas.drawRRect(chorusRect, chorusPaint);
+    }
   }
 }
 

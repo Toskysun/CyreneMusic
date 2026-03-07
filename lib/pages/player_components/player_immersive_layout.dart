@@ -12,6 +12,7 @@ import '../../utils/theme_manager.dart';
 import 'player_fluid_cloud_background.dart';
 import 'player_window_controls.dart';
 import 'player_dialogs.dart';
+import '../../widgets/dynamic_cover_widget.dart';
 
 /// 沉浸样式布局
 /// 底部左右分栏 + 居中单行歌词
@@ -169,25 +170,10 @@ class PlayerImmersiveLayout extends StatelessWidget {
             ],
           ),
           clipBehavior: Clip.antiAlias,
-          child: AnimatedSwitcher(
-            duration: const Duration(milliseconds: 600),
-            switchInCurve: Curves.easeOut,
-            switchOutCurve: Curves.easeIn,
-            transitionBuilder: (Widget child, Animation<double> animation) {
-              return FadeTransition(opacity: animation, child: child);
-            },
-            child: imageUrl.isNotEmpty
-                ? Image(
-                    key: ValueKey(imageUrl),
-                    image: coverProvider ?? NetworkImage(imageUrl) as ImageProvider,
-                    fit: BoxFit.cover,
-                    width: 200 * uiScale,
-                    height: 200 * uiScale,
-                  )
-                : Container(
-                    color: Colors.grey[900],
-                    child: Icon(Icons.music_note, color: Colors.white54, size: 80 * uiScale),
-                  ),
+          child: DynamicCoverWidget(
+            imageUrl: imageUrl,
+            width: 200 * uiScale,
+            height: 200 * uiScale,
           ),
         ),
         SizedBox(width: 32 * uiScale),

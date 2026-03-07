@@ -4,6 +4,7 @@ import 'package:http/http.dart' as http;
 import '../models/track.dart';
 import '../models/playlist.dart';
 import 'url_service.dart';
+import 'audio_source_service.dart';
 
 /// 换源搜索结果
 class SourceSwitchResult {
@@ -271,7 +272,8 @@ class TrackSourceSwitchService extends ChangeNotifier {
 
   /// 搜索酷狗音乐
   Future<List<Track>> _searchKugou(String keyword, String baseUrl) async {
-    final url = '$baseUrl/kugou/search?keywords=${Uri.encodeComponent(keyword)}';
+    final url = AudioSourceService().buildKugouSearchUrl(keyword);
+    print('🔍 [TrackSourceSwitchService] 酷狗搜索 URL: $url');
     final response = await http.get(
       Uri.parse(url),
       headers: {'Content-Type': 'application/json'},

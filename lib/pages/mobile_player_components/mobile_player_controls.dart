@@ -68,46 +68,53 @@ class MobilePlayerControls extends StatelessWidget {
         final position = player.position;
         final duration = player.duration;
         
-        return Column(
-          children: [
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 12.0),
-              child: WavySplitProgressBar(
-                value: duration.inMilliseconds > 0
-                    ? (position.inMilliseconds / duration.inMilliseconds).clamp(0.0, 1.0)
-                    : 0.0,
-                isPlaying: player.isPlaying,
-                onChanged: (value) {
-                  final seekTo = duration.inMilliseconds * value;
-                  player.seek(Duration(milliseconds: seekTo.toInt()));
-                },
-                activeColor: Colors.white,
-                inactiveColor: Colors.white.withOpacity(0.2),
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 12),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(
-                    _formatDuration(position),
-                    style: TextStyle(
-                      color: Colors.white.withOpacity(0.7),
-                      fontSize: 12,
-                    ),
+        return ValueListenableBuilder<List<Map<String, int>>?>(
+          valueListenable: player.chorusTimesNotifier,
+          builder: (context, chorusTimes, child) {
+            return Column(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 12.0),
+                  child: WavySplitProgressBar(
+                    value: duration.inMilliseconds > 0
+                        ? (position.inMilliseconds / duration.inMilliseconds).clamp(0.0, 1.0)
+                        : 0.0,
+                    isPlaying: player.isPlaying,
+                    onChanged: (value) {
+                      final seekTo = duration.inMilliseconds * value;
+                      player.seek(Duration(milliseconds: seekTo.toInt()));
+                    },
+                    activeColor: Colors.white,
+                    inactiveColor: Colors.white.withOpacity(0.2),
+                    chorusTimes: chorusTimes,
+                    durationMs: duration.inMilliseconds.toDouble(),
                   ),
-                  Text(
-                    _formatDuration(duration),
-                    style: TextStyle(
-                      color: Colors.white.withOpacity(0.7),
-                      fontSize: 12,
-                    ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        _formatDuration(position),
+                        style: TextStyle(
+                          color: Colors.white.withOpacity(0.7),
+                          fontSize: 12,
+                        ),
+                      ),
+                      Text(
+                        _formatDuration(duration),
+                        style: TextStyle(
+                          color: Colors.white.withOpacity(0.7),
+                          fontSize: 12,
+                        ),
+                      ),
+                    ],
                   ),
-                ],
-              ),
-            ),
-          ],
+                ),
+              ],
+            );
+          },
         );
       },
     );

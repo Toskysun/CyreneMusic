@@ -40,27 +40,36 @@ class PlayerControls extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           // 进度条
-          SliderTheme(
-            data: SliderThemeData(
-              trackHeight: 4,
-              thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 8),
-              overlayShape: const RoundSliderOverlayShape(overlayRadius: 16),
-              activeTrackColor: Colors.white,
-              inactiveTrackColor: Colors.white.withOpacity(0.3),
-              thumbColor: Colors.white,
-              overlayColor: Colors.white.withOpacity(0.2),
-            ),
-            child: Slider(
-              value: player.duration.inMilliseconds > 0
-                  ? player.position.inMilliseconds / player.duration.inMilliseconds
-                  : 0.0,
-              onChanged: (value) {
-                final position = Duration(
-                  milliseconds: (value * player.duration.inMilliseconds).round(),
-                );
-                player.seek(position);
-              },
-            ),
+          ValueListenableBuilder<List<Map<String, int>>?>(
+            valueListenable: player.chorusTimesNotifier,
+            builder: (context, chorusTimes, child) {
+              return SliderTheme(
+                data: SliderThemeData(
+                  trackHeight: 4,
+                  trackShape: _ChorusSliderTrackShape(
+                    chorusTimes: chorusTimes,
+                    durationMs: player.duration.inMilliseconds.toDouble(),
+                  ),
+                  thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 8),
+                  overlayShape: const RoundSliderOverlayShape(overlayRadius: 16),
+                  activeTrackColor: Colors.white,
+                  inactiveTrackColor: Colors.white.withOpacity(0.3),
+                  thumbColor: Colors.white,
+                  overlayColor: Colors.white.withOpacity(0.2),
+                ),
+                child: Slider(
+                  value: player.duration.inMilliseconds > 0
+                      ? player.position.inMilliseconds / player.duration.inMilliseconds
+                      : 0.0,
+                  onChanged: (value) {
+                    final position = Duration(
+                      milliseconds: (value * player.duration.inMilliseconds).round(),
+                    );
+                    player.seek(position);
+                  },
+                ),
+              );
+            },
           ),
           
           // 时间显示
@@ -458,5 +467,82 @@ class PlayerControls extends StatelessWidget {
     final minutes = duration.inMinutes;
     final seconds = duration.inSeconds % 60;
     return '${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}';
+  }
+}
+
+/// 自定义轨道，支持渲染副歌高亮区间
+class _ChorusSliderTrackShape extends RoundedRectSliderTrackShape {
+  final List<Map<String, int>>? chorusTimes;
+  final double durationMs;
+
+  const _ChorusSliderTrackShape({
+    this.chorusTimes,
+    required this.durationMs,
+  });
+
+  @override
+  void paint(
+    PaintingContext context,
+    Offset offset, {
+    required RenderBox parentBox,
+    required SliderThemeData sliderTheme,
+    required Animation<double> enableAnimation,
+    required TextDirection textDirection,
+    required Offset thumbCenter,
+    Offset? secondaryOffset,
+    bool isDiscrete = false,
+    bool isEnabled = false,
+    double additionalActiveTrackHeight = 2.0,
+  }) {
+    // 1. 绘制原始的背景轨和已播放轨
+    super.paint(
+      context,
+      offset,
+      parentBox: parentBox,
+      sliderTheme: sliderTheme,
+      enableAnimation: enableAnimation,
+      textDirection: textDirection,
+      thumbCenter: thumbCenter,
+      secondaryOffset: secondaryOffset,
+      isDiscrete: isDiscrete,
+      isEnabled: isEnabled,
+      additionalActiveTrackHeight: additionalActiveTrackHeight,
+    );
+
+    if (durationMs <= 0 || chorusTimes == null || chorusTimes!.isEmpty) return;
+
+    // 2. 在上方绘制副歌高亮区间
+    final Rect trackRect = getPreferredRect(
+      parentBox: parentBox,
+      offset: offset,
+      sliderTheme: sliderTheme,
+      isEnabled: isEnabled,
+      isDiscrete: isDiscrete,
+    );
+    
+    final Paint chorusPaint = Paint()
+      ..color = Colors.white.withOpacity(0.5)
+      ..style = PaintingStyle.fill;
+      
+    final double trackWidth = trackRect.width;
+
+    for (final chorus in chorusTimes!) {
+      final startTimeMs = chorus['startTime']?.toDouble() ?? 0.0;
+      final endTimeMs = chorus['endTime']?.toDouble() ?? 0.0;
+      if (startTimeMs >= endTimeMs) continue;
+
+      final startFraction = (startTimeMs / durationMs).clamp(0.0, 1.0);
+      final endFraction = (endTimeMs / durationMs).clamp(0.0, 1.0);
+      
+      final startX = trackRect.left + startFraction * trackWidth;
+      final endX = trackRect.left + endFraction * trackWidth;
+      
+      final chorusRect = RRect.fromRectAndRadius(
+        Rect.fromLTRB(startX, trackRect.top, endX, trackRect.bottom),
+        const Radius.circular(2.0),
+      );
+
+      context.canvas.drawRRect(chorusRect, chorusPaint);
+    }
   }
 }

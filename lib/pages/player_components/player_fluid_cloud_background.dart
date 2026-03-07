@@ -8,6 +8,7 @@ import '../../services/color_extraction_service.dart';
 import '../../widgets/video_background_player.dart';
 import '../../widgets/mesh_gradient_background.dart';
 import '../../widgets/flowing_light_background.dart';
+import '../../utils/image_utils.dart';
 
 /// 动态背景颜色缓存管理器（全局单例）
 /// 现在使用 ColorExtractionService 的缓存，这里只保留接口兼容
@@ -229,7 +230,7 @@ class _PlayerFluidCloudBackgroundState extends State<PlayerFluidCloudBackground>
             
             if (imageUrl != null && imageUrl.isNotEmpty) {
                if (imageUrl.startsWith('http')) {
-                 imageProvider = CachedNetworkImageProvider(imageUrl);
+                 imageProvider = CachedNetworkImageProvider(imageUrl, headers: getImageHeaders(imageUrl));
                } else {
                  imageProvider = FileImage(File(imageUrl));
                }
@@ -380,6 +381,7 @@ class _PlayerFluidCloudBackgroundState extends State<PlayerFluidCloudBackground>
     if (isNetwork) {
       return CachedNetworkImage(
         imageUrl: imageUrl,
+        httpHeaders: getImageHeaders(imageUrl),
         fit: BoxFit.cover,
         width: fullCover ? double.infinity : null,
         height: fullCover ? double.infinity : null,

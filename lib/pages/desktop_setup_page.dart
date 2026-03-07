@@ -23,12 +23,18 @@ class DesktopSetupPage extends StatefulWidget {
 
 class _DesktopSetupPageState extends State<DesktopSetupPage> with WindowListener {
   /// 引导步骤
-  /// 0 = 欢迎/引导入口
+  /// 0 = 欢迎/引导中转
   /// 1 = 主题设置中
   /// 2 = 音源配置中
   /// 3 = 登录中
   /// 4 = 协议确认中
+  /// 5 = 配置完成 (成功页)
   int _currentStep = 0;
+  
+  /// 协议阅读滚动控制器
+  late final ScrollController _agreementScrollController;
+  /// 协议是否已读到底部
+  bool _isAgreementScrolledToBottom = false;
   
   /// 窗口状态
   bool _isWindowMaximized = false;
@@ -36,6 +42,8 @@ class _DesktopSetupPageState extends State<DesktopSetupPage> with WindowListener
   @override
   void initState() {
     super.initState();
+    _agreementScrollController = ScrollController();
+    _agreementScrollController.addListener(_onAgreementScroll);
     // 监听音源配置和登录状态变化
     AudioSourceService().addListener(_onStateChanged);
     AuthService().addListener(_onStateChanged);
@@ -55,12 +63,25 @@ class _DesktopSetupPageState extends State<DesktopSetupPage> with WindowListener
 
   @override
   void dispose() {
+    _agreementScrollController.removeListener(_onAgreementScroll);
+    _agreementScrollController.dispose();
     AudioSourceService().removeListener(_onStateChanged);
     AuthService().removeListener(_onStateChanged);
     if (Platform.isWindows) {
       windowManager.removeListener(this);
     }
     super.dispose();
+  }
+
+  void _onAgreementScroll() {
+    if (!_isAgreementScrolledToBottom && _agreementScrollController.hasClients) {
+      if (_agreementScrollController.position.pixels >= 
+          _agreementScrollController.position.maxScrollExtent - 20) {
+        setState(() {
+          _isAgreementScrolledToBottom = true;
+        });
+      }
+    }
   }
   
   @override
@@ -82,13 +103,13 @@ class _DesktopSetupPageState extends State<DesktopSetupPage> with WindowListener
   void _onStateChanged() {
     if (mounted) {
       setState(() {
-        // 如果音源已配置且在配置步骤，自动返回欢迎页
+        // 如果音源已配置且在配置步骤，自动回到欢迎页
         if (_currentStep == 2 && AudioSourceService().isConfigured) {
           _currentStep = 0;
         }
-        // 如果登录已完成且在登录步骤，自动进入协议页
+        // 如果登录已完成且在登录步骤，自动进入成功页
         if (_currentStep == 3 && AuthService().isLoggedIn) {
-          _currentStep = 4;
+          _currentStep = 5;
         }
       });
     }
@@ -212,6 +233,8 @@ class _DesktopSetupPageState extends State<DesktopSetupPage> with WindowListener
       pageContent = _buildLoginPage(context, theme, isDark);
     } else if (_currentStep == 4) {
       pageContent = _buildAgreementPage(context, theme, isDark);
+    } else if (_currentStep == 5) {
+      pageContent = _buildSuccessPage(context, theme, isDark);
     } else {
       pageContent = _buildWelcomePage(context, theme, isDark);
     }
@@ -247,9 +270,15 @@ class _DesktopSetupPageState extends State<DesktopSetupPage> with WindowListener
       subtitle = '首先，让我们设置您喜欢的外观风格';
       buttonText = '主题设置';
       onButtonPressed = () => setState(() => _currentStep = 1);
-    } else if (!audioConfigured) {
-      // 第二步：配置音源
+    } else if (!(PersistentStorageService().getBool('terms_accepted') ?? false)) {
+      // 第二步：协议确认
       title = '主题设置完成 ✓';
+      subtitle = '在使用之前，请阅读并接受用户协议';
+      buttonText = '查看用户协议';
+      onButtonPressed = () => setState(() => _currentStep = 4);
+    } else if (!audioConfigured) {
+      // 第三步：配置音源
+      title = '设置已准备好 ✓';
       subtitle = '接下来，配置音源以解锁全部功能';
       buttonText = '配置音源';
       onButtonPressed = () => setState(() => _currentStep = 2);
@@ -260,11 +289,11 @@ class _DesktopSetupPageState extends State<DesktopSetupPage> with WindowListener
       buttonText = '登录 / 注册';
       onButtonPressed = () => setState(() => _currentStep = 3);
     } else {
-      // 全部完成，进入协议页
+      // 全部完成，进入成功页
       title = '准备就绪!';
       subtitle = '开始探索音乐世界吧';
-      buttonText = '下一步';
-      onButtonPressed = () => setState(() => _currentStep = 4);
+      buttonText = '进入应用';
+      onButtonPressed = () => setState(() => _currentStep = 5);
       showSkip = false;
     }
 
@@ -401,38 +430,24 @@ class _DesktopSetupPageState extends State<DesktopSetupPage> with WindowListener
               ? (isDark ? Colors.white54 : Colors.black38)
               : (isDark ? Colors.white24 : Colors.black12),
         ),
-        // 音源配置步骤
-        _buildStepDot(
-          isCompleted: audioConfigured,
-          isCurrent: themeConfigured && !audioConfigured,
-          isDark: isDark,
-          currentStepColor: accentColor,
-        ),
-        Container(
-          width: 24,
-          height: 2,
-          color: audioConfigured 
-              ? (isDark ? Colors.white54 : Colors.black38)
-              : (isDark ? Colors.white24 : Colors.black12),
-        ),
-        // 登录步骤
-        _buildStepDot(
-          isCompleted: isLoggedIn,
-          isCurrent: themeConfigured && audioConfigured && !isLoggedIn,
-          isDark: isDark,
-          currentStepColor: accentColor,
-        ),
-        Container(
-          width: 24,
-          height: 2,
-          color: isLoggedIn 
-              ? (isDark ? Colors.white54 : Colors.black38)
-              : (isDark ? Colors.white24 : Colors.black12),
-        ),
         // 协议确认步骤
         _buildStepDot(
-          isCompleted: false,
-          isCurrent: themeConfigured && audioConfigured && isLoggedIn,
+          isCompleted: (PersistentStorageService().getBool('terms_accepted') ?? false),
+          isCurrent: themeConfigured && !(PersistentStorageService().getBool('terms_accepted') ?? false),
+          isDark: isDark,
+          currentStepColor: accentColor,
+        ),
+        Container(
+          width: 24,
+          height: 2,
+          color: (PersistentStorageService().getBool('terms_accepted') ?? false)
+              ? (isDark ? Colors.white54 : Colors.black38)
+              : (isDark ? Colors.white24 : Colors.black12),
+        ),
+        // 音源/登录合并步骤展示（或根据需要细化）
+        _buildStepDot(
+          isCompleted: audioConfigured && isLoggedIn,
+          isCurrent: themeConfigured && (PersistentStorageService().getBool('terms_accepted') ?? false) && (!audioConfigured || !isLoggedIn),
           isDark: isDark,
           currentStepColor: accentColor,
         ),
@@ -512,7 +527,7 @@ class _DesktopSetupPageState extends State<DesktopSetupPage> with WindowListener
                       onPressed: () async {
                         // 标记主题配置完成
                         await PersistentStorageService().setBool('theme_configured', true);
-                        setState(() => _currentStep = 0);
+                        setState(() => _currentStep = 4); // 直接跳到协议页
                       },
                       child: const Padding(
                         padding: EdgeInsets.symmetric(vertical: 8),
@@ -908,23 +923,23 @@ class _DesktopSetupPageState extends State<DesktopSetupPage> with WindowListener
         child: Column(
           children: [
             const SizedBox(height: 24),
-            // Emoji 😋
+            // Emoji 📑
             const Center(
               child: Text(
-                '😋',
+                '📑',
                 style: TextStyle(fontSize: 64),
               ),
             ),
             const SizedBox(height: 24),
             Text(
-              '配置完成',
+              '用户协议',
               style: theme.typography.title?.copyWith(
                 fontWeight: FontWeight.bold,
               ),
             ),
             const SizedBox(height: 8),
             Text(
-              '在开始之前，请认真看完它：',
+              '在开始使用前，请认真阅读以下协议：',
               style: theme.typography.body?.copyWith(
                 fontWeight: FontWeight.w600,
                 color: Colors.redAccent,
@@ -939,57 +954,58 @@ class _DesktopSetupPageState extends State<DesktopSetupPage> with WindowListener
                 child: fluent.Card(
                   padding: const EdgeInsets.all(16),
                   child: SingleChildScrollView(
+                    controller: _agreementScrollController,
                     physics: const BouncingScrollPhysics(),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                      _buildSectionTitle('CyreneMusic 使用协议'),
-                      _buildSectionBody('词语约定：\n“本项目”指 CyreneMusic 应用及其相关开源代码；\n“使用者”指下载、安装、运行或以任何方式使用本项目的个人或组织；\n“音源”指由使用者自行导入或配置的第三方音频数据来源（包括但不限于 API、链接、本地文件路径等）；\n“版权数据”指包括但不限于音频、专辑封面、歌曲名、艺术家信息等受知识产权保护的内容。'),
-                      
-                      _buildSectionTitle('一、数据来源与播放机制'),
-                      _buildSectionBody('1.1 本项目 本身不具备获取音频流的能力。所有音频播放均依赖于使用者自行导入或配置的“音源”。本项目仅将用户输入的歌曲信息（如标题、艺术家等）传递给所选音源，并播放其返回的音频链接。'),
-                      _buildSectionBody('1.2 本项目 不对音源返回内容的合法性、准确性、完整性或可用性作任何保证。若音源返回错误、无关、失效或侵权内容，由此产生的任何问题均由使用者及音源提供方承担，本项目开发者不承担任何责任。'),
-                      _buildSectionBody('1.3 使用者应自行确保所导入音源的合法性，并对其使用行为负全部法律责任。'),
-                      
-                      _buildSectionTitle('二、账号与数据同步'),
-                      _buildSectionBody('2.1 本平台提供的账号系统 仅用于云端保存歌单、播放历史等用户偏好数据，不用于身份认证、商业推广、数据分析或其他用途。'),
-                      _buildSectionBody('2.2 所有同步至云端的数据均由使用者主动上传，本项目不对这些数据的内容、合法性或安全性负责。'),
-                      
-                      _buildSectionTitle('三、版权与知识产权'),
-                      _buildSectionBody('3.1 本项目 不存储、不分发、不缓存任何音频文件或版权数据。所有版权数据均由使用者通过外部音源实时获取。'),
-                      _buildSectionBody('3.2 使用者在使用本项目过程中接触到的任何版权内容（如歌曲、专辑图等），其权利归属于原著作权人。使用者应遵守所在国家/地区的版权法律法规。'),
-                      _buildSectionBody('3.3 强烈建议使用者在24小时内清除本地缓存的版权数据（如有），以避免潜在侵权风险。本项目不主动缓存音频，但部分系统或浏览器可能自动缓存，使用者需自行管理。'),
-                      
-                      _buildSectionTitle('四、开源与许可'),
-                      _buildSectionBody('4.1 本项目为 完全开源软件，基于 Apache License 2.0 发布。使用者可自由使用、修改、分发本项目代码，但须遵守 Apache 2.0 许可证条款。'),
-                      _buildSectionBody('4.2 本项目中使用的第三方资源（如图标、字体等）均注明来源。若存在未授权使用情况，请联系开发者及时移除。'),
-                      
-                      _buildSectionTitle('五、免责声明'),
-                      _buildSectionBody('5.1 使用者理解并同意：因使用本项目或依赖外部音源所导致的任何直接或间接损失（包括但不限于数据丢失、设备损坏、法律纠纷、隐私泄露等），均由使用者自行承担。'),
-                      _buildSectionBody('5.2 本项目开发者 不对本项目的功能完整性、稳定性、安全性或适配性作任何明示或暗示的担保。'),
-                      
-                      _buildSectionTitle('六、使用限制'),
-                      _buildSectionBody('6.1 本项目 仅用于技术学习、个人非商业用途。禁止将本项目用于任何违反当地法律法规的行为（如盗版传播、侵犯版权、非法爬取等）。'),
-                      _buildSectionBody('6.2 若使用者所在司法管辖区禁止使用此类工具，使用者应立即停止使用。因违规使用所引发的一切后果，由使用者自行承担。'),
-                      
-                      _buildSectionTitle('七、尊重版权'),
-                      _buildSectionBody('7.1 音乐创作不易，请尊重艺术家与版权方的劳动成果。支持正版音乐，优先使用合法授权的音源服务。'),
-                      
-                      _buildSectionTitle('八、协议接受'),
-                      _buildSectionBody('8.1 一旦您下载、安装、运行或以任何方式使用 CyreneMusic，即视为您已阅读、理解并无条件接受本协议全部条款。'),
-                      _buildSectionBody('8.2 本协议可能随项目更新而修订，修订后将发布于项目仓库。继续使用即视为接受最新版本。'),
-                      
-                      const SizedBox(height: 16),
-                      const Align(
-                        alignment: Alignment.centerRight,
-                        child: Text(
-                          '最新更新时间：2026年2月4日',
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: Colors.grey,
+                        _buildSectionTitle('CyreneMusic 使用协议'),
+                        _buildSectionBody('词语约定：\n“本项目”指 CyreneMusic 应用及其相关开源代码；\n“使用者”指下载、安装、运行或以任何方式使用本项目的个人或组织；\n“音源”指由使用者自行导入或配置的第三方音频数据来源（包括但不限于 API、链接、本地文件路径等）；\n“版权数据”指包括但不限于音频、专辑封面、歌曲名、艺术家信息等受知识产权保护的内容。'),
+                        
+                        _buildSectionTitle('一、数据来源与播放机制'),
+                        _buildSectionBody('1.1 本项目 本身不具备获取音频流的能力。所有音频播放均依赖于使用者自行导入或配置的“音源”。本项目仅将用户输入的歌曲信息（如标题、艺术家等）传递给所选音源，并播放其返回的音频链接。'),
+                        _buildSectionBody('1.2 本项目 不对音源返回内容的合法性、准确性、完整性或可用性作任何保证。若音源返回错误、无关、失效或侵权内容，由此产生的任何问题均由使用者及音源提供方承担，本项目开发者不承担任何责任。'),
+                        _buildSectionBody('1.3 使用者应自行确保所导入音源的合法性，并对其使用行为负全部法律责任。'),
+                        
+                        _buildSectionTitle('二、账号与数据同步'),
+                        _buildSectionBody('2.1 本平台提供的账号系统 仅用于云端保存歌单、播放历史等用户偏好数据，不用于身份认证、商业推广、数据分析或其他用途。'),
+                        _buildSectionBody('2.2 所有同步至云端的数据均由使用者主动上传，本项目不对这些数据的内容、合法性或安全性负责。'),
+                        
+                        _buildSectionTitle('三、版权与知识产权'),
+                        _buildSectionBody('3.1 本项目 不存储、不分发、不缓存任何音频文件或版权数据。所有版权数据均由使用者通过外部音源实时获取。'),
+                        _buildSectionBody('3.2 使用者在使用本项目过程中接触到的任何版权内容（如歌曲、专辑图等），其权利归属于原著作权人。使用者应遵守所在国家/地区的版权法律法规。'),
+                        _buildSectionBody('3.3 强烈建议使用者在24小时内清除本地缓存的版权数据（如有），以避免潜在侵权风险。本项目不主动缓存音频，但部分系统或浏览器可能自动缓存，使用者需自行管理。'),
+                        
+                        _buildSectionTitle('四、开源与许可'),
+                        _buildSectionBody('4.1 本项目为 完全开源软件，基于 Apache License 2.0 发布。使用者可自由使用、修改、分发本项目代码，但须遵守 Apache 2.0 许可证条款。'),
+                        _buildSectionBody('4.2 本项目中使用的第三方资源（如图标、字体等）均注明来源。若存在未授权使用情况，请联系开发者及时移除。'),
+                        
+                        _buildSectionTitle('五、免责声明'),
+                        _buildSectionBody('5.1 使用者理解并同意：因使用本项目或依赖外部音源所导致的任何直接或间接损失（包括但不限于数据丢失、设备损坏、法律纠纷、隐私泄露等），均由使用者自行承担。'),
+                        _buildSectionBody('5.2 本项目开发者 不对本项目的功能完整性、稳定性、安全性或适配性作任何明示或暗示的担保。'),
+                        
+                        _buildSectionTitle('六、使用限制'),
+                        _buildSectionBody('6.1 本项目 仅用于技术学习、个人非商业用途。禁止将本项目用于任何违反当地法律法规的行为（如盗版传播、侵犯版权、非法爬取等）。'),
+                        _buildSectionBody('6.2 若使用者所在司法管辖区禁止使用此类工具，使用者应立即停止使用。因违规使用所引发的一切后果，由使用者自行承担。'),
+                        
+                        _buildSectionTitle('七、尊重版权'),
+                        _buildSectionBody('7.1 音乐创作不易，请尊重艺术家与版权方的劳动成果。支持正版音乐，优先使用合法授权的音源服务。'),
+                        
+                        _buildSectionTitle('八、协议接受'),
+                        _buildSectionBody('8.1 一旦您下载、安装、运行或以任何方式使用 CyreneMusic，即视为您已阅读、理解并无条件接受本协议全部条款。'),
+                        _buildSectionBody('8.2 本协议可能随项目更新而修订，修订后将发布于项目仓库。继续使用即视为接受最新版本。'),
+                        
+                        const SizedBox(height: 16),
+                        const Align(
+                          alignment: Alignment.centerRight,
+                          child: Text(
+                            '最新更新时间：2026年2月4日',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Colors.grey,
+                            ),
                           ),
                         ),
-                      ),
                       ],
                     ),
                   ),
@@ -997,27 +1013,93 @@ class _DesktopSetupPageState extends State<DesktopSetupPage> with WindowListener
               ),
             ),
             const SizedBox(height: 24),
-            // 确认按钮
+            SizedBox(
+              width: double.infinity,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 32),
+                child: Opacity(
+                  opacity: _isAgreementScrolledToBottom ? 1.0 : 0.5,
+                  child: fluent.FilledButton(
+                    onPressed: () async {
+                      if (!_isAgreementScrolledToBottom) {
+                        return;
+                      }
+                      // 持久化协议确认为 true
+                      final storage = PersistentStorageService();
+                      await storage.setBool('terms_accepted', true);
+                      setState(() => _currentStep = 0); // 返回中转页
+                    },
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                      child: Text(
+                        _isAgreementScrolledToBottom ? '接受协议' : '请先阅读并滚动到底部',
+                        style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 24),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// 构建配置成功页面
+  Widget _buildSuccessPage(BuildContext context, fluent.FluentThemeData theme, bool isDark) {
+    return Center(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 480),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Spacer(),
+            // Emoji 😋
+            const Text(
+              '😋',
+              style: TextStyle(fontSize: 80),
+            ),
+            const SizedBox(height: 32),
+            Text(
+              '配置完成',
+              style: theme.typography.title?.copyWith(
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 16),
+            Text(
+              '一切已经准备就绪，尽情享受您的音乐之旅吧！',
+              style: theme.typography.body?.copyWith(
+                color: isDark ? Colors.white70 : Colors.black54,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const Spacer(),
+            // 进入应用按钮
             SizedBox(
               width: double.infinity,
               child: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 32),
                 child: fluent.FilledButton(
                   onPressed: () async {
-                    // 持久化协议确认为 true
+                    // 记录最终标记
                     final storage = PersistentStorageService();
-                    await storage.setBool('terms_accepted', true);
                     // 退出本地模式
                     await storage.setEnableLocalMode(false);
                     
-                    // 触发监听以切换 DesktopAppGate
+                    // 触发监听以切换 AppGate
                     AudioSourceService().notifyListeners();
                     AuthService().notifyListeners();
                   },
                   child: const Padding(
                     padding: EdgeInsets.symmetric(vertical: 8),
                     child: Text(
-                      '接受协议并进入',
+                      '进入应用',
                       style: TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.w600,
@@ -1027,7 +1109,7 @@ class _DesktopSetupPageState extends State<DesktopSetupPage> with WindowListener
                 ),
               ),
             ),
-            const SizedBox(height: 24),
+            const SizedBox(height: 48),
           ],
         ),
       ),

@@ -133,6 +133,50 @@ class NeteaseRecommendService extends ChangeNotifier {
       'personalizedNewsongs': (d['personalizedNewsongs'] as List<dynamic>? ?? []).cast<Map<String, dynamic>>(),
     };
   }
+
+  Future<Map<String, dynamic>> fetchLikelist() async {
+    final resp = await http.get(Uri.parse(UrlService().neteaseLikelistUrl), headers: _authHeaders()).timeout(const Duration(seconds: 15));
+    if (resp.statusCode != 200) throw Exception('HTTP ${resp.statusCode}');
+    final data = json.decode(utf8.decode(resp.bodyBytes)) as Map<String, dynamic>;
+    if ((data['code'] as num?)?.toInt() != 200) throw Exception('code ${data['code']}');
+    return (data['data'] as Map<String, dynamic>?) ?? {};
+  }
+
+  Future<List<Map<String, dynamic>>> fetchSubscribedAlbums({int limit = 25, int offset = 0}) async {
+    final url = '${UrlService().neteaseAlbumSublistUrl}?limit=$limit&offset=$offset';
+    final resp = await http.get(Uri.parse(url), headers: _authHeaders()).timeout(const Duration(seconds: 15));
+    if (resp.statusCode != 200) throw Exception('HTTP ${resp.statusCode}');
+    final data = json.decode(utf8.decode(resp.bodyBytes)) as Map<String, dynamic>;
+    if ((data['code'] as num?)?.toInt() != 200) throw Exception('code ${data['code']}');
+    return (data['data']?['data'] as List<dynamic>? ?? []).cast<Map<String, dynamic>>();
+  }
+
+  Future<List<Map<String, dynamic>>> fetchSubscribedArtists({int limit = 25, int offset = 0}) async {
+    final url = '${UrlService().neteaseArtistSublistUrl}?limit=$limit&offset=$offset';
+    final resp = await http.get(Uri.parse(url), headers: _authHeaders()).timeout(const Duration(seconds: 15));
+    if (resp.statusCode != 200) throw Exception('HTTP ${resp.statusCode}');
+    final data = json.decode(utf8.decode(resp.bodyBytes)) as Map<String, dynamic>;
+    if ((data['code'] as num?)?.toInt() != 200) throw Exception('code ${data['code']}');
+    return (data['data']?['data'] as List<dynamic>? ?? []).cast<Map<String, dynamic>>();
+  }
+
+  Future<List<Map<String, dynamic>>> fetchTopArtists({int limit = 50, int offset = 0}) async {
+    final url = '${UrlService().neteaseTopArtistUrl}?limit=$limit&offset=$offset';
+    final resp = await http.get(Uri.parse(url), headers: _authHeaders()).timeout(const Duration(seconds: 15));
+    if (resp.statusCode != 200) throw Exception('HTTP ${resp.statusCode}');
+    final data = json.decode(utf8.decode(resp.bodyBytes)) as Map<String, dynamic>;
+    if ((data['status'] as num?)?.toInt() != 200) throw Exception('status ${data['status']}');
+    return (data['artists'] as List<dynamic>? ?? []).cast<Map<String, dynamic>>();
+  }
+
+  Future<List<Map<String, dynamic>>> fetchSubscribedDjs({int limit = 25, int offset = 0}) async {
+    final url = '${UrlService().neteaseDjSublistUrl}?limit=$limit&offset=$offset';
+    final resp = await http.get(Uri.parse(url), headers: _authHeaders()).timeout(const Duration(seconds: 15));
+    if (resp.statusCode != 200) throw Exception('HTTP ${resp.statusCode}');
+    final data = json.decode(utf8.decode(resp.bodyBytes)) as Map<String, dynamic>;
+    if ((data['code'] as num?)?.toInt() != 200) throw Exception('code ${data['code']}');
+    return (data['data']?['djRadios'] as List<dynamic>? ?? []).cast<Map<String, dynamic>>();
+  }
 }
 
 

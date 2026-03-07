@@ -563,8 +563,9 @@ class _SettingsPageState extends State<SettingsPage> {
                 context,
                 isDark: isDark,
                 header: '播放',
-                children: [
-                  const SearchSettings(),
+                children: const [
+                  PlaybackSettings(),
+                  SearchSettings(),
                 ],
               ),
               

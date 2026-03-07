@@ -5,6 +5,7 @@ import 'package:window_manager/window_manager.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:cyrene_music/models/track.dart';
 import 'package:cyrene_music/models/toplist.dart';
+import 'package:cyrene_music/utils/image_utils.dart';
 import 'package:cyrene_music/widgets/track_list_tile.dart';
 import 'package:cyrene_music/utils/theme_manager.dart';
 import 'package:cyrene_music/services/player_service.dart';
@@ -318,6 +319,7 @@ class _ToplistDetailContentFluent extends StatelessWidget {
                   borderRadius: BorderRadius.circular(8),
                   child: CachedNetworkImage(
                     imageUrl: toplist.coverImgUrl,
+                    httpHeaders: getImageHeaders(toplist.coverImgUrl),
                     fit: BoxFit.cover,
                   ),
                 ),
@@ -473,6 +475,7 @@ class _FluentTrackListTileState extends State<_FluentTrackListTile> {
              borderRadius: BorderRadius.circular(4),
              child: CachedNetworkImage(
                imageUrl: widget.track.picUrl,
+               httpHeaders: getImageHeaders(widget.track.picUrl),
                width: 40,
                height: 40,
                fit: BoxFit.cover,
@@ -557,6 +560,7 @@ class _ToplistDetailContent extends StatelessWidget {
                 clipBehavior: Clip.antiAlias,
                 child: CachedNetworkImage(
                   imageUrl: toplist.coverImgUrl,
+                  httpHeaders: getImageHeaders(toplist.coverImgUrl),
                   width: isDesktop ? 96 : 80, // 桌面端稍大
                   height: isDesktop ? 96 : 80,
                   fit: BoxFit.cover,

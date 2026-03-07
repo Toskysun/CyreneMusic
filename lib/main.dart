@@ -119,6 +119,11 @@ Future<void> main() async {
     });
     log(' 持久化存储服务已初始化');
 
+    await timed('ThemeManager.initialize', () async {
+      await ThemeManager().initialize();
+    });
+    log(' 主题服务已初始化');
+
     await timed('DeveloperModeService.initialize', () async {
       await DeveloperModeService().initialize();
     });
@@ -342,6 +347,10 @@ class _MyAppState extends State<MyApp> {
     Future.delayed(const Duration(milliseconds: 500), () {
       _setupAudioSourceCallback();
       _setupHighRefreshRate();
+      // 获取 context 后再次触发初始化以应用系统主题色（如果启用）
+      if (mounted) {
+        ThemeManager().initialize(context);
+      }
     });
   }
 

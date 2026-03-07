@@ -55,11 +55,14 @@ class NeteaseDiscoverService extends ChangeNotifier {
   }
 
   /// 获取歌单详情（含曲目）
-  Future<NeteasePlaylistDetail?> fetchPlaylistDetail(int id) async {
+  Future<NeteasePlaylistDetail?> fetchPlaylistDetail(int id, {int? limit}) async {
     try {
       final baseUrl = UrlService().baseUrl;
-      final url = '$baseUrl/playlist?id=$id';
-      final resp = await http.get(Uri.parse(url)).timeout(const Duration(seconds: 15));
+      var url = '$baseUrl/playlist?id=$id';
+      if (limit != null) {
+        url += '&limit=$limit';
+      }
+      final resp = await http.get(Uri.parse(url)).timeout(const Duration(seconds: 30));
       if (resp.statusCode != 200) {
         throw Exception('HTTP ${resp.statusCode}');
       }

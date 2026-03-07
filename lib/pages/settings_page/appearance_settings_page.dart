@@ -768,6 +768,8 @@ class _AppearanceSettingsContentState extends State<AppearanceSettingsContent> {
         return 'Material Design 3（默认）';
       case MobileThemeFramework.cupertino:
         return 'Cupertino（iOS 风格）';
+      case MobileThemeFramework.oculus:
+        return 'Oculus（现代简约风格）';
     }
   }
 
@@ -1215,6 +1217,15 @@ class _AppearanceSettingsContentState extends State<AppearanceSettingsContent> {
               },
               child: const Text('Cupertino（iOS 风格）'),
             ),
+            CupertinoActionSheetAction(
+              isDefaultAction: ThemeManager().mobileThemeFramework == MobileThemeFramework.oculus,
+              onPressed: () {
+                ThemeManager().setMobileThemeFramework(MobileThemeFramework.oculus);
+                Navigator.pop(context);
+                setState(() {});
+              },
+              child: const Text('Oculus（现代简约风格）'),
+            ),
           ],
           cancelButton: CupertinoActionSheetAction(
             isDestructiveAction: true,
@@ -1250,6 +1261,19 @@ class _AppearanceSettingsContentState extends State<AppearanceSettingsContent> {
                 subtitle: const Text('iOS 原生设计风格'),
                 secondary: const Icon(Icons.phone_iphone),
                 value: MobileThemeFramework.cupertino,
+                groupValue: ThemeManager().mobileThemeFramework,
+                onChanged: (value) {
+                  if (value == null) return;
+                  ThemeManager().setMobileThemeFramework(value);
+                  Navigator.pop(context);
+                  setState(() {});
+                },
+              ),
+              RadioListTile<MobileThemeFramework>(
+                title: const Text('Oculus'),
+                subtitle: const Text('现代简约设计风格'),
+                secondary: const Icon(Icons.blur_on),
+                value: MobileThemeFramework.oculus,
                 groupValue: ThemeManager().mobileThemeFramework,
                 onChanged: (value) {
                   if (value == null) return;

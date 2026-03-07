@@ -141,6 +141,11 @@ class UrlService extends ChangeNotifier {
   String get neteaseQrKeyUrl => '$baseUrl/login/qr/key';
   String get neteaseQrCreateUrl => '$baseUrl/login/qr/create';
   String get neteaseQrCheckUrl => '$baseUrl/login/qr/check';
+  String get neteaseListenTogether => '$baseUrl/listen/together/status';
+  String get neteaseListenTogetherCheck => '$baseUrl/listen/together/play/command';
+  String get neteaseDynamicCover => '$baseUrl/song/dynamic/cover';
+  // 获取网易云副歌时间
+  String get neteaseChorus => '$baseUrl/song/chorus';
 
   // Accounts API
   String get accountsBindingsUrl => '$baseUrl/accounts/bindings';
@@ -160,6 +165,12 @@ class UrlService extends ChangeNotifier {
   String get neteasePlaylistDetailUrl => '$baseUrl/playlist';
   // Netease user playlists (for import)
   String get neteaseUserPlaylistsUrl => '$baseUrl/netease/user/playlists';
+  // Netease Library
+  String get neteaseLikelistUrl => '$baseUrl/netease/likelist';
+  String get neteaseAlbumSublistUrl => '$baseUrl/netease/album/sublist';
+  String get neteaseArtistSublistUrl => '$baseUrl/netease/artist/sublist';
+  String get neteaseTopArtistUrl => '$baseUrl/netease/artist/top';
+  String get neteaseDjSublistUrl => '$baseUrl/netease/dj/sublist';
 
   // QQ Music API
   String get qqSearchUrl => '$baseUrl/qq/search';

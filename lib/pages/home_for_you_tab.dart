@@ -34,13 +34,20 @@ import '../widgets/audio_source_prompt.dart';
 import '../services/audio_source_service.dart';
 import 'settings_page/audio_source_settings.dart';
 import 'auth/auth_page.dart';
+import '../widgets/oculus/oculus_home_widgets.dart';
 
 /// 首页 - 为你推荐 Tab 内容 (优化版)
 class HomeForYouTab extends StatefulWidget {
-  const HomeForYouTab({super.key, this.onOpenPlaylistDetail, this.onOpenDailyDetail});
-
   final void Function(int playlistId)? onOpenPlaylistDetail;
   final void Function(List<Map<String, dynamic>> tracks)? onOpenDailyDetail;
+  final Widget Function(List<Map<String, dynamic>> playlists)? playlistGridBuilder;
+
+  const HomeForYouTab({
+    super.key, 
+    this.onOpenPlaylistDetail, 
+    this.onOpenDailyDetail,
+    this.playlistGridBuilder,
+  });
 
   @override
   State<HomeForYouTab> createState() => _HomeForYouTabState();
@@ -127,7 +134,7 @@ class _HomeForYouTabState extends State<HomeForYouTab> {
     // 未登录状态下显示登录提示
     if (!AuthService().isLoggedIn) {
       return ForYouLoginPrompt(
-        onLoginPressed: () {
+        onLoginPressed: () async { // 修复：增加 async
           // ForYouLoginPrompt 内部已处理登录对话框，这里只需刷新状态
           if (mounted && AuthService().isLoggedIn) {
             setState(() {
@@ -186,6 +193,55 @@ class _HomeForYouTabState extends State<HomeForYouTab> {
         
         // 移动端使用原始布局
         if (isMobile) {
+          final isOculus = themeManager.isOculusFramework;
+          
+          if (isOculus) {
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                OculusGreetingHeader(),
+                OculusHeroSection(
+                  dailySongs: data.dailySongs,
+                  fmList: data.fm,
+                  onOpenDailyDetail: () => widget.onOpenDailyDetail?.call(data.dailySongs),
+                ),
+                OculusQuickActions(),
+                const SizedBox(height: 16),
+                const Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 16),
+                  child: Text(
+                    '推荐歌单',
+                    style: TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.w900,
+                      letterSpacing: -0.5,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                widget.playlistGridBuilder?.call(data.dailyPlaylists) ?? MobilePlaylistGrid(
+                  list: data.dailyPlaylists,
+                  onTap: (id) => widget.onOpenPlaylistDetail?.call(id),
+                ),
+                const SizedBox(height: 24),
+                const Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 16),
+                  child: Text(
+                    '发现新歌',
+                    style: TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.w900,
+                      letterSpacing: -0.5,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                OculusNewSongsWidget(list: data.personalizedNewsongs),
+                const SizedBox(height: 32),
+              ],
+            );
+          }
+
           return Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -199,19 +255,19 @@ class _HomeForYouTabState extends State<HomeForYouTab> {
               MobilePersonalFm(list: data.fm),
               SizedBox(height: isCupertino ? 24 : 32),
               SectionTitle(title: '每日推荐歌单'),
-              MobilePlaylistGrid(
+              widget.playlistGridBuilder?.call(data.dailyPlaylists) ?? MobilePlaylistGrid(
                 list: data.dailyPlaylists,
                 onTap: (id) => widget.onOpenPlaylistDetail?.call(id),
               ),
               SizedBox(height: isCupertino ? 24 : 32),
               SectionTitle(title: '专属歌单'),
-              MobilePlaylistGrid(
+              widget.playlistGridBuilder?.call(data.personalizedPlaylists) ?? MobilePlaylistGrid(
                 list: data.personalizedPlaylists,
                 onTap: (id) => widget.onOpenPlaylistDetail?.call(id),
               ),
               SizedBox(height: isCupertino ? 24 : 32),
               SectionTitle(title: '雷达歌单'),
-              MobilePlaylistGrid(
+              widget.playlistGridBuilder?.call(data.radarPlaylists) ?? MobilePlaylistGrid(
                 list: data.radarPlaylists,
                 onTap: (id) => widget.onOpenPlaylistDetail?.call(id),
               ),

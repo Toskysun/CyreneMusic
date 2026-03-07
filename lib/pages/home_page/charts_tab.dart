@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:fluent_ui/fluent_ui.dart' as fluent;
 import 'package:cached_network_image/cached_network_image.dart';
+import '../../utils/image_utils.dart';
 import '../../models/track.dart';
 import '../../models/toplist.dart';
 import '../../services/player_service.dart';
@@ -9,6 +10,7 @@ import '../../services/music_service.dart';
 import '../../utils/theme_manager.dart';
 import 'home_widgets.dart';
 import 'toplist_detail.dart';
+import '../../widgets/oculus/oculus_home_widgets.dart';
 import '../../widgets/skeleton_loader.dart';
 
 class ChartsTab extends StatelessWidget {
@@ -286,6 +288,7 @@ class _FeaturedCardState extends State<_FeaturedCard> {
                   curve: Curves.easeOutCubic,
                   child: CachedNetworkImage(
                     imageUrl: widget.track.picUrl,
+                    httpHeaders: getImageHeaders(widget.track.picUrl),
                     fit: BoxFit.cover,
                     placeholder: (context, url) => Container(
                       color: Colors.grey[800],
@@ -400,6 +403,36 @@ class _ToplistSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    if (ThemeManager().isOculusFramework) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          OculusSectionHeader(
+            title: toplist.name,
+            onMoreTap: () => showToplistDetail(context, toplist),
+            moreLabel: '全部',
+          ),
+          const SizedBox(height: 12),
+          SizedBox(
+            height: 220,
+            child: ListView.separated(
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.symmetric(horizontal: 4),
+              itemCount: toplist.tracks.take(12).length,
+              separatorBuilder: (c, i) => const SizedBox(width: 16),
+              itemBuilder: (context, index) {
+                return _ToplistTrackCard(
+                  track: toplist.tracks[index],
+                  rank: index,
+                  checkLoginStatus: checkLoginStatus,
+                );
+              },
+            ),
+          ),
+        ],
+      );
+    }
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -509,6 +542,7 @@ class _ToplistTrackCardState extends State<_ToplistTrackCard> {
                         duration: const Duration(milliseconds: 200),
                         child: CachedNetworkImage(
                           imageUrl: widget.track.picUrl,
+                          httpHeaders: getImageHeaders(widget.track.picUrl),
                           fit: BoxFit.cover,
                         ),
                       ),

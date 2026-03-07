@@ -19,6 +19,8 @@ class ProxyService {
 
   bool get isRunning => _isRunning;
   int get port => _port;
+  int? _lastUpstreamStatus;
+  int? get lastUpstreamStatus => _lastUpstreamStatus;
 
   /// 启动代理服务器
   Future<bool> start() async {
@@ -42,8 +44,8 @@ class ProxyService {
           );
           _port = port;
           _isRunning = true;
-          print('✅ [ProxyService] 代理服务器已启动: http://localhost:$_port');
-          DeveloperModeService().addLog('✅ [ProxyService] 代理服务器已启动: http://localhost:$_port');
+          print('✅ [ProxyService] 代理服务器已启动: http://127.0.0.1:$_port');
+          DeveloperModeService().addLog('✅ [ProxyService] 代理服务器已启动: http://127.0.0.1:$_port');
           return true;
         } catch (e) {
           print('⚠️ [ProxyService] 端口 $port 启动失败: $e');
@@ -179,6 +181,7 @@ class ProxyService {
       }
 
       final upstreamStatus = streamedResponse.statusCode;
+      _lastUpstreamStatus = upstreamStatus;
       final upstreamContentRange = streamedResponse.headers['content-range'];
       final upstreamContentLength = streamedResponse.headers['content-length'];
 
@@ -355,8 +358,11 @@ class ProxyService {
       return originalUrl;
     }
     
+    // 重置状态，避免旧的 404 影响后续播放
+    _lastUpstreamStatus = null;
+    
     final encodedUrl = Uri.encodeComponent(originalUrl);
-    final proxyUrl = 'http://localhost:$_port/proxy?url=$encodedUrl&platform=$platform';
+    final proxyUrl = 'http://127.0.0.1:$_port/proxy?url=$encodedUrl&platform=$platform';
     
     print('🔗 [ProxyService] 生成代理 URL: $proxyUrl');
     DeveloperModeService().addLog('🔗 [ProxyService] 生成代理 URL (端口: $_port, 平台: $platform)');

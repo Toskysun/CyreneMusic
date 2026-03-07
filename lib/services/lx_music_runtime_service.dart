@@ -56,12 +56,16 @@ class LxMusicRuntimeService {
   /// 脚本初始化时解析的每个平台音质映射（临时保存）
   Map<String, List<String>> _pendingPlatformQualities = {};
 
+  /// 记录最后一次 HTTP 请求的原始响应体（用于排查洛雪音源问题）
+  String? _lastResponseBody;
+
 
   // ==================== Getters ====================
   
   bool get isInitialized => _isInitialized;
   bool get isScriptReady => _isScriptReady;
   LxScriptInfo? get currentScript => _currentScript;
+  String? get lastResponseBody => _lastResponseBody;
 
   // ==================== 生命周期 ====================
 
@@ -140,6 +144,7 @@ class LxMusicRuntimeService {
     _isScriptReady = false;
     _currentScript = null;
     _pendingRequests.clear();
+    _lastResponseBody = null;
     
     await _headlessWebView?.dispose();
     _headlessWebView = null;
@@ -262,11 +267,27 @@ class LxMusicRuntimeService {
 
     try {
       // 构建音乐信息
-      final info = musicInfo ?? {
-        'songmid': songId.toString(),
-        'copyrightId': songId.toString(),
-        'hash': songId.toString(),
-      };
+      Map<String, dynamic> info;
+      if (musicInfo != null) {
+        info = musicInfo;
+      } else {
+        final idStr = songId.toString();
+        // 🛠️ 洛雪音源修复：解析拼接的酷狗 ID (hash:album_id)
+        if (source == 'kg' && idStr.contains(':')) {
+          final parts = idStr.split(':');
+          info = {
+            'hash': parts[0].toUpperCase(),
+            'albumId': parts.length > 1 ? parts[1] : '',
+            'songmid': parts[0].toUpperCase(), // 备用
+          };
+        } else {
+          info = {
+            'songmid': idStr,
+            'copyrightId': idStr,
+            'hash': idStr,
+          };
+        }
+      }
 
       final requestData = jsonEncode({
         'requestKey': requestKey,
@@ -299,7 +320,7 @@ class LxMusicRuntimeService {
     } catch (e) {
       print('❌ [LxMusicRuntime] 获取 URL 失败: $e');
       _pendingRequests.remove(requestKey);
-      return null;
+      rethrow;
     }
   }
 
@@ -473,7 +494,19 @@ class LxMusicRuntimeService {
         },
         'body': result['body'],
       });
-      
+
+      // 详细调试日志：打印 API 返回的响应体
+      // print('🌐 [WebView Console] "API Response: " ${jsonEncode(result['body'])}');
+
+      // 记录最后一次成功的响应体
+      if (result['body'] != null) {
+        if (result['body'] is Map || result['body'] is List) {
+          _lastResponseBody = jsonEncode(result['body']);
+        } else {
+          _lastResponseBody = result['body'].toString();
+        }
+      }
+
       await _webViewController?.evaluateJavascript(source: '''
         window.__lx_handleHttpResponse__($responseData);
       ''');

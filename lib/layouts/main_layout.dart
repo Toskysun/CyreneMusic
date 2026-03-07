@@ -8,6 +8,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import '../widgets/custom_title_bar.dart';
 import '../widgets/cupertino/cupertino_bottom_nav.dart';
+import '../widgets/oculus/oculus_bottom_nav.dart';
 import '../widgets/mini_player.dart';
 import '../pages/home_page.dart';
 import '../pages/discover_page.dart';
@@ -498,6 +499,7 @@ class _MainLayoutState extends State<MainLayout>
     
     final colorScheme = Theme.of(context).colorScheme;
     final isCupertinoUI = (Platform.isIOS || Platform.isAndroid) && ThemeManager().isCupertinoFramework;
+    final isOculusUI = (Platform.isIOS || Platform.isAndroid) && ThemeManager().isOculusFramework;
 
     return PopScope(
       canPop: false, // 始终拦截返回键
@@ -526,7 +528,7 @@ class _MainLayoutState extends State<MainLayout>
             Positioned(
               left: 0,
               right: 0,
-              bottom: isCupertinoUI ? 80 : 0, // Cupertino 模式下给悬浮 Tab 栏留空间
+              bottom: isOculusUI ? 100 : (isCupertinoUI ? 80 : 0), // Oculus 全宽底栏较高
               child: AnimatedBuilder(
                 animation: PlayerService(),
                 builder: (context, child) {
@@ -546,10 +548,18 @@ class _MainLayoutState extends State<MainLayout>
                 bottom: 0,
                 child: _buildCupertinoTabBar(context),
               ),
+            // Oculus 悬浮胶囊 Tab 栏
+            if (isOculusUI)
+              Positioned(
+                left: 0,
+                right: 0,
+                bottom: 0,
+                child: _buildOculusTabBar(context),
+              ),
           ],
         ),
-        // 非 Cupertino 模式使用 bottomNavigationBar
-        bottomNavigationBar: isCupertinoUI 
+        // 非悬浮模式使用 bottomNavigationBar
+        bottomNavigationBar: (isCupertinoUI || isOculusUI) 
             ? null
             : _buildGlassBottomNavigationBar(context),
       ),
@@ -765,6 +775,75 @@ class _MainLayoutState extends State<MainLayout>
       },
       showSupport: isPortrait,
       showDev: DeveloperModeService().isDeveloperMode,
+    );
+  }
+
+  /// 构建 Oculus 风格的悬浮精致底部导航栏
+  Widget _buildOculusTabBar(BuildContext context) {
+    final isLocalMode = PersistentStorageService().enableLocalMode;
+    final int myIndex = _pages.indexWhere((w) => w is MyPage);
+    
+    // Tab 项目数据
+    final List<OculusNavItem> tabItems = isLocalMode
+        ? [
+            const OculusNavItem(
+              svgAsset: 'assets/ui/FluentColorHistory16.svg',
+              label: '本地',
+            ),
+            const OculusNavItem(
+              svgAsset: 'assets/ui/FluentColorSettings16.svg',
+              label: '设置',
+            ),
+          ]
+        : [
+            const OculusNavItem(
+              svgAsset: 'assets/ui/FluentColorHome16.svg',
+              label: '首页',
+            ),
+            const OculusNavItem(
+              svgAsset: 'assets/ui/FluentColorSearchSparkle16.svg',
+              label: '发现',
+            ),
+            const OculusNavItem(
+              svgAsset: 'assets/ui/FluentColorPerson16.svg',
+              label: '我的',
+            ),
+            const OculusNavItem(
+              svgAsset: 'assets/ui/FluentColorAppsList20.svg',
+              label: '更多',
+            ),
+          ];
+
+    int navSelectedIndex() {
+      if (isLocalMode) return _selectedIndex;
+      if (_selectedIndex == 0) return 0;
+      if (_selectedIndex == 1) return 1;
+      if (_selectedIndex == myIndex) return 2;
+      return tabItems.length - 1; // 更多
+    }
+
+    return OculusBottomNavigationBar(
+      currentIndex: navSelectedIndex(),
+      onTap: (index) async {
+        if (isLocalMode) {
+          setState(() => _selectedIndex = index);
+          PageVisibilityNotifier().setCurrentPage(index);
+          return;
+        }
+
+        final int moreTab = tabItems.length - 1;
+        if (index == moreTab) {
+          await _openMoreBottomSheet(context);
+          return;
+        }
+
+        int targetIndex = index;
+        if (index == 2) targetIndex = myIndex;
+        
+        setState(() => _selectedIndex = targetIndex);
+        PageVisibilityNotifier().setCurrentPage(targetIndex);
+      },
+      items: tabItems,
     );
   }
 

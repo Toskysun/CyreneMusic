@@ -137,6 +137,7 @@ class _DiscoverPlaylistDetailContentState
     _coverProviderCache.clear();
     final detail = await NeteaseDiscoverService().fetchPlaylistDetail(
       widget.playlistId,
+      limit: 1000,
     );
     if (!mounted) return;
     setState(() {

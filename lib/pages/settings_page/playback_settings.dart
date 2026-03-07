@@ -10,7 +10,7 @@ import '../../models/song_detail.dart';
 import '../../utils/theme_manager.dart';
 import '../../widgets/material/material_settings_widgets.dart';
 import 'equalizer_page.dart';
-
+import '../../services/persistent_storage_service.dart';
 
 /// 播放设置组件
 class PlaybackSettings extends StatelessWidget {
@@ -26,10 +26,11 @@ class PlaybackSettings extends StatelessWidget {
     final isFluent = fluent_ui.FluentTheme.maybeOf(context) != null;
     final isCupertino = ThemeManager().isCupertinoFramework;
     final qualityService = AudioQualityService();
+    final storageService = PersistentStorageService();
 
     // 使用 ListenableBuilder 监听音质变化，实现实时刷新
     return ListenableBuilder(
-      listenable: qualityService,
+      listenable: Listenable.merge([qualityService, storageService]),
       builder: (context, child) {
         if (isFluent) {
           return FluentSettingsGroup(
@@ -43,6 +44,14 @@ class PlaybackSettings extends StatelessWidget {
                 trailing: const Icon(Icons.chevron_right),
                 onTap: () => _showAudioQualityDialogFluent(context),
               ),
+              fluent_ui.SizedBox(height: 8),
+              FluentSwitchTile(
+                icon: Icons.vpn_key_outlined,
+                title: '代理播放',
+                subtitle: '关闭时，播放受限音乐将不再使用本地代理，而是直连播放',
+                value: storageService.enableQqProxy,
+                onChanged: (value) => storageService.setEnableQqProxy(value),
+              ),
             ],
           );
         }
@@ -50,7 +59,7 @@ class PlaybackSettings extends StatelessWidget {
         if (isCupertino) {
           return Column(
             children: [
-              _buildCupertinoUI(context, qualityService),
+              _buildCupertinoUI(context, qualityService, storageService),
             ],
           );
         }
@@ -64,6 +73,13 @@ class PlaybackSettings extends StatelessWidget {
               trailing: const Icon(Icons.chevron_right),
               onTap: () => _showAudioQualityDialog(context),
             ),
+            MD3SwitchTile(
+              leading: const Icon(Icons.vpn_key_outlined),
+              title: '代理播放',
+              subtitle: '关闭时，播放受限音乐将不再使用本地代理，而是直连播放',
+              value: storageService.enableQqProxy,
+              onChanged: (value) => storageService.setEnableQqProxy(value),
+            ),
           ],
         );
       },
@@ -71,14 +87,27 @@ class PlaybackSettings extends StatelessWidget {
   }
 
   /// 构建 Cupertino UI 版本
-  Widget _buildCupertinoUI(BuildContext context, AudioQualityService qualityService) {
-    return CupertinoSettingsTile(
-      icon: CupertinoIcons.music_note_2,
-      iconColor: CupertinoColors.systemPurple,
-      title: '音质选择',
-      subtitle: '${qualityService.getQualityName()} - ${qualityService.getQualityDescription()}',
-      showChevron: true,
-      onTap: () => _showAudioQualityDialogCupertino(context),
+  Widget _buildCupertinoUI(BuildContext context, AudioQualityService qualityService, PersistentStorageService storageService) {
+    return Column(
+      children: [
+        CupertinoSettingsTile(
+          icon: CupertinoIcons.music_note_2,
+          iconColor: CupertinoColors.systemPurple,
+          title: '音质选择',
+          subtitle: '${qualityService.getQualityName()} - ${qualityService.getQualityDescription()}',
+          showChevron: true,
+          onTap: () => _showAudioQualityDialogCupertino(context),
+        ),
+        const SizedBox(height: 8),
+        CupertinoSwitchTile(
+          icon: CupertinoIcons.shield,
+          iconColor: CupertinoColors.systemBlue,
+          title: '代理播放',
+          subtitle: '关闭时，播放受限音乐将不再使用本地代理，而是直连播放',
+          value: storageService.enableQqProxy,
+          onChanged: (value) => storageService.setEnableQqProxy(value ?? false),
+        ),
+      ],
     );
   }
 

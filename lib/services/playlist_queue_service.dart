@@ -1,7 +1,9 @@
+import 'dart:convert';
 import 'dart:math';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart' show ImageProvider;
 import '../models/track.dart';
+import 'persistent_storage_service.dart';
 
 /// 播放队列来源
 enum QueueSource {
@@ -274,12 +276,56 @@ class PlaylistQueueService extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// 获取队列信息（用于显示）
-  String getQueueInfo() {
-    if (_queue.isEmpty) {
-      return '无播放队列';
+  /// 导出队列数据为 JSON
+  Map<String, dynamic> exportQueue() {
+    return {
+      'queue': _queue.map((t) => t.toJson()).toList(),
+      'currentIndex': _currentIndex,
+      'source': _source.index,
+    };
+  }
+
+  /// 从 JSON 导入队列数据
+  void importQueue(Map<String, dynamic> data) {
+    try {
+      final List<dynamic> tracksJson = data['queue'] as List<dynamic>;
+      _queue = tracksJson.map((t) => Track.fromJson(t as Map<String, dynamic>)).toList();
+      _currentIndex = data['currentIndex'] as int;
+      final sourceIndex = data['source'] as int;
+      _source = QueueSource.values[sourceIndex];
+      _shuffledIndices.clear();
+      _shufflePosition = -1;
+      notifyListeners();
+      print('🎵 [PlaylistQueueService] 已从 JSON 恢复队列: ${_queue.length} 首歌曲');
+    } catch (e) {
+      print('❌ [PlaylistQueueService] 恢复队列失败: $e');
     }
-    return '${_source.name} (${_currentIndex + 1}/${_queue.length})';
+  }
+
+  /// 保存当前队列到本地存储
+  void saveQueue() {
+    if (_queue.isEmpty) return;
+    try {
+      final data = json.encode(exportQueue());
+      PersistentStorageService().setString('last_playback_queue', data);
+      print('💾 [PlaylistQueueService] 播放队列已保存到本地');
+    } catch (e) {
+      print('❌ [PlaylistQueueService] 保存队列失败: $e');
+    }
+  }
+
+  /// 从本地存储恢复队列
+  void restoreQueue() {
+    final dataStr = PersistentStorageService().getString('last_playback_queue');
+    if (dataStr != null && dataStr.isNotEmpty) {
+      try {
+        final data = json.decode(dataStr) as Map<String, dynamic>;
+        importQueue(data);
+        print('✅ [PlaylistQueueService] 播放队列已从本地恢复');
+      } catch (e) {
+        print('❌ [PlaylistQueueService] 解析本地队列数据失败: $e');
+      }
+    }
   }
 }
 

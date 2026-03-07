@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../../utils/theme_manager.dart';
+import '../../utils/image_utils.dart';
 
 /// 歌单网格（移动端）
 class MobilePlaylistGrid extends StatelessWidget {
@@ -107,6 +108,7 @@ class _MobileHoverPlaylistCardState extends State<MobileHoverPlaylistCard> {
                                   tag: 'playlist_cover_${widget.id}',
                                   child: CachedNetworkImage(
                                     imageUrl: widget.picUrl,
+                                    httpHeaders: getImageHeaders(widget.picUrl),
                                     fit: BoxFit.cover,
                                     placeholder: (context, url) => Container(
                                       color: CupertinoColors.systemGrey6,
@@ -213,6 +215,7 @@ class _MobileHoverPlaylistCardState extends State<MobileHoverPlaylistCard> {
                             tag: 'playlist_cover_${widget.id}',
                             child: CachedNetworkImage(
                               imageUrl: widget.picUrl,
+                              httpHeaders: getImageHeaders(widget.picUrl),
                               fit: BoxFit.cover,
                               placeholder: (context, url) => Container(
                                 color: cs.surfaceContainerHighest,

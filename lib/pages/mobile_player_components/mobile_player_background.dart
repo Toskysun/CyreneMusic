@@ -11,6 +11,7 @@ import '../../models/song_detail.dart';
 import '../../widgets/video_background_player.dart';
 import '../../widgets/mesh_gradient_background.dart';
 import '../../widgets/flowing_light_background.dart';
+import '../../utils/image_utils.dart';
 
 /// 动态背景颜色缓存管理器（移动端）
 /// 现在使用 ColorExtractionService 的缓存
@@ -321,7 +322,7 @@ class _MobilePlayerBackgroundState extends State<MobilePlayerBackground> {
             
             if (imageUrl != null && imageUrl.isNotEmpty) {
                if (imageUrl.startsWith('http')) {
-                 imageProvider = CachedNetworkImageProvider(imageUrl);
+                 imageProvider = CachedNetworkImageProvider(imageUrl, headers: getImageHeaders(imageUrl));
                } else {
                  imageProvider = FileImage(File(imageUrl));
                }
@@ -553,6 +554,7 @@ class _MobilePlayerBackgroundState extends State<MobilePlayerBackground> {
     if (isNetwork) {
       return CachedNetworkImage(
         imageUrl: imageUrl,
+        httpHeaders: getImageHeaders(imageUrl),
         fit: BoxFit.cover,
         placeholder: (context, url) => Container(
           color: Colors.grey[900],

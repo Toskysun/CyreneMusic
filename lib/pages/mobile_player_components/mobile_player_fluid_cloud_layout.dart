@@ -20,6 +20,7 @@ import '../../services/audio_quality_service.dart';
 import '../../services/audio_source_service.dart';
 import '../../utils/toast_utils.dart';
 import '../../models/song_detail.dart';
+import '../../widgets/dynamic_cover_widget.dart';
 
 /// 移动端流体云播放器布局
 /// 参考 HTML 设计：统一在同一页面显示歌曲信息、歌词、控制按钮
@@ -715,23 +716,32 @@ class _MobilePlayerFluidCloudLayoutState extends State<MobilePlayerFluidCloudLay
   
   /// 横屏进度条 (用于左侧)
   Widget _buildLandscapeProgressBar(PlayerService player, double width) {
-    return AnimatedBuilder(
-      animation: player.positionNotifier,
-      builder: (context, _) {
-        final position = player.positionNotifier.value.inMilliseconds.toDouble();
-        final duration = player.duration.inMilliseconds.toDouble();
-        final progress = (duration > 0) ? (position / duration).clamp(0.0, 1.0) : 0.0;
+    return ValueListenableBuilder<List<Map<String, int>>?>(
+      valueListenable: player.chorusTimesNotifier,
+      builder: (context, chorusTimes, child) {
+        return AnimatedBuilder(
+          animation: player.positionNotifier,
+          builder: (context, _) {
+            final position = player.positionNotifier.value.inMilliseconds.toDouble();
+            final durationMs = player.duration.inMilliseconds.toDouble();
+            final progress = (durationMs > 0) ? (position / durationMs).clamp(0.0, 1.0) : 0.0;
 
-        return SizedBox(
-          width: width,
-          height: 24, // 增加点击热区
-          child: _AppleMusicSlider(
-            value: progress,
-            onChanged: (v) {
-              final pos = Duration(milliseconds: (v * duration).round());
-              player.seek(pos);
-            },
-          ),
+            return SizedBox(
+              width: width,
+              height: 24, // 增加点击热区
+              child: _AppleMusicSlider(
+                value: progress,
+                onChanged: (v) {
+                  final pos = Duration(milliseconds: (v * durationMs).round());
+                  player.seek(pos);
+                },
+                durationMs: durationMs,
+                activeColor: Colors.white,
+                inactiveColor: const Color(0x1FFFFFFF),
+                chorusTimes: chorusTimes,
+              ),
+            );
+          },
         );
       },
     );
@@ -968,26 +978,35 @@ class _MobilePlayerFluidCloudLayoutState extends State<MobilePlayerFluidCloudLay
           // 进度条
           Column(
             children: [
-              // 进度条 - Apple Music 风格
-              AnimatedBuilder(
-                animation: player.positionNotifier,
-                builder: (context, _) {
-                  final position = player.positionNotifier.value.inMilliseconds.toDouble();
-                  final duration = player.duration.inMilliseconds.toDouble();
-                  final value = (duration > 0) ? (position / duration).clamp(0.0, 1.0) : 0.0;
-                  
-                  return SizedBox(
-                     height: 24, // 增加点击热区
-                     child: _AppleMusicSlider(
-                        value: value,
-                        onChanged: (v) {
-                          final pos = Duration(milliseconds: (v * duration).round());
-                          player.seek(pos);
-                        },
-                      ),
-                  );
-                },
-              ),
+            // 进度条 - Apple Music 风格
+            ValueListenableBuilder<List<Map<String, int>>?>(
+              valueListenable: player.chorusTimesNotifier,
+              builder: (context, chorusTimes, child) {
+                return AnimatedBuilder(
+                  animation: player.positionNotifier,
+                  builder: (context, _) {
+                    final position = player.positionNotifier.value.inMilliseconds.toDouble();
+                    final durationMs = player.duration.inMilliseconds.toDouble();
+                    final value = (durationMs > 0) ? (position / durationMs).clamp(0.0, 1.0) : 0.0;
+                    
+                    return SizedBox(
+                       height: 24, // 增加点击热区
+                       child: _AppleMusicSlider(
+                          value: value,
+                          onChanged: (v) {
+                            final pos = Duration(milliseconds: (v * durationMs).round());
+                            player.seek(pos);
+                          },
+                          durationMs: durationMs,
+                          activeColor: Colors.white,
+                          inactiveColor: const Color(0x1FFFFFFF),
+                          chorusTimes: chorusTimes,
+                        ),
+                    );
+                  },
+                );
+              },
+            ),
               
               const SizedBox(height: 8),
 
@@ -1266,32 +1285,13 @@ class _MobilePlayerFluidCloudLayoutState extends State<MobilePlayerFluidCloudLay
     );
   }
 
-  /// 构建封面图片（支持网络 URL 和本地文件路径）
+  /// 构建封面图片（支持网络 URL、本地文件路径及动态视频封面）
   Widget _buildCoverImage(String imageUrl) {
-    // 判断是网络 URL 还是本地文件路径
-    final isNetwork = imageUrl.startsWith('http://') || imageUrl.startsWith('https://');
-    
-    if (isNetwork) {
-      return CachedNetworkImage(
-        imageUrl: imageUrl,
-        fit: BoxFit.cover,
-        placeholder: (context, url) => Container(color: Colors.grey[900]),
-        errorWidget: (context, url, error) => Container(
-          color: Colors.grey[900],
-          child: const Icon(Icons.music_note, color: Colors.white54),
-        ),
-      );
-    } else {
-      // 本地文件
-      return Image.file(
-        File(imageUrl),
-        fit: BoxFit.cover,
-        errorBuilder: (context, error, stackTrace) => Container(
-          color: Colors.grey[900],
-          child: const Icon(Icons.music_note, color: Colors.white54),
-        ),
-      );
-    }
+    return DynamicCoverWidget(
+      imageUrl: imageUrl,
+      width: double.infinity,
+      height: double.infinity,
+    );
   }
 }
 
@@ -1668,19 +1668,23 @@ class _DownloadButtonState extends State<_DownloadButton> {
 /// 3. 使用圆形滑块，触摸拖动时放大
 class _AppleMusicSlider extends StatefulWidget {
   final double value;
-  final ValueChanged<double>? onChanged;
   final double min;
   final double max;
+  final ValueChanged<double>? onChanged;
   final Color activeColor;
   final Color inactiveColor;
+  final List<Map<String, int>>? chorusTimes;
+  final double? durationMs;
 
   const _AppleMusicSlider({
     required this.value,
-    required this.onChanged,
     this.min = 0.0,
     this.max = 1.0,
-    this.activeColor = Colors.white,
-    this.inactiveColor = const Color(0x1FFFFFFF), // 约 12% 不透明度
+    required this.onChanged,
+    required this.activeColor,
+    required this.inactiveColor,
+    this.chorusTimes,
+    this.durationMs,
   });
 
   @override
@@ -1689,7 +1693,8 @@ class _AppleMusicSlider extends StatefulWidget {
 
 class _AppleMusicSliderState extends State<_AppleMusicSlider> with SingleTickerProviderStateMixin {
   bool _isInteracting = false;
-  double? _dragValue; // 用于处理移动端拖动时的平滑感
+  double? _dragValue; // 保存拖动过程中的临时进度
+  
   late AnimationController _controller;
   late Animation<double> _animation;
 
@@ -1700,6 +1705,7 @@ class _AppleMusicSliderState extends State<_AppleMusicSlider> with SingleTickerP
       vsync: this,
       duration: const Duration(milliseconds: 200),
     );
+    // 动画用于控制圆点大小和透明度
     _animation = CurvedAnimation(
       parent: _controller,
       curve: Curves.easeOutCubic,
@@ -1715,23 +1721,29 @@ class _AppleMusicSliderState extends State<_AppleMusicSlider> with SingleTickerP
   @override
   Widget build(BuildContext context) {
     return AnimatedBuilder(
-      animation: _animation,
+      animation: _controller,
       builder: (context, child) {
-        // 交互时 active track 变亮
-        final currentActiveColor = widget.activeColor.withOpacity(
-          lerpDouble(0.45, 0.8, _animation.value) ?? 0.45
-        );
-            
+        // 未交互时，由于圆点完全隐藏，我们使用稍微不同的颜色方案
+        // 交互时，已播放轨道变得明显更亮，背景轨道也略微变亮
+        final currentActiveColor = Color.lerp(
+          widget.activeColor.withOpacity(0.55), // 未交互时较淡
+          widget.activeColor.withOpacity(0.9),  // 交互时较亮
+          _animation.value
+        ) ?? widget.activeColor;
+        
         final currentInactiveColor = Color.lerp(
-          widget.inactiveColor,
-          Colors.white.withOpacity(0.3),
+          widget.inactiveColor, // 未交互时使用传入极低透明度
+          Colors.white.withOpacity(0.25), // 交互时背景轨道显得更清晰一点
           _animation.value
         ) ?? widget.inactiveColor;
 
         return SliderTheme(
           data: SliderThemeData(
             trackHeight: 6, 
-            trackShape: const RoundedRectSliderTrackShape(),
+            trackShape: _ChorusSliderTrackShape(
+              chorusTimes: widget.chorusTimes,
+              durationMs: widget.durationMs ?? widget.max,
+            ),
             thumbShape: _AppleMusicThumbShape(
               scale: _animation.value, // 完全跟随动画，未交互时为 0 (隐藏)
               opacity: _animation.value,
@@ -1768,6 +1780,83 @@ class _AppleMusicSliderState extends State<_AppleMusicSlider> with SingleTickerP
         );
       }
     );
+  }
+}
+
+/// 自定义轨道，支持渲染副歌高亮区间
+class _ChorusSliderTrackShape extends RoundedRectSliderTrackShape {
+  final List<Map<String, int>>? chorusTimes;
+  final double durationMs;
+
+  const _ChorusSliderTrackShape({
+    this.chorusTimes,
+    required this.durationMs,
+  });
+
+  @override
+  void paint(
+    PaintingContext context,
+    Offset offset, {
+    required RenderBox parentBox,
+    required SliderThemeData sliderTheme,
+    required Animation<double> enableAnimation,
+    required TextDirection textDirection,
+    required Offset thumbCenter,
+    Offset? secondaryOffset,
+    bool isDiscrete = false,
+    bool isEnabled = false,
+    double additionalActiveTrackHeight = 2.0,
+  }) {
+    // 1. 绘制原始的背景轨和已播放轨
+    super.paint(
+      context,
+      offset,
+      parentBox: parentBox,
+      sliderTheme: sliderTheme,
+      enableAnimation: enableAnimation,
+      textDirection: textDirection,
+      thumbCenter: thumbCenter,
+      secondaryOffset: secondaryOffset,
+      isDiscrete: isDiscrete,
+      isEnabled: isEnabled,
+      additionalActiveTrackHeight: additionalActiveTrackHeight,
+    );
+
+    if (durationMs <= 0 || chorusTimes == null || chorusTimes!.isEmpty) return;
+
+    // 2. 在上方绘制副歌高亮区间
+    final Rect trackRect = getPreferredRect(
+      parentBox: parentBox,
+      offset: offset,
+      sliderTheme: sliderTheme,
+      isEnabled: isEnabled,
+      isDiscrete: isDiscrete,
+    );
+    
+    final Paint chorusPaint = Paint()
+      ..color = Colors.white.withOpacity(0.5)
+      ..style = PaintingStyle.fill;
+      
+    final double trackWidth = trackRect.width;
+
+    for (final chorus in chorusTimes!) {
+      final startTimeMs = chorus['startTime']?.toDouble() ?? 0.0;
+      final endTimeMs = chorus['endTime']?.toDouble() ?? 0.0;
+      if (startTimeMs >= endTimeMs) continue;
+
+      final startFraction = (startTimeMs / durationMs).clamp(0.0, 1.0);
+      final endFraction = (endTimeMs / durationMs).clamp(0.0, 1.0);
+      
+      final startX = trackRect.left + startFraction * trackWidth;
+      final endX = trackRect.left + endFraction * trackWidth;
+      
+      final chorusRect = RRect.fromRectAndRadius(
+        Rect.fromLTRB(startX, trackRect.top, endX, trackRect.bottom),
+        const Radius.circular(3.0),
+      );
+
+      context.canvas.drawRRect(chorusRect, chorusPaint);
+    }
   }
 }
 

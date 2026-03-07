@@ -21,11 +21,17 @@ class MobileSetupPage extends StatefulWidget {
 class _MobileSetupPageState extends State<MobileSetupPage> {
   /// 引导步骤
   /// 0 = 主题选择
-  /// 1 = 欢迎/音源配置入口
-  /// 2 = 音源配置中
-  /// 3 = 登录中
-  /// 4 = 协议确认中
+  /// 1 = 协议确认
+  /// 2 = 欢迎/引导中转（音源/登录入口）
+  /// 3 = 音源配置中
+  /// 4 = 登录中
+  /// 5 = 配置完成 (成功页)
   int _currentStep = 0;
+  
+  /// 协议阅读滚动控制器
+  late final ScrollController _agreementScrollController;
+  /// 协议是否已读到底部
+  bool _isAgreementScrolledToBottom = false;
   
   /// 主题是否已选择
   bool _themeSelected = false;
@@ -33,6 +39,8 @@ class _MobileSetupPageState extends State<MobileSetupPage> {
   @override
   void initState() {
     super.initState();
+    _agreementScrollController = ScrollController();
+    _agreementScrollController.addListener(_onAgreementScroll);
     // 检查主题是否已配置过
     _checkThemeConfigured();
     // 监听音源配置和登录状态变化
@@ -44,31 +52,54 @@ class _MobileSetupPageState extends State<MobileSetupPage> {
   void _checkThemeConfigured() {
     final storage = PersistentStorageService();
     final hasThemeConfig = storage.containsKey('mobile_theme_framework');
+    final termsAccepted = storage.getBool('terms_accepted') ?? false;
+
     if (hasThemeConfig) {
-      setState(() {
-        _themeSelected = true;
-        _currentStep = 1; // 跳到音源配置步骤
-      });
+      if (!termsAccepted) {
+        setState(() {
+          _themeSelected = true;
+          _currentStep = 1; // 去协议页
+        });
+      } else {
+        setState(() {
+          _themeSelected = true;
+          _currentStep = 2; // 去中转页
+        });
+      }
     }
   }
 
   @override
   void dispose() {
+    _agreementScrollController.removeListener(_onAgreementScroll);
+    _agreementScrollController.dispose();
     AudioSourceService().removeListener(_onStateChanged);
     AuthService().removeListener(_onStateChanged);
     super.dispose();
   }
 
+  void _onAgreementScroll() {
+    if (!_isAgreementScrolledToBottom && _agreementScrollController.hasClients) {
+      // 这里的阈值可以根据需要调整，通常偏离底部 20 像素以内即视为到底部
+      if (_agreementScrollController.position.pixels >= 
+          _agreementScrollController.position.maxScrollExtent - 20) {
+        setState(() {
+          _isAgreementScrolledToBottom = true;
+        });
+      }
+    }
+  }
+
   void _onStateChanged() {
     if (mounted) {
       setState(() {
-        // 如果音源已配置且在配置步骤，自动进入下一步
-        if (_currentStep == 2 && AudioSourceService().isConfigured) {
-          _currentStep = 1; // 返回欢迎页（音源入口）
+        // 如果音源已配置且在配置步骤，自动回到中转页
+        if (_currentStep == 3 && AudioSourceService().isConfigured) {
+          _currentStep = 2;
         }
-        // 如果登录已完成且在登录步骤，自动进入协议页
-        if (_currentStep == 3 && AuthService().isLoggedIn) {
-          _currentStep = 4; 
+        // 如果登录已完成且在登录步骤，自动进入成功页
+        if (_currentStep == 4 && AuthService().isLoggedIn) {
+          _currentStep = 5; 
         }
       });
     }
@@ -86,25 +117,30 @@ class _MobileSetupPageState extends State<MobileSetupPage> {
       return _buildThemeSelectionPage(context, isDark);
     }
 
+    // 协议确认页面
+    if (_currentStep == 1) {
+      return _buildAgreementPage(context, isCupertino, colorScheme, isDark);
+    }
+
     // 音源配置页面
-    if (_currentStep == 2) {
+    if (_currentStep == 3) {
       return AudioSourceSettingsContent(
-        onBack: () => setState(() => _currentStep = 1),
+        onBack: () => setState(() => _currentStep = 2),
         embed: false,
       );
     }
 
     // 登录页面
-    if (_currentStep == 3) {
+    if (_currentStep == 4) {
       return _buildLoginPage(context, isCupertino, isDark);
     }
 
-    // 协议确认页面
-    if (_currentStep == 4) {
-      return _buildAgreementPage(context, isCupertino, colorScheme, isDark);
+    // 配置完成成功页面
+    if (_currentStep == 5) {
+      return _buildSuccessPage(context, isCupertino, colorScheme, isDark);
     }
 
-    // 欢迎/引导页面（音源配置入口）
+    // 欢迎/引导页面（音源/登录中转）
     return _buildWelcomePage(context, isCupertino, colorScheme, isDark);
   }
 
@@ -294,7 +330,7 @@ class _MobileSetupPageState extends State<MobileSetupPage> {
     
     setState(() {
       _themeSelected = true;
-      _currentStep = 1; // 进入音源配置入口
+      _currentStep = 1; // 进入协议确认
     });
   }
 
@@ -315,19 +351,19 @@ class _MobileSetupPageState extends State<MobileSetupPage> {
       title = '欢迎使用 Cyrene Music';
       subtitle = '开始前，请先配置音源以解锁全部功能';
       buttonText = '配置音源';
-      onButtonPressed = () => setState(() => _currentStep = 2);
+      onButtonPressed = () => setState(() => _currentStep = 3);
     } else if (!isLoggedIn) {
       // 第二步：登录
       title = '音源配置完成 ✓';
       subtitle = '登录账号以同步您的收藏和播放记录';
       buttonText = '登录 / 注册';
-      onButtonPressed = () => setState(() => _currentStep = 3);
+      onButtonPressed = () => setState(() => _currentStep = 4);
     } else {
       // 全部完成（理论上不会到达这里，因为 main.dart 会跳转）
       title = '准备就绪!';
       subtitle = '开始探索音乐世界吧';
-      buttonText = '下一步';
-      onButtonPressed = () => setState(() => _currentStep = 4);
+      buttonText = '进入应用';
+      onButtonPressed = () => setState(() => _currentStep = 5);
       showSkip = false;
     }
 
@@ -463,24 +499,24 @@ class _MobileSetupPageState extends State<MobileSetupPage> {
               ? (isDark ? Colors.white54 : Colors.black38)
               : (isDark ? Colors.white24 : Colors.black12),
         ),
-        // 音源配置步骤
+        // 用户协议步骤
         _buildStepDot(
-          isCompleted: audioConfigured,
-          isCurrent: themeSelected && !audioConfigured,
+          isCompleted: (PersistentStorageService().getBool('terms_accepted') ?? false),
+          isCurrent: themeSelected && !(PersistentStorageService().getBool('terms_accepted') ?? false),
           isDark: isDark,
           currentStepColor: currentStepColor,
         ),
         Container(
           width: 32,
           height: 2,
-          color: audioConfigured 
+          color: (PersistentStorageService().getBool('terms_accepted') ?? false)
               ? (isDark ? Colors.white54 : Colors.black38)
               : (isDark ? Colors.white24 : Colors.black12),
         ),
-        // 登录步骤
+        // 音源/登录步骤（合并展示或作为主流程）
         _buildStepDot(
-          isCompleted: isLoggedIn,
-          isCurrent: audioConfigured && !isLoggedIn,
+          isCompleted: audioConfigured && isLoggedIn,
+          isCurrent: themeSelected && (PersistentStorageService().getBool('terms_accepted') ?? false) && (!audioConfigured || !isLoggedIn),
           isDark: isDark,
           currentStepColor: currentStepColor,
         ),
@@ -526,7 +562,7 @@ class _MobileSetupPageState extends State<MobileSetupPage> {
           ? CupertinoNavigationBar(
               leading: CupertinoButton(
                 padding: EdgeInsets.zero,
-                onPressed: () => setState(() => _currentStep = 1),
+                onPressed: () => setState(() => _currentStep = 2),
                 child: const Icon(CupertinoIcons.back),
               ),
               middle: const Text('登录'),
@@ -536,7 +572,7 @@ class _MobileSetupPageState extends State<MobileSetupPage> {
           : AppBar(
               leading: IconButton(
                 icon: const Icon(Icons.arrow_back),
-                onPressed: () => setState(() => _currentStep = 1),
+                onPressed: () => setState(() => _currentStep = 2),
               ),
               title: const Text('登录'),
               backgroundColor: Colors.transparent,
@@ -651,16 +687,16 @@ class _MobileSetupPageState extends State<MobileSetupPage> {
         child: Column(
           children: [
             const SizedBox(height: 48),
-            // Emoji 😋
+            // Emoji 📑
             const Center(
               child: Text(
-                '😋',
+                '📑',
                 style: TextStyle(fontSize: 64),
               ),
             ),
             const SizedBox(height: 24),
             Text(
-              '配置完成',
+              '用户协议',
               style: TextStyle(
                 fontSize: 28,
                 fontWeight: FontWeight.bold,
@@ -671,7 +707,7 @@ class _MobileSetupPageState extends State<MobileSetupPage> {
             const Padding(
               padding: EdgeInsets.symmetric(horizontal: 32),
               child: Text(
-                '在开始之前，请认真看完它：',
+                '在开始使用前，请认真阅读以下协议：',
                 style: TextStyle(
                   fontSize: 16,
                   fontWeight: FontWeight.w600,
@@ -694,6 +730,7 @@ class _MobileSetupPageState extends State<MobileSetupPage> {
                   ),
                 ),
                 child: SingleChildScrollView(
+                  controller: _agreementScrollController,
                   physics: const BouncingScrollPhysics(),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -754,14 +791,85 @@ class _MobileSetupPageState extends State<MobileSetupPage> {
             // 确认按钮
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 32),
+              child: Opacity(
+                opacity: _isAgreementScrolledToBottom ? 1.0 : 0.5,
+                child: _buildMainButton(
+                  context, 
+                  isCupertino, 
+                  _isAgreementScrolledToBottom ? '接受协议' : '请先阅读并滚动到底部', 
+                  () async {
+                    if (!_isAgreementScrolledToBottom) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('请将协议内容滑动到底部后再接受')),
+                      );
+                      return;
+                    }
+                    // 持久化协议确认为 true
+                    final storage = PersistentStorageService();
+                    await storage.setBool('terms_accepted', true);
+                    setState(() {
+                      _currentStep = 2; // 进入中转页
+                    });
+                  }
+                ),
+              ),
+            ),
+            const SizedBox(height: 24),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// 构建配置成功页面
+  Widget _buildSuccessPage(BuildContext context, bool isCupertino, ColorScheme colorScheme, bool isDark) {
+    return Scaffold(
+      backgroundColor: isCupertino
+          ? (isDark ? CupertinoColors.black : CupertinoColors.systemGroupedBackground)
+          : colorScheme.surface,
+      body: SafeArea(
+        child: Column(
+          children: [
+            const Spacer(),
+            // Emoji 😋
+            const Center(
+              child: Text(
+                '😋',
+                style: TextStyle(fontSize: 80),
+              ),
+            ),
+            const SizedBox(height: 32),
+            Text(
+              '配置完成',
+              style: TextStyle(
+                fontSize: 32,
+                fontWeight: FontWeight.bold,
+                color: isDark ? Colors.white : Colors.black87,
+              ),
+            ),
+            const SizedBox(height: 16),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 48),
+              child: Text(
+                '一切已经准备就绪，尽情享受您的音乐之旅吧！',
+                style: TextStyle(
+                  fontSize: 16,
+                  color: isDark ? Colors.white70 : Colors.black54,
+                ),
+                textAlign: TextAlign.center,
+              ),
+            ),
+            const Spacer(),
+            // 进入应用按钮
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 32),
               child: _buildMainButton(
                 context, 
                 isCupertino, 
-                '接受协议并进入', 
+                '进入应用', 
                 () async {
-                  // 持久化协议确认为 true
+                  // 记录最终标记（已由 terms_accepted 等驱动）
                   final storage = PersistentStorageService();
-                  await storage.setBool('terms_accepted', true);
                   // 退出本地模式，显示全功能界面
                   await storage.setEnableLocalMode(false);
                   
@@ -771,7 +879,7 @@ class _MobileSetupPageState extends State<MobileSetupPage> {
                 }
               ),
             ),
-            const SizedBox(height: 24),
+            const SizedBox(height: 48),
           ],
         ),
       ),

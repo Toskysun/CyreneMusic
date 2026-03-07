@@ -8,6 +8,7 @@ import '../../models/song_detail.dart';
 import '../../widgets/search_widget.dart';
 import '../../services/netease_artist_service.dart';
 import '../artist_detail_page.dart';
+import '../../widgets/dynamic_cover_widget.dart';
 
 /// 移动端播放器歌曲信息组件
 /// 显示专辑封面、歌曲名称、艺术家等信息
@@ -130,56 +131,13 @@ class MobilePlayerSongInfo extends StatelessWidget {
     );
   }
 
-  /// 构建优化的封面图片，优先使用预取的 Provider 避免重复加载
+  /// 构建优化的封面图片，支持动态视频封面
   Widget _buildOptimizedCover(String imageUrl, double coverSize) {
-    // 优先使用播放前由列表项传入并已预取的 Provider，避免再次网络请求
-    final provider = PlayerService().currentCoverImageProvider;
-    if (provider != null) {
-      return Image(
-        image: provider,
-        fit: BoxFit.cover,
-      );
-    }
-
-    // 检查是否为网络图片
-    final isNetwork = imageUrl.startsWith('http') || imageUrl.startsWith('https');
-
-    if (!isNetwork) {
-      // 本地文件
-      return Image.file(
-        File(imageUrl),
-        fit: BoxFit.cover,
-        errorBuilder: (context, error, stackTrace) => Container(
-          color: Colors.grey[900],
-          child: Icon(
-            Icons.music_note,
-            size: coverSize * 0.3,
-            color: Colors.white30,
-          ),
-        ),
-      );
-    }
-
-    // 回退到 CachedNetworkImage（首次加载或 Provider 不可用时）
-    return CachedNetworkImage(
+    return DynamicCoverWidget(
       imageUrl: imageUrl,
-      fit: BoxFit.cover,
-      placeholder: (context, url) => Container(
-        color: Colors.grey[900],
-        child: const Center(
-          child: CircularProgressIndicator(
-            color: Colors.white30,
-          ),
-        ),
-      ),
-      errorWidget: (context, url, error) => Container(
-        color: Colors.grey[900],
-        child: Icon(
-          Icons.music_note,
-          size: coverSize * 0.3,
-          color: Colors.white30,
-        ),
-      ),
+      width: coverSize,
+      height: coverSize,
+      borderRadius: BorderRadius.circular(12),
     );
   }
 

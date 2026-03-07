@@ -10,6 +10,7 @@ import '../../models/song_detail.dart';
 import '../../widgets/search_widget.dart';
 import '../../services/netease_artist_service.dart';
 import '../artist_detail_page.dart';
+import '../../widgets/dynamic_cover_widget.dart';
 
 /// 播放器歌曲信息面板
 /// 显示专辑封面、歌曲名称、艺术家和专辑信息
@@ -110,26 +111,11 @@ class PlayerSongInfo extends StatelessWidget {
       );
     }
 
-    return CachedNetworkImage(
+    return DynamicCoverWidget(
       imageUrl: imageUrl,
-      fit: BoxFit.cover,
-      placeholder: (context, url) => Container(
-        color: Colors.grey[800],
-        child: const Center(
-          child: SizedBox(
-            width: 50,
-            height: 50,
-            child: CircularProgressIndicator(
-              strokeWidth: 3,
-              color: Colors.white54,
-            ),
-          ),
-        ),
-      ),
-      errorWidget: (context, url, error) => Container(
-        color: Colors.grey[800],
-        child: const Icon(Icons.music_note, size: 100, color: Colors.white54),
-      ),
+      width: 320,
+      height: 320,
+      borderRadius: BorderRadius.circular(20),
     );
   }
 

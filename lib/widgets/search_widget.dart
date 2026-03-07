@@ -693,7 +693,7 @@ class _SearchWidgetState extends State<SearchWidget> {
     final isMergeEnabled = DeveloperModeService().isSearchResultMergeEnabled;
     final tabs = isMergeEnabled 
         ? ['歌曲', '歌手'] 
-        : ['网易云', 'Apple', 'Spotify', 'QQ音乐', '酷狗', '酷我', '歌手'];
+        : _getPlatformTabs();
     final brightness = isDark ? Brightness.dark : Brightness.light;
 
     return Column(

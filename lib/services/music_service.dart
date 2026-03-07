@@ -11,6 +11,7 @@ import 'developer_mode_service.dart';
 import 'audio_quality_service.dart';
 import 'auth_service.dart';
 import 'lx_music_runtime_service.dart';
+import '../utils/toast_utils.dart';
 
 /// 音乐服务 - 处理与音乐相关的API请求
 class MusicService extends ChangeNotifier {
@@ -29,6 +30,10 @@ class MusicService extends ChangeNotifier {
   /// 错误信息
   String? _errorMessage;
   String? get errorMessage => _errorMessage;
+
+  /// 最近一次请求的原始响应体（用于错误排查）
+  String? _lastRawResponse;
+  String? get lastRawResponse => _lastRawResponse;
 
   /// 数据是否已缓存（是否已成功加载过）
   bool _isCached = false;
@@ -250,8 +255,9 @@ class MusicService extends ChangeNotifier {
         DeveloperModeService().addLog('🔄 [MusicService] 音质降级到 ${effectiveQuality.displayName}');
       }
       
-      String url;
+      String url = ''; // 初始化
       http.Response response;
+      _lastRawResponse = null; // 清空旧数据
       
       switch (source) {
         case MusicSource.netease:
@@ -277,9 +283,11 @@ class MusicService extends ChangeNotifier {
             const Duration(seconds: 15),
             onTimeout: () {
               DeveloperModeService().addLog('⏱️ [Network] 请求超时 (15s)');
+              _lastRawResponse = '请求超时 (15s)';
               throw Exception('请求超时');
             },
           );
+          _lastRawResponse = utf8.decode(response.bodyBytes);
           break;
 
         case MusicSource.apple:
@@ -298,9 +306,11 @@ class MusicService extends ChangeNotifier {
             const Duration(seconds: 15),
             onTimeout: () {
               DeveloperModeService().addLog('⏱️ [Network] 请求超时 (15s)');
+              _lastRawResponse = '请求超时 (15s)';
               throw Exception('请求超时');
             },
           );
+          _lastRawResponse = utf8.decode(response.bodyBytes);
           break;
 
         case MusicSource.qq:
@@ -318,9 +328,11 @@ class MusicService extends ChangeNotifier {
             const Duration(seconds: 15),
             onTimeout: () {
               DeveloperModeService().addLog('⏱️ [Network] 请求超时 (15s)');
+              _lastRawResponse = '请求超时 (15s)';
               throw Exception('请求超时');
             },
           );
+          _lastRawResponse = utf8.decode(response.bodyBytes);
           break;
 
         case MusicSource.kugou:
@@ -330,24 +342,27 @@ class MusicService extends ChangeNotifier {
           // 2. "hash" 或 "hash:album_audio_id" - 来自歌单导入（备用）
           final songIdStr = songId.toString();
           if (songIdStr.contains(':')) {
-            // 格式: "hash:album_audio_id" - 使用hash值
+            // 🛠️ 格式: "hash:album_audio_id" - 提取并传递双参数
             final parts = songIdStr.split(':');
-            final hash = parts[0].toUpperCase(); // 确保hash为大写
+            final hash = parts[0].toUpperCase();
+            final albumAudioId = parts.length > 1 ? parts[1] : '';
+            
             if (hash.isEmpty) {
               throw Exception('酷狗歌曲hash值不能为空');
             }
+            
             url = '$baseUrl/kugou/song?hash=$hash';
+            if (albumAudioId.isNotEmpty) {
+              url += '&album_audio_id=$albumAudioId';
+            }
           } else {
             // 判断是hash还是emixsongid
-            // hash通常是32位十六进制字符串，emixsongid通常是其他格式
             final idStr = songIdStr.toUpperCase();
             final isHash = idStr.length == 32 && RegExp(r'^[0-9A-F]+$').hasMatch(idStr);
             
             if (isHash) {
-              // 32位十六进制字符串，是hash
               url = '$baseUrl/kugou/song?hash=$idStr';
             } else {
-              // 否则是emixsongid（优先使用，更稳定）
               url = '$baseUrl/kugou/song?emixsongid=$songId';
             }
           }
@@ -365,9 +380,11 @@ class MusicService extends ChangeNotifier {
             const Duration(seconds: 15),
             onTimeout: () {
               DeveloperModeService().addLog('⏱️ [Network] 请求超时 (15s)');
+              _lastRawResponse = '请求超时 (15s)';
               throw Exception('请求超时');
             },
           );
+          _lastRawResponse = utf8.decode(response.bodyBytes);
           break;
 
         case MusicSource.kuwo:
@@ -385,9 +402,11 @@ class MusicService extends ChangeNotifier {
             const Duration(seconds: 15),
             onTimeout: () {
               DeveloperModeService().addLog('⏱️ [Network] 请求超时 (15s)');
+              _lastRawResponse = '请求超时 (15s)';
               throw Exception('请求超时');
             },
           );
+          _lastRawResponse = utf8.decode(response.bodyBytes);
           break;
 
         case MusicSource.spotify:
@@ -406,8 +425,15 @@ class MusicService extends ChangeNotifier {
       print('🎵 [MusicService] 歌曲详情响应状态码: ${response.statusCode}');
       DeveloperModeService().addLog('📥 [Network] 状态码: ${response.statusCode}');
 
+      final responseBody = utf8.decode(response.bodyBytes);
+      // 无论成功还是失败，均记录原始响应
       if (response.statusCode == 200) {
-        final responseBody = utf8.decode(response.bodyBytes);
+        _lastRawResponse = responseBody;
+      } else {
+        _lastRawResponse = 'HTTP 状态码: ${response.statusCode}\n响应内容: $responseBody';
+      }
+
+      if (response.statusCode == 200) {
         final truncatedBody = responseBody.length > 500 
             ? '${responseBody.substring(0, 500)}...' 
             : responseBody;
@@ -472,10 +498,10 @@ class MusicService extends ChangeNotifier {
             String bitrate = '';
             if (musicUrls != null) {
               // 使用 AudioQualityService 选择最佳音质
-              playUrl = AudioQualityService().selectBestQQMusicUrl(musicUrls) ?? '';
+              playUrl = AudioQualityService().selectBestQQMusicUrl(musicUrls, quality) ?? '';
               
               // 获取对应的 bitrate 信息
-              final qualityKey = AudioQualityService().getQQMusicQualityKey();
+              final qualityKey = AudioQualityService().getQQMusicQualityKey(quality);
               if (musicUrls[qualityKey] != null) {
                 bitrate = musicUrls[qualityKey]['bitrate'] ?? qualityKey;
               } else {
@@ -549,6 +575,23 @@ class MusicService extends ChangeNotifier {
             final bitrateValue = song['bitrate'];
             final bitrate = bitrateValue != null ? '${bitrateValue}kbps' : '未知';
             
+            // 🌟 核心修改：统一通过独立的 `/lyrics/kugou` 接口获取歌词
+            String lyricText = song['lyric'] ?? '';
+            String tlyricText = '';
+            try {
+              final lyricData = await _fetchLyricFromBackend(source, songId);
+              if (lyricData != null) {
+                // 如果通过接口成功获取，则覆盖默认值
+                if ((lyricData['lyric'] ?? '').isNotEmpty) {
+                  lyricText = lyricData['lyric']!;
+                }
+                tlyricText = lyricData['tlyric'] ?? '';
+                print('📝 [MusicService] 酷狗音乐通过独立接口获取歌词成功: ${lyricText.length} 字符');
+              }
+            } catch (e) {
+              print('⚠️ [MusicService] 酷狗独立歌词接口请求失败，降级使用详情返回: $e');
+            }
+            
             songDetail = SongDetail(
               id: songId, // 使用传入的 emixsongid
               name: song['name'] ?? '',
@@ -558,8 +601,8 @@ class MusicService extends ChangeNotifier {
               level: bitrate,
               size: song['duration']?.toString() ?? '0', // 使用 duration 字段
               url: song['url'] ?? '',
-              lyric: song['lyric'] ?? '',
-              tlyric: '', // 酷狗音乐没有翻译歌词
+              lyric: lyricText,
+              tlyric: tlyricText,
               source: source,
             );
           } else if (source == MusicSource.kuwo) {
@@ -681,6 +724,102 @@ class MusicService extends ChangeNotifier {
     } catch (e) {
       print('❌ [MusicService] 获取歌曲详情异常: $e');
       DeveloperModeService().addLog('❌ [MusicService] 异常: $e');
+      _lastRawResponse = e.toString();
+      return null;
+    }
+  }
+
+  /// 获取网易云音乐副歌时间
+  /// 
+  /// 仅支持网易云音乐，返回歌曲的副歌时间段列表
+  Future<List<Map<String, int>>?> fetchChorusTime(dynamic songId) async {
+    try {
+      final url = '${UrlService().neteaseChorus}?id=$songId';
+      
+      print('🎵 [MusicService] 尝试获取副歌时间: $url');
+      DeveloperModeService().addLog('🌐 [Network] GET $url');
+
+      final response = await http.get(
+        Uri.parse(url),
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      ).timeout(
+        const Duration(seconds: 15),
+        onTimeout: () {
+          DeveloperModeService().addLog('⏱️ [Network] 副歌时间请求超时 (15s)');
+          throw Exception('请求超时');
+        },
+      );
+
+      DeveloperModeService().addLog('📥 [Network] 副歌状态码: ${response.statusCode}');
+
+      if (response.statusCode == 200) {
+        final data = json.decode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
+        
+        if (data['code'] == 200 && data['chorus'] != null) {
+          final chorusTimes = <Map<String, int>>[];
+          // 解析 JSON 中的副歌时间
+          for (final item in data['chorus']) {
+             final start = item['startTime'] as int?;
+             final end = item['endTime'] as int?;
+             if (start != null && end != null) {
+               chorusTimes.add({'startTime': start, 'endTime': end});
+             }
+          }
+          return chorusTimes.isNotEmpty ? chorusTimes : null;
+        }
+      }
+      return null;
+    } catch (e) {
+      print('❌ [MusicService] 获取副歌时间失败: $e');
+      DeveloperModeService().addLog('❌ [MusicService] 获取副歌时间失败: $e');
+      return null;
+    }
+  }
+
+  /// 获取网易云音乐动态封面
+  /// 
+  /// 仅支持网易云音乐，如果存在动态视频封面，返回视频的播放链接。
+  Future<String?> fetchDynamicCover(dynamic songId) async {
+    try {
+      final baseUrl = UrlService().baseUrl;
+      final url = '${UrlService().neteaseDynamicCover}?id=$songId';
+      
+      print('🎵 [MusicService] 尝试获取动态封面: $url');
+      DeveloperModeService().addLog('🌐 [Network] GET $url');
+
+      final response = await http.get(
+        Uri.parse(url),
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      ).timeout(
+        const Duration(seconds: 15),
+        onTimeout: () {
+          DeveloperModeService().addLog('⏱️ [Network] 动态封面请求超时 (15s)');
+          throw Exception('请求超时');
+        },
+      );
+
+      DeveloperModeService().addLog('📥 [Network] 动态封面状态码: ${response.statusCode}');
+
+      if (response.statusCode == 200) {
+        final data = json.decode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
+        
+        if (data['status'] == 200 && data['data'] != null) {
+          final videoUrl = data['data']['videoPlayUrl'];
+          if (videoUrl != null && videoUrl.toString().isNotEmpty) {
+            print('✅ [MusicService] 成功获取动态封面视频链接');
+            DeveloperModeService().addLog('✅ [MusicService] 获取动态封面URL成功');
+            return videoUrl.toString();
+          }
+        }
+      }
+      return null;
+    } catch (e) {
+      print('❌ [MusicService] 获取动态封面失败: $e');
+      DeveloperModeService().addLog('❌ [MusicService] 获取动态封面异常: $e');
       return null;
     }
   }
@@ -715,6 +854,8 @@ class MusicService extends ChangeNotifier {
     final sourceCode = audioSourceService.getLxSourceCode(source);
     final lxQuality = audioSourceService.getLxQuality(quality);
     
+    _lastRawResponse = null; // 请求前清空
+    
     try {
       final runtime = LxMusicRuntimeService();
       
@@ -732,7 +873,6 @@ class MusicService extends ChangeNotifier {
       // 等待脚本就绪 (如果正在加载中)
       if (!runtime.isScriptReady) {
         print('⏳ [MusicService] 等待洛雪脚本就绪...');
-        // 简单等待一下，实际应该由 initializeLxRuntime 保证
         await Future.delayed(const Duration(milliseconds: 500));
         if (!runtime.isScriptReady) {
            throw Exception('洛雪音源脚本未就绪，请检查脚本是否有效');
@@ -747,18 +887,29 @@ class MusicService extends ChangeNotifier {
         songId: lxSongId,
         quality: lxQuality,
       );
-
-      if (audioUrl == null || audioUrl.isEmpty) {
-        print('❌ [MusicService] 洛雪音源返回空 URL');
-        DeveloperModeService().addLog('❌ [MusicService] 返回空 URL');
+      
+      // 记录成功的响应
+      print('✅ [MusicService] 洛雪音源获取操作完成');
+      
+      // 验证返回的 URL 是否合法
+      if (!_isValidUrl(audioUrl)) {
+        print('❌ [MusicService] 洛雪音源返回了无效 URL 或错误提示: $audioUrl');
+        DeveloperModeService().addLog('❌ [MusicService] 无效 URL: $audioUrl');
+        
+        // 尝试获取脚本内部请求的原始响应以供排查
+        final lastBody = runtime.lastResponseBody;
+        if (lastBody != null && lastBody.isNotEmpty) {
+          _lastRawResponse = '洛雪脚本解析失败。\n脚本返回结果: $audioUrl\n\n内部请求原始响应:\n$lastBody';
+        } else {
+          _lastRawResponse = '洛雪脚本解析失败。\n脚本返回结果: $audioUrl';
+        }
         return null;
       }
 
-      print('✅ [MusicService] 洛雪音源获取成功');
-      print('   🔗 URL: ${audioUrl.length > 50 ? "${audioUrl.substring(0, 50)}..." : audioUrl}');
+      _lastRawResponse = audioUrl;
       DeveloperModeService().addLog('✅ [MusicService] 获取成功');
 
-      // 🎵 尝试从后端歌词 API 获取歌词
+      // (后续歌词获取逻辑保持不变...)
       String lyric = '';
       String tlyric = '';
       String qrc = '';
@@ -770,17 +921,11 @@ class MusicService extends ChangeNotifier {
           tlyric = lyricData['tlyric'] ?? '';
           qrc = lyricData['qrc'] ?? '';
           qrcTrans = lyricData['qrcTrans'] ?? '';
-          print('📝 [MusicService] 成功从后端获取歌词: ${lyric.length} 字符');
-          if (qrc.isNotEmpty) {
-            print('   逐字歌词(QRC): ${qrc.length} 字符');
-          }
         }
       } catch (e) {
         print('⚠️ [MusicService] 获取歌词失败（不影响播放）: $e');
       }
 
-      // 洛雪音源只返回 URL，创建一个简化的 SongDetail
-      // 注意：歌曲元数据（名称、艺术家、封面等）需要从其他地方获取
       return SongDetail(
         id: songId,
         name: '', // 需要从 Track 信息获取
@@ -789,7 +934,7 @@ class MusicService extends ChangeNotifier {
         alName: '', // 需要从 Track 信息获取
         level: lxQuality,
         size: '0',
-        url: audioUrl,
+        url: audioUrl!,
         lyric: lyric,
         tlyric: tlyric,
         qrc: qrc,
@@ -800,6 +945,7 @@ class MusicService extends ChangeNotifier {
       if (e is UnsupportedError) rethrow;
       print('❌ [MusicService] 洛雪音源异常: $e');
       DeveloperModeService().addLog('❌ [MusicService] 异常: $e');
+      _lastRawResponse = '洛雪脚本异常: $e';
       return null;
     }
   }
@@ -822,12 +968,20 @@ class MusicService extends ChangeNotifier {
         url = '$baseUrl/lyrics/qq?id=$songId';
         break;
       case MusicSource.kugou:
-        // 酷狗可能使用 hash 或 emixsongid
+        // 🛠️ 酷狗逻辑优化：支持拼接 ID (hash:album_id) 并强制使用 platform=lite
         final idStr = songId.toString();
-        if (idStr.length == 32 && RegExp(r'^[0-9A-Fa-f]+$').hasMatch(idStr)) {
-          url = '$baseUrl/lyrics/kugou?hash=$idStr';
+        String hash;
+        if (idStr.contains(':')) {
+          hash = idStr.split(':')[0].toUpperCase();
         } else {
-          url = '$baseUrl/lyrics/kugou?emixsongid=$songId';
+          hash = idStr.toUpperCase();
+        }
+
+        final isHash = hash.length == 32 && RegExp(r'^[0-9A-F]+$').hasMatch(hash);
+        if (isHash) {
+          url = '$baseUrl/lyrics/kugou?hash=$hash&platform=lite';
+        } else {
+          url = '$baseUrl/lyrics/kugou?emixsongid=$songId&platform=lite';
         }
         break;
       case MusicSource.kuwo:
@@ -1078,6 +1232,9 @@ class MusicService extends ChangeNotifier {
     final url = '$baseUrl/spotify/stream/$songId';
 
     DeveloperModeService().addLog('🌐 [Network] GET $url');
+    
+    // 显示解密提示
+    ToastUtils.show('正在请求解密流，请耐心等待（通常需要10s左右）...');
 
     try {
       final response = await http.get(Uri.parse(url)).timeout(
@@ -1107,6 +1264,7 @@ class MusicService extends ChangeNotifier {
             url: streamData['url'] ?? streamData['proxyUrl'] ?? '',
             lyric: streamData['lyric'] ?? '',
             tlyric: '', // Spotify 通常无翻译
+            decryptionKey: streamData['decryptionKey'],
             source: MusicSource.spotify,
           );
         }
@@ -1117,6 +1275,27 @@ class MusicService extends ChangeNotifier {
       DeveloperModeService().addLog('❌ [MusicService] Spotify异常: $e');
       return null;
     }
+  }
+
+  /// 验证 URL 是否为合法的播放链接
+  bool _isValidUrl(String? url) {
+    if (url == null || url.isEmpty) return false;
+    
+    // 如果包含“失败”、“到期”、“错误”等关键词，很可能是错误提示文本而非链接
+    final lowerUrl = url.toLowerCase();
+    if (lowerUrl.contains('失败') || 
+        lowerUrl.contains('错误') || 
+        lowerUrl.contains('到期') || 
+        lowerUrl.contains('验证码') ||
+        lowerUrl.contains('上限')) {
+      return false;
+    }
+
+    // 合法的链接应该以常见的协议头开头
+    return url.startsWith('http://') || 
+           url.startsWith('https://') || 
+           url.startsWith('rtmp://') ||
+           url.startsWith('mms://');
   }
 }
 

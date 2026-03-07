@@ -195,10 +195,10 @@ class SearchService extends ChangeNotifier {
           final results = (data['result'] as List<dynamic>)
               .map((item) => Track(
                     id: item['id'] as int,
-                    name: item['name'] as String,
-                    artists: item['artists'] as String,
-                    album: item['album'] as String,
-                    picUrl: item['picUrl'] as String,
+                    name: item['name'] as String? ?? '',
+                    artists: item['artists'] as String? ?? '',
+                    album: item['album'] as String? ?? '',
+                    picUrl: item['picUrl'] as String? ?? '',
                     source: MusicSource.netease,
                   ))
               .toList();
@@ -250,10 +250,10 @@ class SearchService extends ChangeNotifier {
           final results = (data['result'] as List<dynamic>)
               .map((item) => Track(
                     id: item['id'],
-                    name: item['name'] as String,
-                    artists: item['artists'] as String,
-                    album: item['album'] as String,
-                    picUrl: item['picUrl'] as String,
+                    name: item['name'] as String? ?? '',
+                    artists: item['artists'] as String? ?? '',
+                    album: item['album'] as String? ?? '',
+                    picUrl: item['picUrl'] as String? ?? '',
                     source: MusicSource.apple,
                   ))
               .toList();
@@ -302,11 +302,11 @@ class SearchService extends ChangeNotifier {
         if (data['status'] == 200) {
           final results = (data['result'] as List<dynamic>)
               .map((item) => Track(
-                    id: item['mid'] as String,  // QQ音乐使用 mid
-                    name: item['name'] as String,
-                    artists: item['singer'] as String,
-                    album: item['album'] as String,
-                    picUrl: item['pic'] as String,
+                    id: item['mid'] as String? ?? '',  // QQ音乐使用 mid
+                    name: item['name'] as String? ?? '',
+                    artists: item['singer'] as String? ?? '',
+                    album: item['album'] as String? ?? '',
+                    picUrl: item['pic'] as String? ?? '',
                     source: MusicSource.qq,
                   ))
               .toList();
@@ -338,8 +338,8 @@ class SearchService extends ChangeNotifier {
     try {
       print('🎼 [SearchService] 酷狗音乐搜索: $keyword');
       
-      final baseUrl = UrlService().baseUrl;
-      final url = '$baseUrl/kugou/search?keywords=${Uri.encodeComponent(keyword)}';
+      final url = AudioSourceService().buildKugouSearchUrl(keyword, limit: 30);
+      print('🔍 [SearchService] 酷狗搜索 URL: $url');
 
       final response = await http.get(
         Uri.parse(url),
@@ -354,14 +354,26 @@ class SearchService extends ChangeNotifier {
         
         if (data['status'] == 200) {
           final results = (data['result'] as List<dynamic>)
-              .map((item) => Track(
-                    id: item['emixsongid'] as String,  // 酷狗使用 emixsongid
-                    name: item['name'] as String,
-                    artists: item['singer'] as String,
-                    album: item['album'] as String,
-                    picUrl: item['pic'] as String,
-                    source: MusicSource.kugou,
-                  ))
+              .map((item) {
+                final emixsongid = item['emixsongid'] as String? ?? '';
+                final hash = item['hash'] as String? ?? '';
+                final albumId = item['album_id'] as String? ?? '';
+                
+                // 🛠️ 酷狗逻辑优化：只要有 hash，就拼接 hash 和 album_id
+                // 这样无论是洛雪音源还是 omniparse 的详情接口都能获得最完整的参数
+                final trackId = (hash.isNotEmpty) 
+                    ? '$hash:$albumId' 
+                    : emixsongid;
+
+                return Track(
+                  id: trackId,
+                  name: item['name'] as String? ?? '',
+                  artists: item['singer'] as String? ?? '',
+                  album: item['album'] as String? ?? '',
+                  picUrl: item['pic'] as String? ?? '',
+                  source: MusicSource.kugou,
+                );
+              })
               .toList();
 
           _searchResult = _searchResult.copyWith(
@@ -409,9 +421,9 @@ class SearchService extends ChangeNotifier {
           final songsData = data['data']?['songs'] as List<dynamic>? ?? [];
           final results = songsData
               .map((item) => Track(
-                    id: item['rid'] as int,  // 酷我使用 rid
-                    name: item['name'] as String,
-                    artists: item['artist'] as String,
+                    id: item['rid'] as int? ?? 0,  // 酷我使用 rid
+                    name: item['name'] as String? ?? '',
+                    artists: item['artist'] as String? ?? '',
                     album: item['album'] as String? ?? '',
                     picUrl: item['pic'] as String? ?? '',
                     source: MusicSource.kuwo,

@@ -36,6 +36,7 @@ import 'package:flutter_acrylic/flutter_acrylic.dart';
 import '../services/url_service.dart';
 import '../services/netease_login_service.dart';
 import '../services/auto_update_service.dart';
+import '../services/netease_recommend_service.dart';
 import 'home_for_you_tab.dart';
 import 'discover_playlist_detail_page.dart';
 import 'home_page/daily_recommend_detail_page.dart';
@@ -46,6 +47,7 @@ import '../services/global_back_handler_service.dart';
 import 'home_page/toplist_detail.dart';
 import 'home_page/charts_tab.dart';
 import '../widgets/cupertino/cupertino_home_widgets.dart';
+import '../widgets/oculus/oculus_home_widgets.dart';
 import '../widgets/skeleton_loader.dart';
 
 /// 首页 - 展示音乐和视频内容
@@ -140,6 +142,18 @@ class _HomePageState extends State<HomePage>
         _syncGlobalBackHandler();
       }
     });
+
+    // 🔍 首次进入时检查更新
+    _checkForUpdateOnce();
+  }
+
+
+  void _onOpenDailyDetail(List<Map<String, dynamic>> tracks) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => DailyRecommendDetailPage(tracks: tracks),
+      ),
+    );
   }
 
   void _onAuthChanged() {
@@ -150,6 +164,7 @@ class _HomePageState extends State<HomePage>
       });
       // 登录状态变化时，刷新绑定状态
       _loadBindings();
+
     }
   }
 
@@ -1190,6 +1205,10 @@ class _HomePageState extends State<HomePage>
       return _buildCupertinoHome(context, showTabs);
     }
 
+    if ((Platform.isIOS || Platform.isAndroid) && _themeManager.isOculusFramework) {
+      return _buildOculusHome(context, showTabs);
+    }
+
     // Material Design (default)
     return Theme(
       data: _materialHomeThemeWithFont(theme),
@@ -1233,7 +1252,21 @@ class _HomePageState extends State<HomePage>
       );
     }
 
-    return scaffold;
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      value: SystemUiOverlayStyle(
+        statusBarColor: Colors.transparent,
+        statusBarIconBrightness:
+            Theme.of(context).brightness == Brightness.dark
+                ? Brightness.light
+                : Brightness.dark,
+        systemNavigationBarColor: Colors.transparent,
+        systemNavigationBarIconBrightness:
+            Theme.of(context).brightness == Brightness.dark
+                ? Brightness.light
+                : Brightness.dark,
+      ),
+      child: scaffold,
+    );
   }
 
   /// 构建 iOS Cupertino 风格首页
@@ -1275,7 +1308,192 @@ class _HomePageState extends State<HomePage>
       );
     }
 
-    return pageScaffold;
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      value: SystemUiOverlayStyle(
+        statusBarColor: Colors.transparent,
+        statusBarIconBrightness:
+            CupertinoTheme.of(context).brightness == Brightness.dark
+                ? Brightness.light
+                : Brightness.dark,
+        systemNavigationBarColor: Colors.transparent, // Android only
+        systemNavigationBarIconBrightness: 
+            CupertinoTheme.of(context).brightness == Brightness.dark
+                ? Brightness.light
+                : Brightness.dark,
+      ),
+      child: pageScaffold,
+    );
+  }
+
+  /// 构建 Oculus 风格首页
+  Widget _buildOculusHome(BuildContext context, bool showTabs) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      value: SystemUiOverlayStyle(
+        statusBarColor: Colors.transparent,
+        statusBarIconBrightness: isDark ? Brightness.light : Brightness.dark,
+        systemNavigationBarColor: Colors.transparent,
+        systemNavigationBarIconBrightness:
+            isDark ? Brightness.light : Brightness.dark,
+      ),
+      child: Scaffold(
+        body: _buildSlidingSwitcher(
+          _buildOculusContentArea(context, showTabs),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildOculusContentArea(BuildContext context, bool showTabs) {
+    if (_showDailyDetail) {
+      return DailyRecommendDetailPage(
+        tracks: _dailyTracks,
+        onClose: _closeDailyDetail,
+      );
+    }
+
+    if (_showDiscoverDetail && _discoverPlaylistId != null) {
+      return DiscoverPlaylistDetailPage(
+        playlistId: _discoverPlaylistId!,
+      );
+    }
+
+    if (_showSearch) {
+      return SearchWidget(
+        onClose: () {
+          if (!mounted) return;
+          setState(() {
+            _reverseTransition = true;
+            _showSearch = false;
+            _initialSearchKeyword = null;
+          });
+          _syncGlobalBackHandler();
+        },
+        initialKeyword: _initialSearchKeyword,
+      );
+    }
+
+    return RefreshIndicator(
+      onRefresh: _onRefresh,
+      displacement: 20,
+      child: CustomScrollView(
+        key: const ValueKey('oculus_home_overview'),
+        physics: const AlwaysScrollableScrollPhysics(
+          parent: BouncingScrollPhysics(),
+        ),
+        slivers: [
+          OculusSliverAppBar(
+            title: '首页',
+            actions: [
+              IconButton(
+                icon: const Icon(Icons.qr_code_scanner),
+                onPressed: () => openQrLoginScanPage(context),
+                tooltip: '扫码登录桌面端',
+              ),
+              IconButton(
+                icon: const Icon(Icons.search),
+                onPressed: () => _handleSearchPressed(context),
+                tooltip: '搜索',
+              ),
+            ],
+            systemOverlayStyle: SystemUiOverlayStyle(
+              statusBarColor: Colors.transparent,
+              statusBarIconBrightness: Theme.of(context).brightness == Brightness.dark
+                  ? Brightness.light
+                  : Brightness.dark,
+            ),
+          ),
+          _buildOculusHomeHeader(context),
+          _buildOculusContentSliver(context, showTabs),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildOculusHomeHeader(BuildContext context) {
+    return const SliverToBoxAdapter(
+      child: Column(
+        children: [
+          // 可以在这里放置 Oculus 特有的顶层全局组件，如 Breadcrumbs
+          // 其他内容（问候语、Hero等）已移至 HomeForYouTab 以消除重复
+        ],
+      ),
+    );
+  }
+
+  Widget _buildOculusContentSliver(BuildContext context, bool showTabs) {
+    final isLoggedIn = AuthService().isLoggedIn;
+
+    if (_isBindingsLoading) {
+      return SliverFillRemaining(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 24),
+          child: ForYouSkeleton(),
+        ),
+      );
+    }
+
+    return SliverPadding(
+      padding: const EdgeInsets.fromLTRB(24, 24, 24, 120),
+      sliver: SliverList(
+        delegate: SliverChildListDelegate([
+          if (isLoggedIn && showTabs) ...[
+            Padding(
+              padding: const EdgeInsets.only(bottom: 16.0),
+              child: OculusHomeTabs(
+                tabs: const ['为你推荐', '榜单'],
+                currentIndex: _homeTabIndex,
+                onChanged: (i) => setState(() => _homeTabIndex = i),
+              ),
+            ),
+          ],
+          if (!isLoggedIn) ...[
+            HomeForYouTab(
+              key: const ValueKey('oculus_for_you_not_logged_in'),
+              onOpenPlaylistDetail: (id) {},
+              onOpenDailyDetail: (tracks) {},
+            ),
+          ] else if (showTabs && _homeTabIndex == 0) ...[
+            HomeForYouTab(
+              key: ValueKey('oculus_for_you_$_forYouReloadToken'),
+              onOpenPlaylistDetail: (id) {
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (context) => DiscoverPlaylistDetailPage(playlistId: id),
+                  ),
+                );
+              },
+              onOpenDailyDetail: (tracks) {
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (context) => DailyRecommendDetailPage(tracks: tracks),
+                  ),
+                );
+              },
+              // 针对 Oculus 主题的特殊注入：使用 BentoGrid 展示歌单
+              playlistGridBuilder: (playlists) => OculusBentoGrid(
+                list: playlists,
+                onTap: (id) {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (context) => DiscoverPlaylistDetailPage(playlistId: id),
+                    ),
+                  );
+                },
+              ),
+            ),
+          ] else ...[
+            ChartsTab(
+              cachedRandomTracks: _cachedRandomTracks,
+              checkLoginStatus: _checkLoginStatus,
+              guessYouLikeFuture: _guessYouLikeFuture,
+              onRefresh: _onRefresh,
+            ),
+          ],
+        ]),
+      ),
+    );
   }
 
   /// 构建 iOS 风格内容区域

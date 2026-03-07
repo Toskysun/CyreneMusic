@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import '../../utils/image_utils.dart';
 import '../../models/track.dart';
 import '../../services/player_service.dart';
 import '../../services/playlist_queue_service.dart';
@@ -217,7 +218,7 @@ class _DailyRecommendHeroCardState extends State<DailyRecommendHeroCard> {
       itemBuilder: (context, i) {
         return ClipRRect(
           borderRadius: BorderRadius.circular(8),
-          child: CachedNetworkImage(imageUrl: covers[i], fit: BoxFit.cover),
+          child: CachedNetworkImage(imageUrl: covers[i], httpHeaders: getImageHeaders(covers[i]), fit: BoxFit.cover),
         );
       },
     );
@@ -275,7 +276,7 @@ class PersonalFmCompactCard extends StatelessWidget {
                   Positioned.fill(
                     child: Opacity(
                       opacity: 0.15,
-                      child: CachedNetworkImage(imageUrl: pic, fit: BoxFit.cover),
+                      child: CachedNetworkImage(imageUrl: pic, httpHeaders: getImageHeaders(pic), fit: BoxFit.cover),
                     ),
                   ),
                 Padding(
@@ -300,7 +301,7 @@ class PersonalFmCompactCard extends StatelessWidget {
                               child: SizedBox(
                                 width: 100, height: 100,
                                 child: pic.isNotEmpty 
-                                    ? CachedNetworkImage(imageUrl: pic, fit: BoxFit.cover)
+                                    ? CachedNetworkImage(imageUrl: pic, httpHeaders: getImageHeaders(pic), fit: BoxFit.cover)
                                     : Container(color: cs.surfaceContainerHighest, child: Icon(Icons.music_note, color: cs.onSurface.withOpacity(0.3))),
                               ),
                             ),

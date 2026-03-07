@@ -4,6 +4,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:fluent_ui/fluent_ui.dart' as fluent;
 import '../../utils/theme_manager.dart';
+import '../../utils/image_utils.dart';
 import 'daily_recommend_detail_page.dart';
 
 /// 每日推荐卡片（移动端）
@@ -255,6 +256,7 @@ class MobileDailyRecommendCard extends StatelessWidget {
                   child: displayCovers[index].isNotEmpty
                       ? CachedNetworkImage(
                           imageUrl: displayCovers[index],
+                          httpHeaders: getImageHeaders(displayCovers[index]),
                           fit: BoxFit.cover,
                         )
                       : Container(
@@ -571,6 +573,7 @@ class MobileDailyRecommendCard extends StatelessWidget {
                     )
                   : CachedNetworkImage(
                       imageUrl: url,
+                      httpHeaders: getImageHeaders(url),
                       fit: BoxFit.cover,
                       placeholder: (context, url) => Container(
                         color: cs.surfaceContainerHighest,
