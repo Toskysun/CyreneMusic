@@ -7,8 +7,8 @@ import 'android_media_notification_service.dart';
 import 'package:home_widget/home_widget.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:http/http.dart' as http;
+import '../utils/image_utils.dart';
 import 'lab_functions_service.dart';
-
 
 /// Android 媒体通知处理器
 /// 使用 audio_service 包实现 Android 系统通知栏的媒体控件
@@ -266,7 +266,7 @@ class CyreneAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler
   }
   
   /// 实际执行更新操作
-  void _performUpdate() {
+  Future<void> _performUpdate() async {
     final player = PlayerService();
     final song = player.currentSong;
     final track = player.currentTrack;
@@ -274,17 +274,66 @@ class CyreneAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler
     // 更新播放状态
     _updatePlaybackState(player.state, player.position, player.duration);
 
-    // 更新媒体信息
+    // 更新媒体信息 (先用原始 URL 更新，保证响应速度)
     if (song != null || track != null) {
       _updateMediaItem(song, track);
     }
     
+    // 获取本地封面路径
+    final dynamic songOrTrack = song ?? track;
+    final String artUri = (songOrTrack?.pic as String?) ?? (songOrTrack?.picUrl as String?) ?? '';
+    final String title = (songOrTrack?.name as String?) ?? (songOrTrack?.title as String?) ?? 'Not Playing';
+    final String artist = (songOrTrack?.arName as String?) ?? (songOrTrack?.artist as String?) ?? 'Cyrene Music';
+    final currentSongKey = '$title-$artist';
+    
+    String? localArtPath;
+    final songChanged = currentSongKey != _lastWidgetSongKey;
+    
+    if (artUri.isNotEmpty && (songChanged || artUri != _lastWidgetArtUri)) {
+      if (artUri.startsWith('http')) {
+        try {
+          print('🌐 [AudioHandler] 下载封面用于通知/小部件: $artUri');
+          final response = await http.get(Uri.parse(artUri), headers: getImageHeaders(artUri)).timeout(const Duration(seconds: 5));
+          if (response.statusCode == 200) {
+            final tempDir = await getTemporaryDirectory();
+            final file = File('${tempDir.path}/widget_art.png');
+            await file.writeAsBytes(response.bodyBytes);
+            localArtPath = file.path;
+            
+            _lastWidgetArtUri = artUri;
+            _lastWidgetArtPath = localArtPath;
+            _lastWidgetSongKey = currentSongKey;
+          }
+        } catch (e) {
+          print('⚠️ [AudioHandler] 下载通知封面失败: $e');
+        }
+      } else if (artUri.startsWith('/') || artUri.startsWith('file://')) {
+        localArtPath = artUri.replaceFirst('file://', '');
+        _lastWidgetArtUri = artUri;
+        _lastWidgetArtPath = localArtPath;
+        _lastWidgetSongKey = currentSongKey;
+      }
+    } else if (artUri.isEmpty) {
+      if (songChanged) {
+        _lastWidgetArtUri = null;
+        _lastWidgetArtPath = null;
+        _lastWidgetSongKey = currentSongKey;
+      }
+    } else {
+      localArtPath = _lastWidgetArtPath;
+    }
+    
+    // 再次更新媒体信息，这次传入本地封面路径，供系统通知栏获取图片（防止 Android 下载时无网易云 header）
+    if (localArtPath != null && (song != null || track != null)) {
+      _updateMediaItem(song, track, overrideArtUri: 'file://$localArtPath');
+    }
+    
     // 更新桌面小部件
-    _updateWidget(player.state, song ?? track);
+    _updateWidget(player.state, song ?? track, localArtPath);
   }
 
   /// 更新桌面小部件数据
-  Future<void> _updateWidget(PlayerState state, dynamic songOrTrack) async {
+  Future<void> _updateWidget(PlayerState state, dynamic songOrTrack, String? albumArtPath) async {
     if (!Platform.isAndroid) return;
     
     // 检查小部件是否开启（仅赞助用户可用且由用户在实验室设置中手动开启）
@@ -310,61 +359,15 @@ class CyreneAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler
       final artist = songOrTrack?.arName ?? songOrTrack?.artist ?? 'Cyrene Music';
       final isPlaying = state == PlayerState.playing;
 
-      // 1. 并行保存基础信息（加速响应）
+      // 保存所有信息
       await Future.wait([
         HomeWidget.saveWidgetData<String>('title', title),
         HomeWidget.saveWidgetData<String>('artist', artist),
         HomeWidget.saveWidgetData<bool>('isPlaying', isPlaying),
         HomeWidget.saveWidgetData<bool>('isEnabled', true),
+        HomeWidget.saveWidgetData<int>('art_version', DateTime.now().millisecondsSinceEpoch),
+        HomeWidget.saveWidgetData<String>('albumArtPath', albumArtPath ?? ''),
       ]);
-
-      // --- 专辑封面同步逻辑 (优化：识别切歌并强制刷新) ---
-      String? albumArtPath = _lastWidgetArtPath;
-      final artUri = songOrTrack?.pic ?? songOrTrack?.picUrl ?? '';
-      final currentSongKey = '$title-$artist';
-      final songChanged = currentSongKey != _lastWidgetSongKey;
-
-      // 如果歌曲变了，或者封面 URI 变了，我们需要强制更新封面
-      if (artUri.isNotEmpty && (songChanged || artUri != _lastWidgetArtUri)) {
-        if (artUri.startsWith('http')) {
-          // 网络图片：下载并保存到固定文件（覆盖式）
-          try {
-            print('🌐 [AudioHandler] 歌曲或封面变化，更新小部件封面: $artUri');
-            final response = await http.get(Uri.parse(artUri)).timeout(const Duration(seconds: 5));
-            if (response.statusCode == 200) {
-              final tempDir = await getTemporaryDirectory();
-              final file = File('${tempDir.path}/widget_art.png');
-              await file.writeAsBytes(response.bodyBytes);
-              albumArtPath = file.path;
-              _lastWidgetArtUri = artUri;
-              _lastWidgetArtPath = albumArtPath;
-              _lastWidgetSongKey = currentSongKey;
-              // 更新版本号以强制原生端重新解码即便路径相同
-              await HomeWidget.saveWidgetData<int>('art_version', DateTime.now().millisecondsSinceEpoch);
-            }
-          } catch (e) {
-            print('⚠️ [AudioHandler] 下载小部件封面失败: $e');
-          }
-        } else if (artUri.startsWith('/') || artUri.startsWith('file://')) {
-          // 本地图片：直接使用路径
-          albumArtPath = artUri.replaceFirst('file://', '');
-          _lastWidgetArtUri = artUri;
-          _lastWidgetArtPath = albumArtPath;
-          _lastWidgetSongKey = currentSongKey;
-          // 直接更新版本号
-          await HomeWidget.saveWidgetData<int>('art_version', DateTime.now().millisecondsSinceEpoch);
-        }
-      } else if (artUri.isEmpty) {
-        // 无封面情况
-        if (songChanged) {
-          albumArtPath = null;
-          _lastWidgetArtUri = null;
-          _lastWidgetArtPath = null;
-          _lastWidgetSongKey = currentSongKey;
-        }
-      }
-      
-      await HomeWidget.saveWidgetData<String>('albumArtPath', albumArtPath ?? '');
       
       print('📱 [AudioHandler] 更新小部件数据: Title=$title, Artist=$artist, Playing=$isPlaying, ArtPath=$albumArtPath');
 
@@ -392,11 +395,11 @@ class CyreneAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler
   }
 
   /// 更新媒体信息
-  void _updateMediaItem(dynamic song, dynamic track) {
+  void _updateMediaItem(dynamic song, dynamic track, {String? overrideArtUri}) {
     final title = song?.name ?? track?.name ?? '未知歌曲';
     final artist = song?.arName ?? track?.artists ?? '未知歌手';
     final album = song?.alName ?? track?.album ?? '';
-    final artUri = song?.pic ?? track?.picUrl ?? '';
+    final artUri = overrideArtUri ?? song?.pic ?? track?.picUrl ?? '';
 
     // 转换封面 URI
     Uri? parsedArtUri;
