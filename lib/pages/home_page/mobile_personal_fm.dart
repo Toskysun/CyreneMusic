@@ -6,6 +6,8 @@ import '../../models/track.dart';
 import '../../services/player_service.dart';
 import '../../services/playlist_queue_service.dart';
 import '../../utils/theme_manager.dart';
+import '../../utils/image_utils.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import 'hero_section.dart'; // 复用 convertToTrack 函数
 
 /// 私人FM（移动端）
@@ -129,7 +131,7 @@ class MobilePersonalFm extends StatelessWidget {
         children: [
           ClipRRect(
             borderRadius: BorderRadius.circular(10),
-            child: Image.network(pic, width: 120, height: 120, fit: BoxFit.cover),
+            child: CachedNetworkImage(imageUrl: pic, httpHeaders: getImageHeaders(pic), width: 120, height: 120, fit: BoxFit.cover),
           ),
           const SizedBox(width: 12),
           Expanded(
@@ -180,7 +182,7 @@ class MobilePersonalFm extends StatelessWidget {
             ),
             child: ClipRRect(
               borderRadius: BorderRadius.circular(24),
-              child: Image.network(pic, width: 120, height: 120, fit: BoxFit.cover),
+              child: CachedNetworkImage(imageUrl: pic, httpHeaders: getImageHeaders(pic), width: 120, height: 120, fit: BoxFit.cover),
             ),
           ),
           const SizedBox(width: 20),
